@@ -79,6 +79,7 @@ describe('initializeBedrock', () => {
     delete process.env.BEDROCK_AWS_PROFILE;
     delete process.env.BEDROCK_AWS_SESSION_TOKEN;
     delete process.env.BEDROCK_REVERSE_PROXY;
+    delete process.env.MINISTACK_PORT;
     delete process.env.PROXY;
     delete process.env.proxy;
     delete process.env.HTTP_PROXY;
@@ -381,6 +382,60 @@ describe('initializeBedrock', () => {
   });
 
   describe('Proxy Configuration', () => {
+    it('should create a BedrockRuntimeClient with the configured HTTP baseURL', async () => {
+      const params = createMockParams({
+        config: {
+          endpoints: {
+            [EModelEndpoint.bedrock]: {
+              baseURL: 'http://ministack:4566',
+            },
+          },
+        },
+      });
+
+      const result = (await initializeBedrock(params)) as BedrockLLMConfigResult;
+
+      expect(result.llmConfig).toHaveProperty('client');
+      expect(result.llmConfig.client).toHaveProperty('endpoint', 'http://ministack:4566');
+      expect(result.llmConfig).not.toHaveProperty('credentials');
+      expect(result.llmConfig).not.toHaveProperty('endpointHost');
+    });
+
+    it('should resolve an environment variable embedded in the configured baseURL', async () => {
+      process.env.MINISTACK_PORT = '4566';
+      const params = createMockParams({
+        config: {
+          endpoints: {
+            [EModelEndpoint.bedrock]: {
+              baseURL: 'http://ministack:${MINISTACK_PORT}',
+            },
+          },
+        },
+      });
+
+      const result = (await initializeBedrock(params)) as BedrockLLMConfigResult;
+
+      expect(result.llmConfig.client).toHaveProperty('endpoint', 'http://ministack:4566');
+    });
+
+    it('should prefer the configured baseURL over BEDROCK_REVERSE_PROXY', async () => {
+      process.env.BEDROCK_REVERSE_PROXY = 'legacy-bedrock.example.com';
+      const params = createMockParams({
+        config: {
+          endpoints: {
+            [EModelEndpoint.bedrock]: {
+              baseURL: 'http://ministack:4566',
+            },
+          },
+        },
+      });
+
+      const result = (await initializeBedrock(params)) as BedrockLLMConfigResult;
+
+      expect(result.llmConfig.client).toHaveProperty('endpoint', 'http://ministack:4566');
+      expect(result.llmConfig).not.toHaveProperty('endpointHost');
+    });
+
     it('should create BedrockRuntimeClient with proxy when PROXY is set', async () => {
       process.env.PROXY = 'http://proxy:8080';
       const params = createMockParams();

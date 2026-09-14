@@ -29,9 +29,9 @@ type ParsedBedrockUserCredentials = Partial<Record<UserCredentialKey, UserCreden
   apiKey?: string;
 };
 
-function getBedrockProxyTarget(region?: string, reverseProxy?: string): string | undefined {
-  const trimmedReverseProxy = reverseProxy?.trim();
-  if (trimmedReverseProxy) return `https://${trimmedReverseProxy}`;
+function getBedrockProxyTarget(region?: string, endpoint?: string): string | undefined {
+  const trimmedEndpoint = endpoint?.trim();
+  if (trimmedEndpoint) return trimmedEndpoint;
 
   const trimmedRegion = region?.trim();
   if (!trimmedRegion) return undefined;
@@ -96,6 +96,7 @@ function getUserCredentialValue(
  * Reverse Proxy Support:
  * - When BEDROCK_REVERSE_PROXY is set, routes Bedrock API calls through a custom endpoint
  * - Works with or without the PROXY setting
+ * - An endpoints.bedrock.baseURL value takes precedence and preserves its configured scheme
  *
  * Without Proxy:
  * - Credentials and endpoint configuration are passed separately to ChatBedrockConverse,
@@ -263,11 +264,17 @@ export async function initializeBedrock(
     credentials.secretAccessKey !== '';
   const hasBearerToken = typeof bearerToken === 'string' && bearerToken !== '';
 
+  const configuredBaseURL =
+    typeof bedrockConfig?.baseURL === 'string'
+      ? extractEnvVariable(bedrockConfig.baseURL).trim()
+      : undefined;
+  const reverseProxyEndpoint = BEDROCK_REVERSE_PROXY
+    ? `https://${BEDROCK_REVERSE_PROXY}`
+    : undefined;
+  const bedrockEndpoint = configuredBaseURL || reverseProxyEndpoint;
   const bedrockRegion = typeof llmConfig.region === 'string' ? llmConfig.region : undefined;
-  const proxyAgent = getHttpsProxyAgent(
-    getBedrockProxyTarget(bedrockRegion, BEDROCK_REVERSE_PROXY),
-  );
-  if (proxyAgent || hasBearerToken) {
+  const proxyAgent = getHttpsProxyAgent(getBedrockProxyTarget(bedrockRegion, bedrockEndpoint));
+  if (proxyAgent || hasBearerToken || configuredBaseURL) {
     const credentialProvider =
       !hasCompleteCredentials && !hasBearerToken && BEDROCK_AWS_PROFILE
         ? fromNodeProviderChain({ profile: BEDROCK_AWS_PROFILE })
@@ -301,8 +308,8 @@ export async function initializeBedrock(
       });
     }
 
-    if (BEDROCK_REVERSE_PROXY) {
-      customClientConfig.endpoint = `https://${BEDROCK_REVERSE_PROXY}`;
+    if (bedrockEndpoint) {
+      customClientConfig.endpoint = bedrockEndpoint;
     }
 
     const customClient = new BedrockRuntimeClient(customClientConfig);
