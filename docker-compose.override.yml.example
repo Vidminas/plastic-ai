@@ -15,7 +15,7 @@
 #   api:
 #     volumes:
 #     - type: bind
-#       source: ./librechat.yaml
+#       source: ${PWD}/librechat.yaml
 #       target: /app/librechat.yaml
 #     image: registry.librechat.ai/danny-avila/librechat:latest
 
@@ -27,7 +27,7 @@
 #   api:
 #     volumes:
 #     - type: bind
-#       source: ./librechat.yaml
+#       source: ${PWD}/librechat.yaml
 #       target: /app/librechat.yaml
 
 # # LOCAL BUILD
