@@ -1,13 +1,13 @@
-const mongoose = require('mongoose');
+// const mongoose = require('mongoose');
 const { CacheKeys } = require('librechat-data-provider');
 const { AppService, logger } = require('@librechat/data-schemas');
 const {
   createAppConfigService,
   clearMcpConfigCache,
-  createCodeEnvironmentRegistry,
-  mergeAccessibleCodeEnvironments,
-  cacheConfig,
-  standardCache,
+  // createCodeEnvironmentRegistry,
+  // mergeAccessibleCodeEnvironments,
+  // cacheConfig,
+  // standardCache,
 } = require('@librechat/api');
 const { setCachedTools, invalidateCachedTools } = require('./getCachedTools');
 const { loadAndFormatTools } = require('~/server/services/start/tools');
@@ -16,21 +16,23 @@ const getLogStores = require('~/cache/getLogStores');
 const paths = require('~/config/paths');
 const db = require('~/models');
 
-let codeEnvironmentRegistry;
+// let codeEnvironmentRegistry;
 
 function getCodeEnvironmentRegistry() {
-  if (codeEnvironmentRegistry == null) {
-    codeEnvironmentRegistry = createCodeEnvironmentRegistry(mongoose, {
-      configurationCache: cacheConfig.USE_REDIS
-        ? standardCache('CODE_ENVIRONMENT_CONFIG')
-        : undefined,
-    });
-  }
-  return codeEnvironmentRegistry;
+  // if (codeEnvironmentRegistry == null) {
+  //   codeEnvironmentRegistry = createCodeEnvironmentRegistry(mongoose, {
+  //     configurationCache: cacheConfig.USE_REDIS
+  //       ? standardCache('CODE_ENVIRONMENT_CONFIG')
+  //       : undefined,
+  //   });
+  // }
+  // return codeEnvironmentRegistry;
+  return null;
 }
 
 async function invalidateCodeEnvironmentConfigCache(tenantId) {
-  await getCodeEnvironmentRegistry().invalidateAccessibleConfigurations(tenantId);
+  // await getCodeEnvironmentRegistry().invalidateAccessibleConfigurations(tenantId);
+  return tenantId;
 }
 
 const loadBaseConfig = async () => {
@@ -52,20 +54,21 @@ const { getAppConfig, clearAppConfigCache, clearOverrideCache } = createAppConfi
   cacheKeys: CacheKeys,
   getApplicableConfigs: db.getApplicableConfigs,
   getUserPrincipals: db.getUserPrincipals,
-  augmentConfig: ({ appConfig, baseConfig, principals, options }) => {
-    if (!options.userId) return appConfig;
-    return mergeAccessibleCodeEnvironments({
-      appConfig,
-      deploymentConfig: baseConfig,
-      actor: {
-        userId: options.userId,
-        role: options.role ?? null,
-        idOnTheSource: options.idOnTheSource ?? null,
-        principals,
-      },
-      registry: getCodeEnvironmentRegistry(),
-    });
-  },
+  // augmentConfig: ({ appConfig, baseConfig, principals, options }) => {
+  //   if (!options.userId) return appConfig;
+  //   return mergeAccessibleCodeEnvironments({
+  //     appConfig,
+  //     deploymentConfig: baseConfig,
+  //     actor: {
+  //       userId: options.userId,
+  //       role: options.role ?? null,
+  //       idOnTheSource: options.idOnTheSource ?? null,
+  //       principals,
+  //     },
+  //     registry: getCodeEnvironmentRegistry(),
+  //   });
+  // },
+  augmentConfig: ({ appConfig }) => appConfig,
 });
 
 /**

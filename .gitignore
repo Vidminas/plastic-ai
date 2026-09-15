@@ -129,6 +129,7 @@ auth.json
 # User uploads
 uploads/
 /ollama/
+/ministack/state/
 
 # owner
 release/

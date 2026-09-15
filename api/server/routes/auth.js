@@ -1,8 +1,13 @@
 const express = require('express');
-const { createSetBalanceConfig, forceRefreshCloudFrontAuthCookies } = require('@librechat/api');
+// const { createSetBalanceConfig, forceRefreshCloudFrontAuthCookies } = require('@librechat/api');
 const {
-  resetPasswordRequestController,
-  resetPasswordController,
+  createSetBalanceConfig,
+  forceRefreshCloudFrontAuthCookies,
+  unsupportedFeature,
+} = require('@librechat/api');
+const {
+  // resetPasswordRequestController,
+  // resetPasswordController,
   registrationController,
   graphTokenController,
   refreshController,
@@ -75,17 +80,19 @@ router.post(
 );
 router.post(
   '/requestPasswordReset',
-  middleware.resetPasswordLimiter,
-  middleware.checkBan,
-  middleware.validatePasswordReset,
-  resetPasswordRequestController,
+  // middleware.resetPasswordLimiter,
+  // middleware.checkBan,
+  // middleware.validatePasswordReset,
+  // resetPasswordRequestController,
+  unsupportedFeature('password-reset'),
 );
 router.post(
   '/resetPassword',
-  middleware.resetPasswordSubmissionLimiter,
-  middleware.checkBan,
-  middleware.validatePasswordReset,
-  resetPasswordController,
+  // middleware.resetPasswordSubmissionLimiter,
+  // middleware.checkBan,
+  // middleware.validatePasswordReset,
+  // resetPasswordController,
+  unsupportedFeature('password-reset'),
 );
 
 router.post('/2fa/enable', middleware.requireJwtAuth, enable2FA);

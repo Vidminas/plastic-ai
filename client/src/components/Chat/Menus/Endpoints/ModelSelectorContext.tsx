@@ -2,7 +2,9 @@ import React, { createContext, useContext, useState, useMemo, useCallback } from
 import debounce from 'lodash/debounce';
 import {
   EModelEndpoint,
+  Permissions,
   PermissionBits,
+  PermissionTypes,
   isAgentsEndpoint,
   isAssistantsEndpoint,
 } from 'librechat-data-provider';
@@ -13,6 +15,7 @@ import {
   useSelectorEffects,
   useKeyDialog,
   useEndpoints,
+  useHasAccess,
   useLocalize,
 } from '~/hooks';
 import { useAgentsMapContext, useAssistantsMapContext, useLiveAnnouncer } from '~/Providers';
@@ -88,6 +91,10 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
   }, [startupConfig, agentsMap]);
 
   const permissionLevel = useAgentDefaultPermissionLevel();
+  const hasAgentAccess = useHasAccess({
+    permissionType: PermissionTypes.AGENTS,
+    permission: Permissions.USE,
+  });
   /**
    * Always query the VIEW scope so this shares one cache entry (and one paginated walk)
    * with `useAgentsMap` and `useMentions`. Asking for EDIT here spawned a second full
@@ -108,7 +115,7 @@ export function ModelSelectorProvider({ children, startupConfig }: ModelSelector
   );
   const { data: agents = null } = useListAgentsQuery(
     { requiredPermission: PermissionBits.VIEW },
-    { select: selectAgents },
+    { enabled: hasAgentAccess, select: selectAgents },
   );
 
   const { mappedEndpoints, endpointRequiresUserKey } = useEndpoints({

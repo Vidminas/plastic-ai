@@ -26,6 +26,12 @@ jest.mock('@librechat/api', () => ({
     return mockRetryService;
   },
 }));
+jest.mock('~/models', () => ({
+  listMCPAuthorizationFenceRetries: mockStorage.list,
+  upsertMCPAuthorizationFenceRetry: mockStorage.upsert,
+  deleteMCPAuthorizationFenceRetry: mockStorage.deleteVersion,
+  deferMCPAuthorizationFenceRetry: mockStorage.deferVersion,
+}));
 
 const retryAdapter = require('./MCPAuthorizationFenceRetry');
 
@@ -51,7 +57,7 @@ describe('MCPAuthorizationFenceRetry adapter', () => {
       version: 'v1',
     };
     retryAdapter.startMCPAuthorizationFenceRetryWorker();
-    expect(capturedDeps.storage).toBe(mockStorage);
+    expect(capturedDeps.storage).toEqual(mockStorage);
     const operation = jest.fn().mockResolvedValue(undefined);
     await capturedDeps.runInRetryScope(retry, operation);
 
