@@ -69,6 +69,17 @@ COPY --from=data-provider-build /app/packages/data-provider/dist /app/packages/d
 COPY --from=data-schemas-build /app/packages/data-schemas/dist /app/packages/data-schemas/dist
 RUN npm run build
 
+# Typecheck API source copied into Docker's Linux filesystem
+FROM base AS api-typecheck-run
+WORKDIR /app
+COPY packages/api ./packages/api
+COPY --from=data-provider-build /app/packages/data-provider/dist /app/packages/data-provider/dist
+COPY --from=data-schemas-build /app/packages/data-schemas/dist /app/packages/data-schemas/dist
+RUN npx tsc --noEmit -p packages/api/tsconfig.json && touch /tmp/api-typecheck
+
+FROM scratch AS api-typecheck
+COPY --from=api-typecheck-run /tmp/api-typecheck /api-typecheck
+
 # Build `client` package
 FROM base AS client-package-build
 WORKDIR /app/packages/client
