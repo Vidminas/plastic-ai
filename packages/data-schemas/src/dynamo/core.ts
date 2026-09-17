@@ -250,12 +250,12 @@ const hydrateValue = (key: string, value: DynamoValue): DynamoValue => {
 const hydrateItem = (item: DynamoItem): DynamoItem =>
   Object.fromEntries(Object.entries(item).map(([key, value]) => [key, hydrateValue(key, value)]));
 
-const cleanItem = (item: DynamoItem): DynamoItem => {
+export const cleanItem = (item: DynamoItem): DynamoItem => {
   const { PK: _pk, SK: _sk, GSI1PK: _gsiPk, GSI1SK: _gsiSk, version: _version, ...record } = item;
   return hydrateItem(record);
 };
 
-const project = (item: DynamoItem | null, fields?: string | string[] | null): DynamoItem | null => {
+export const project = (item: DynamoItem | null, fields?: string | string[] | null): DynamoItem | null => {
   if (item == null) {
     return item;
   }
@@ -281,13 +281,13 @@ const project = (item: DynamoItem | null, fields?: string | string[] | null): Dy
   );
 };
 
-const assertItemSize = (item: DynamoItem): void => {
+export const assertItemSize = (item: DynamoItem): void => {
   if (Buffer.byteLength(JSON.stringify(item), 'utf8') > DYNAMO_ITEM_LIMIT_BYTES) {
     throw new DynamoItemTooLargeError();
   }
 };
 
-const valueString = (value: DynamoValue | undefined): string | undefined => {
+export const valueString = (value: DynamoValue | undefined): string | undefined => {
   if (typeof value === 'string') {
     return value;
   }
@@ -297,7 +297,7 @@ const valueString = (value: DynamoValue | undefined): string | undefined => {
 const valueBoolean = (value: DynamoValue | undefined): boolean | undefined =>
   typeof value === 'boolean' ? value : undefined;
 
-const valueNumber = (value: DynamoValue | undefined): number | undefined =>
+export const valueNumber = (value: DynamoValue | undefined): number | undefined =>
   typeof value === 'number' ? value : undefined;
 
 const matches = (item: DynamoItem, filter: DynamoFilter): boolean =>

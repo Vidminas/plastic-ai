@@ -80,6 +80,16 @@ RUN npx tsc --noEmit -p packages/api/tsconfig.json && touch /tmp/api-typecheck
 FROM scratch AS api-typecheck
 COPY --from=api-typecheck-run /tmp/api-typecheck /api-typecheck
 
+# Typecheck data-schemas source copied into Docker's Linux filesystem
+FROM base AS data-schemas-typecheck-run
+WORKDIR /app
+COPY packages/data-schemas ./packages/data-schemas
+COPY --from=data-provider-build /app/packages/data-provider/dist /app/packages/data-provider/dist
+RUN npx tsc --noEmit -p packages/data-schemas/tsconfig.json && touch /tmp/data-schemas-typecheck
+
+FROM scratch AS data-schemas-typecheck
+COPY --from=data-schemas-typecheck-run /tmp/data-schemas-typecheck /data-schemas-typecheck
+
 # Build `client` package
 FROM base AS client-package-build
 WORKDIR /app/packages/client

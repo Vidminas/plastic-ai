@@ -5,6 +5,7 @@ export * from './crypto';
 export * from './schema';
 export * from './utils';
 export * from './dynamo/core';
+export * from './dynamo/files';
 export { createModels } from './models';
 export {
   createMethods,
