@@ -241,10 +241,11 @@ interface:
   #   # Implies `requireProject`. Chat projects are user-owned, so a value set here
   #   # only makes sense as a per-user or per-role config override.
   #   # projectId: '000000000000000000000000'
+  # No multi-user sharing is being tested in this deployment.
   peoplePicker:
-    users: true
-    groups: true
-    roles: true
+    users: false
+    groups: false
+    roles: false
   marketplace:
     use: false
   fileCitations: true
@@ -344,7 +345,8 @@ interface:
 
 # Example Registration Object Structure (optional)
 registration:
-  socialLogins: ['github', 'google', 'discord', 'openid', 'facebook', 'apple', 'saml']
+  # No social login credentials are configured in this deployment (ALLOW_SOCIAL_LOGIN=false).
+  socialLogins: []
   # allowedDomains:
   # - "gmail.com"
   # How long a started social login may take to return from the provider (ms, default 600000)
@@ -563,7 +565,11 @@ endpoints:
   #   # (optional) Assistant Capabilities available to all users. Omit the ones you wish to exclude. Defaults to list below.
   #   capabilities: ["code_interpreter", "retrieval", "actions", "tools", "image_vision"]
   agents:
-    capabilities: ["deferred_tools", "execute_code", "file_search", "web_search", "artifacts", "subagents", "actions", "context", "skills", "memory", "ask_user_question", "tools", "chain", "ocr"]
+    # Trimmed to what RAG chat testing needs, plus ask_user_question/web_search kept
+    # deliberately (a search provider key can be added later). Dropped: execute_code/ocr
+    # (no backing API key configured), artifacts/subagents/actions/chain/deferred_tools
+    # (don't exercise the file_search/context path), skills/memory (no backing config).
+    capabilities: ["file_search", "web_search", "context", "ask_user_question", "tools"]
   #   # (optional) Default recursion depth for agents, defaults to 25
   #   recursionLimit: 50
   #   # (optional) Max recursion depth for agents, defaults to 25
@@ -837,75 +843,78 @@ endpoints:
   #     #   claude-3.5-haiku:
   #     #     deploymentName: claude-3-5-haiku@20241022  # Override for this model
 
-  custom:
+  # No custom OpenAI-compatible providers are needed for local ministack testing —
+  # only `bedrock` below (routed through ministack to Ollama) is used. Kept as
+  # reference examples, matching the Mistral example already commented out below.
+  # custom:
     # Anthropic-compatible Example (native `/v1/messages` API)
     # Set `provider: anthropic` to use the native Anthropic client instead of the
     # default OpenAI-compatible one — for Anthropic itself or Anthropic-compatible
     # gateways (e.g. AI gateways, OpenCode Zen). The `baseURL` must be the API root
     # the Anthropic SDK appends `/v1/messages` to. List models explicitly: model
     # auto-fetch uses the OpenAI `/models` convention and is not used for this provider.
-    - name: 'Claude-Compatible'
-      provider: 'anthropic'
-      apiKey: '${ANTHROPIC_API_KEY}'
-      baseURL: 'https://api.anthropic.com'
-      # (optional) headers forwarded on every request (e.g. for a reverse proxy);
-      # values support the same placeholders as built-in endpoints.
-      headers:
-        anthropic-version: '2023-06-01'
-      models:
-        default:
-          - 'claude-sonnet-4-5'
-          - 'claude-opus-4-5'
-        fetch: false
-      titleConvo: true
-      titleModel: 'claude-sonnet-4-5'
-      # Agent activity groups: collapse each block of reasoning + tool calls
-      # under a generated one-line header. Same shape as the title options.
-      activityLabel: true
-      activityModel: 'claude-3-5-haiku'
-      # activityEndpoint: 'anthropic'   # run labels on another endpoint's credentials
-      # activityPrompt: 'Write a 5-9 word past-tense label...'
-      # activityMaxPerRun: 20           # cost cap per response
-      # activityCharLimit: 600          # per-entry prompt truncation
-      # Parent phase summaries are an independent opt-in. They collapse 2+
-      # logical activities before the answer into one run-level summary.
-      # activityPhaseLabel: true
-      # activityPhaseModel: 'claude-3-5-haiku' # falls back to activity/title/run model
-      # activityPhaseEndpoint: 'anthropic'     # falls back to activity/run endpoint
-      # activityPhasePrompt: 'Summarize the completed agent phase...'
-      # activityPhaseMaxPerRun: 5               # cost cap per response
-      # Live reasoning labels are also independent. They update one top-level
-      # THINK heading in place and never create or shift message content parts.
-      # Enabling this sends a bounded snapshot (up to 4,000 characters) of the
-      # visible reasoning to the resolved label endpoint, which may be a different provider.
-      # With Langfuse tracing enabled, that snapshot is also recorded as generation input
-      # unless the active redaction policy suppresses the label call.
-      # reasoningLabel: true
-      # reasoningLabelModel: 'claude-3-5-haiku' # falls back to activity/title/run model
-      # reasoningLabelEndpoint: 'anthropic'     # falls back to activity/run endpoint
-      # reasoningLabelPrompt: 'Describe the current reasoning direction...'
-      # reasoningLabelMinChars: 500
-      # reasoningLabelUpdateChars: 400
-      # reasoningLabelUpdateIntervalMs: 3000
-      # A final rewrite may run immediately after a meaningful 120-character tail.
-      # reasoningLabelMaxPerRun: 8
-      modelDisplayLabel: 'Claude (Compatible)'
+    # - name: 'Claude-Compatible'
+    #   provider: 'anthropic'
+    #   apiKey: '${ANTHROPIC_API_KEY}'
+    #   baseURL: 'https://api.anthropic.com'
+    #   # (optional) headers forwarded on every request (e.g. for a reverse proxy);
+    #   # values support the same placeholders as built-in endpoints.
+    #   headers:
+    #     anthropic-version: '2023-06-01'
+    #   models:
+    #     default:
+    #       - 'claude-sonnet-4-5'
+    #       - 'claude-opus-4-5'
+    #     fetch: false
+    #   titleConvo: true
+    #   titleModel: 'claude-sonnet-4-5'
+    #   # Agent activity groups: collapse each block of reasoning + tool calls
+    #   # under a generated one-line header. Same shape as the title options.
+    #   activityLabel: true
+    #   activityModel: 'claude-3-5-haiku'
+    #   # activityEndpoint: 'anthropic'   # run labels on another endpoint's credentials
+    #   # activityPrompt: 'Write a 5-9 word past-tense label...'
+    #   # activityMaxPerRun: 20           # cost cap per response
+    #   # activityCharLimit: 600          # per-entry prompt truncation
+    #   # Parent phase summaries are an independent opt-in. They collapse 2+
+    #   # logical activities before the answer into one run-level summary.
+    #   # activityPhaseLabel: true
+    #   # activityPhaseModel: 'claude-3-5-haiku' # falls back to activity/title/run model
+    #   # activityPhaseEndpoint: 'anthropic'     # falls back to activity/run endpoint
+    #   # activityPhasePrompt: 'Summarize the completed agent phase...'
+    #   # activityPhaseMaxPerRun: 5               # cost cap per response
+    #   # Live reasoning labels are also independent. They update one top-level
+    #   # THINK heading in place and never create or shift message content parts.
+    #   # Enabling this sends a bounded snapshot (up to 4,000 characters) of the
+    #   # visible reasoning to the resolved label endpoint, which may be a different provider.
+    #   # With Langfuse tracing enabled, that snapshot is also recorded as generation input
+    #   # unless the active redaction policy suppresses the label call.
+    #   # reasoningLabel: true
+    #   # reasoningLabelModel: 'claude-3-5-haiku' # falls back to activity/title/run model
+    #   # reasoningLabelEndpoint: 'anthropic'     # falls back to activity/run endpoint
+    #   # reasoningLabelPrompt: 'Describe the current reasoning direction...'
+    #   # reasoningLabelMinChars: 500
+    #   # reasoningLabelUpdateChars: 400
+    #   # reasoningLabelUpdateIntervalMs: 3000
+    #   # A final rewrite may run immediately after a meaningful 120-character tail.
+    #   # reasoningLabelMaxPerRun: 8
+    #   modelDisplayLabel: 'Claude (Compatible)'
 
     # Groq Example
-    - name: 'groq'
-      apiKey: '${GROQ_API_KEY}'
-      baseURL: 'https://api.groq.com/openai/v1/'
-      models:
-        default:
-          - 'llama3-70b-8192'
-          - 'llama3-8b-8192'
-          - 'llama2-70b-4096'
-          - 'mixtral-8x7b-32768'
-          - 'gemma-7b-it'
-        fetch: false
-      titleConvo: true
-      titleModel: 'mixtral-8x7b-32768'
-      modelDisplayLabel: 'groq'
+    # - name: 'groq'
+    #   apiKey: '${GROQ_API_KEY}'
+    #   baseURL: 'https://api.groq.com/openai/v1/'
+    #   models:
+    #     default:
+    #       - 'llama3-70b-8192'
+    #       - 'llama3-8b-8192'
+    #       - 'llama2-70b-4096'
+    #       - 'mixtral-8x7b-32768'
+    #       - 'gemma-7b-it'
+    #     fetch: false
+    #   titleConvo: true
+    #   titleModel: 'mixtral-8x7b-32768'
+    #   modelDisplayLabel: 'groq'
 
     # Mistral AI Example
     # - name: 'Mistral' # Unique name for the endpoint
@@ -950,21 +959,21 @@ endpoints:
     #   dropParams: ['stop', 'user', 'frequency_penalty', 'presence_penalty']
 
     # OpenRouter Example
-    - name: 'OpenRouter'
-      # For `apiKey` and `baseURL`, you can use environment variables that you define.
-      # recommended environment variables:
-      apiKey: '${OPENROUTER_KEY}'
-      baseURL: 'https://openrouter.ai/api/v1'
-      headers:
-        x-librechat-body-parentmessageid: '{{LIBRECHAT_BODY_PARENTMESSAGEID}}'
-      models:
-        default: ['meta-llama/llama-3-70b-instruct']
-        fetch: true
-      titleConvo: true
-      titleModel: 'meta-llama/llama-3-70b-instruct'
-      # Recommended: Drop the stop parameter from the request as Openrouter models use a variety of stop tokens.
-      dropParams: ['stop']
-      modelDisplayLabel: 'OpenRouter'
+    # - name: 'OpenRouter'
+    #   # For `apiKey` and `baseURL`, you can use environment variables that you define.
+    #   # recommended environment variables:
+    #   apiKey: '${OPENROUTER_KEY}'
+    #   baseURL: 'https://openrouter.ai/api/v1'
+    #   headers:
+    #     x-librechat-body-parentmessageid: '{{LIBRECHAT_BODY_PARENTMESSAGEID}}'
+    #   models:
+    #     default: ['meta-llama/llama-3-70b-instruct']
+    #     fetch: true
+    #   titleConvo: true
+    #   titleModel: 'meta-llama/llama-3-70b-instruct'
+    #   # Recommended: Drop the stop parameter from the request as Openrouter models use a variety of stop tokens.
+    #   dropParams: ['stop']
+    #   modelDisplayLabel: 'OpenRouter'
 
   bedrock:
     baseURL: 'http://ministack:${MINISTACK_PORT}'
