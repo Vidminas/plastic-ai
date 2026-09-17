@@ -40,13 +40,12 @@ services:
       MONGO_URI: ""
       DYNAMODB_ENDPOINT: ${DYNAMODB_ENDPOINT}
       DYNAMODB_TABLE: ${DYNAMODB_TABLE}
-      AWS_ACCESS_KEY_ID: ${BEDROCK_AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${BEDROCK_AWS_SECRET_ACCESS_KEY}
-      AWS_DEFAULT_REGION: ${BEDROCK_AWS_DEFAULT_REGION}
-      # S3 (fileStrategy: "s3" in librechat.yaml) reads AWS_REGION, not AWS_DEFAULT_REGION,
-      # and needs its own bucket + ministack endpoint override. Credentials above are
-      # already shared with the DynamoDB client, so only these four are new.
-      AWS_REGION: ${BEDROCK_AWS_DEFAULT_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      # DynamoDB's client already falls back to AWS_REGION; this covers callers that only
+      # recognize AWS_DEFAULT_REGION (the aws-cli init containers, ministack itself).
+      AWS_DEFAULT_REGION: ${AWS_REGION}
       AWS_BUCKET_NAME: librechat-files
       AWS_ENDPOINT_URL: http://ministack:${MINISTACK_PORT}
       AWS_FORCE_PATH_STYLE: "true"
@@ -97,7 +96,7 @@ services:
       LAMBDA_EXECUTOR: docker
       DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME}_infra-network
       GATEWAY_PORT: ${MINISTACK_PORT}
-      AWS_DEFAULT_REGION: ${BEDROCK_AWS_DEFAULT_REGION}
+      AWS_DEFAULT_REGION: ${AWS_REGION}
       MINISTACK_BEDROCK_PROXY_URL: http://ollama:${OLLAMA_PORT}
       MINISTACK_BEDROCK_PROXY_TIMEOUT_SECONDS: 120
       PERSIST_STATE: "1"
@@ -140,9 +139,9 @@ services:
             --time-to-live-specification Enabled=true,AttributeName=expiresAt >/dev/null
         fi
     environment:
-      AWS_ACCESS_KEY_ID: ${BEDROCK_AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${BEDROCK_AWS_SECRET_ACCESS_KEY}
-      AWS_DEFAULT_REGION: ${BEDROCK_AWS_DEFAULT_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_REGION}
     depends_on:
       ministack:
         condition: service_healthy
@@ -159,9 +158,9 @@ services:
         aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api head-bucket --bucket librechat-files >/dev/null 2>&1 ||
           aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api create-bucket --bucket librechat-files
     environment:
-      AWS_ACCESS_KEY_ID: ${BEDROCK_AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${BEDROCK_AWS_SECRET_ACCESS_KEY}
-      AWS_DEFAULT_REGION: ${BEDROCK_AWS_DEFAULT_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_REGION}
     depends_on:
       ministack:
         condition: service_healthy
