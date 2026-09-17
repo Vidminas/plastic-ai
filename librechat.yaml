@@ -146,8 +146,7 @@ interface:
   # Enable/disable file search as a chatarea selection (default: true)
   # Note: This setting does not disable the Agents File Search Capability.
   # To disable the Agents Capability, see the Agents Endpoint configuration instead.
-  # Legacy Mongo-backed setting: fileSearch: true
-  fileSearch: false
+  fileSearch: true
   # Privacy policy settings
   privacyPolicy:
     externalUrl: 'https://librechat.ai/privacy-policy'
@@ -210,9 +209,8 @@ interface:
   bookmarks: false
   multiConvo: true
   agents:
-    # Legacy Mongo-backed settings: use/create: true
-    use: false
-    create: false
+    use: true
+    create: true
     share: false
     public: false
   # Scheduled chats are experimental and disabled unless explicitly enabled.
@@ -564,7 +562,8 @@ endpoints:
   #   retrievalModels: ["gpt-4-turbo-preview"]
   #   # (optional) Assistant Capabilities available to all users. Omit the ones you wish to exclude. Defaults to list below.
   #   capabilities: ["code_interpreter", "retrieval", "actions", "tools", "image_vision"]
-  # agents:
+  agents:
+    capabilities: ["deferred_tools", "execute_code", "file_search", "web_search", "artifacts", "subagents", "actions", "context", "skills", "memory", "ask_user_question", "tools", "chain", "ocr"]
   #   # (optional) Default recursion depth for agents, defaults to 25
   #   recursionLimit: 50
   #   # (optional) Max recursion depth for agents, defaults to 25
