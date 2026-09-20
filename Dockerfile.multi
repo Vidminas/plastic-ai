@@ -90,6 +90,38 @@ RUN npx tsc --noEmit -p packages/data-schemas/tsconfig.json && touch /tmp/data-s
 FROM scratch AS data-schemas-typecheck
 COPY --from=data-schemas-typecheck-run /tmp/data-schemas-typecheck /data-schemas-typecheck
 
+# Run API package unit tests against source copied into Docker's Linux filesystem
+FROM base AS api-test-run
+WORKDIR /app
+COPY config ./config
+COPY packages/api ./packages/api
+COPY --from=data-provider-build /app/packages/data-provider/dist /app/packages/data-provider/dist
+COPY --from=data-schemas-build /app/packages/data-schemas/dist /app/packages/data-schemas/dist
+RUN npx jest --coverage=false --config packages/api/jest.config.mjs --rootDir packages/api \
+      --testPathPatterns="(src/bedrock-kb/|src/files/rag\.spec\.ts$|src/storage/s3/)" \
+    && touch /tmp/api-test
+
+FROM scratch AS api-test
+COPY --from=api-test-run /tmp/api-test /api-test
+
+# Run legacy `/api` workspace unit tests against source copied into Docker's Linux filesystem
+FROM base AS legacy-api-test-run
+WORKDIR /app
+COPY config ./config
+COPY skill ./skill
+COPY api ./api
+COPY --from=data-provider-build /app/packages/data-provider/dist ./packages/data-provider/dist
+COPY --from=data-schemas-build /app/packages/data-schemas/dist ./packages/data-schemas/dist
+COPY --from=api-package-build /app/packages/api/dist ./packages/api/dist
+WORKDIR /app/api
+RUN npx cross-env NODE_ENV=test jest \
+      --testPathPatterns="(server/services/Files/(process|strategies)|test/app/clients/tools/util/fileSearch)" \
+      --testPathIgnorePatterns="integration" \
+    && touch /tmp/legacy-api-test
+
+FROM scratch AS legacy-api-test
+COPY --from=legacy-api-test-run /tmp/legacy-api-test /legacy-api-test
+
 # Build `client` package
 FROM base AS client-package-build
 WORKDIR /app/packages/client

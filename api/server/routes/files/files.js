@@ -21,6 +21,7 @@ const {
   checkToolResourceUploadPermission,
   resolveAssistantToolPermissions,
   resolveDownloadPath,
+  isBedrockKbConfigured,
 } = require('@librechat/api');
 const {
   Time,
@@ -852,7 +853,7 @@ const handleFileUpload = async (req, res) => {
       toolResource: effectiveToolResource,
       fileConfig: mergeFileConfig(req.config?.fileConfig),
       ocrConfigured: req.config?.ocr != null,
-      ragConfigured: !!process.env.RAG_API_URL,
+      ragConfigured: isBedrockKbConfigured(),
       readFile: fs.readFile,
     });
 

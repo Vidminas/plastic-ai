@@ -1,5 +1,11 @@
-const axios = require('axios');
-const { isEnabled, generateShortLivedToken, logAxiosError } = require('@librechat/api');
+// const axios = require('axios');
+// const { isEnabled, generateShortLivedToken, logAxiosError } = require('@librechat/api');
+const {
+  logAxiosError,
+  retrieveForFiles,
+  isBedrockKbConfigured,
+  resolveBedrockKbConfig,
+} = require('@librechat/api');
 
 const footer = `Use the context as your learned knowledge to better answer the user.
 
@@ -10,39 +16,41 @@ In your response, remember to follow these guidelines:
 `;
 
 function createContextHandlers(req, userMessageContent) {
-  if (!process.env.RAG_API_URL) {
+  // if (!process.env.RAG_API_URL) {
+  //   return;
+  // }
+  if (!isBedrockKbConfigured()) {
     return;
   }
 
   const queryPromises = [];
   const processedFiles = [];
   const processedIds = new Set();
-  const jwtToken = generateShortLivedToken(req.user.id);
-  const useFullContext = isEnabled(process.env.RAG_USE_FULL_CONTEXT);
+  // const jwtToken = generateShortLivedToken(req.user.id);
+  // const useFullContext = isEnabled(process.env.RAG_USE_FULL_CONTEXT);
+  const fullContextMode = req.config?.bedrockKnowledgeBase?.fullContextMode ?? 'stored-text';
+  const useFullContext = fullContextMode === 'stored-text';
 
+  /* `'stored-text'` (default) reads the File record's already-extracted `file.text` directly —
+   * no Bedrock call needed, and closer to the old full-document behavior than any chunked
+   * approximation. `'chunked-high-k'`/`'deprecated'` both retrieve from the KB, differing only
+   * in topK, since Bedrock KB has no "whole document" retrieval mode to call instead. */
   const query = async (file) => {
-    if (useFullContext) {
-      return axios.get(`${process.env.RAG_API_URL}/documents/${file.file_id}/context`, {
-        headers: {
-          Authorization: `Bearer ${jwtToken}`,
-        },
-      });
+    if (fullContextMode === 'stored-text') {
+      return { data: file.text ?? '' };
     }
 
-    return axios.post(
-      `${process.env.RAG_API_URL}/query`,
-      {
-        file_id: file.file_id,
-        query: userMessageContent,
-        k: 4,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${jwtToken}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
+    const knowledgeBaseConfig = await resolveBedrockKbConfig();
+    if (!knowledgeBaseConfig) {
+      return { data: [] };
+    }
+    const retrievalResults = await retrieveForFiles(knowledgeBaseConfig, {
+      query: userMessageContent,
+      topK: fullContextMode === 'chunked-high-k' ? 20 : 4,
+      userId: req.user.id,
+      files: [{ file_id: file.file_id }],
+    });
+    return { data: retrievalResults };
   };
 
   const processFile = async (file) => {
@@ -113,7 +121,8 @@ function createContextHandlers(req, userMessageContent) {
 
                 contextItems = queryResult.data
                   .map((item) => {
-                    const pageContent = item[0].page_content;
+                    // const pageContent = item[0].page_content;
+                    const pageContent = item.content?.text;
                     return `
             <contextItem>
               <![CDATA[${pageContent?.trim()}]]>
