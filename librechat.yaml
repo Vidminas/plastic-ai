@@ -978,7 +978,8 @@ endpoints:
   bedrock:
     baseURL: 'http://ministack:${MINISTACK_PORT}'
     models:
-      - 'granite4.2:3b'
+      # Keep in sync with OLLAMA_MODEL in .env (LibreChat does not expand ${ENV} here).
+      - 'qwen3.5:0.8b'
 
   # AWS Bedrock Example
   # Note: Bedrock endpoint is configured via environment variables
@@ -1012,12 +1013,18 @@ endpoints:
 
 modelSpecs:
   list:
-    - name: 'ministack-granite-4.2-3b'
-      label: 'MiniStack (Granite 4.2 3B)'
-      description: 'Local Granite inference through the MiniStack Bedrock service'
+    # - name: 'ministack-granite-4.2-3b'
+    #   label: 'MiniStack (Granite 4.2 3B)'
+    #   description: 'Local Granite inference through the MiniStack Bedrock service'
+    #   preset:
+    #     endpoint: 'bedrock'
+    #     model: 'granite4.2:3b'
+    - name: 'ministack-qwen3.5-0.8b'
+      label: 'MiniStack (Qwen 3.5 0.8B)'
+      description: 'Local Qwen inference through the MiniStack Bedrock service'
       preset:
         endpoint: 'bedrock'
-        model: 'granite4.2:3b'
+        model: 'qwen3.5:0.8b'
 
 # Example modelSpecs configuration showing grouping options
 # The 'group' field organizes model specs in the UI selector:

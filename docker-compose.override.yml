@@ -91,7 +91,7 @@ services:
       - infra-network
 
   ministack:
-    image: ministackorg/ministack:latest
+    image: ministackorg/ministack:1.5.16
     container_name: infra_ministack
     ports:
       - "${MINISTACK_PORT}:${MINISTACK_PORT}"
