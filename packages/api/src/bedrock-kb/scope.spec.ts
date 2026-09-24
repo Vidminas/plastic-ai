@@ -217,7 +217,7 @@ describe('bedrock-kb scope', () => {
       delete process.env.BEDROCK_KB_NAME;
       expect(isBedrockKbConfigured()).toBe(false);
 
-      process.env.BEDROCK_KB_NAME = 'librechat-kb';
+      process.env.BEDROCK_KB_NAME = 'plastic-ai-kb';
       expect(isBedrockKbConfigured()).toBe(true);
 
       delete process.env.BEDROCK_KB_NAME;

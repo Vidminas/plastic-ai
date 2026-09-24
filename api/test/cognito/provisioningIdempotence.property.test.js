@@ -109,8 +109,8 @@ function makeStartingState(rng, poolName, clientName) {
 
 describe('Feature: cognito-login-migration, Property 8: Provisioning is idempotent', () => {
   const CONFIGS = [
-    { poolName: 'librechat-users', clientName: 'librechat-web' },
-    { poolName: 'patient-ai-pool', clientName: 'patient-ai-client' },
+    { poolName: 'plastic-ai-users', clientName: 'plastic-ai-web' },
+    { poolName: 'plastic-ai-pool', clientName: 'plastic-ai-client' },
     { poolName: 'p', clientName: 'c' },
   ];
 

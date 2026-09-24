@@ -18,7 +18,7 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { hashToken, signPayload } from '~/crypto';
 
 export const DYNAMO_ITEM_LIMIT_BYTES: number = 380 * 1024;
-export const DEFAULT_DYNAMO_TABLE: string = 'librechat-core';
+export const DEFAULT_DYNAMO_TABLE: string = 'plastic-ai-core';
 const DEFAULT_REFRESH_TOKEN_EXPIRY = 1000 * 60 * 60 * 24 * 7;
 const DEFAULT_SESSION_EXPIRY = 1000 * 60 * 15;
 const GSI_NAME = 'GSI1';

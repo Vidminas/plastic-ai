@@ -1,4 +1,4 @@
-# patient.ai — real AWS (Bedrock) config
+# plastic-ai — real AWS (Bedrock) config
 version: 1.3.16
 cache: true
 
@@ -16,7 +16,7 @@ interface:
     externalUrl: 'https://librechat.ai/tos'
     openNewTab: true
     modalAcceptance: true
-    modalTitle: 'Terms of Service for patient.ai'
+    modalTitle: 'Terms of Service for plastic-ai'
     modalContent: |
       Replace with your Terms of Service.
 

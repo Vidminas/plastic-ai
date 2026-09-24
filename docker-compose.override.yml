@@ -52,7 +52,7 @@ services:
       # DynamoDB's client already falls back to AWS_REGION; this covers callers that only
       # recognize AWS_DEFAULT_REGION (the aws-cli init containers, ministack itself).
       AWS_DEFAULT_REGION: ${AWS_REGION}
-      AWS_BUCKET_NAME: librechat-files
+      AWS_BUCKET_NAME: plastic-ai-files
       AWS_ENDPOINT_URL: http://ministack:${MINISTACK_PORT}
       AWS_FORCE_PATH_STYLE: "true"
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1},${no_proxy:-},meilisearch,chat-meilisearch,rag_api,vectordb,ministack,ollama,host.docker.internal
@@ -160,8 +160,8 @@ services:
     command:
       - |
         until aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api list-buckets >/dev/null 2>&1; do sleep 2; done
-        aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api head-bucket --bucket librechat-files >/dev/null 2>&1 ||
-          aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api create-bucket --bucket librechat-files
+        aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api head-bucket --bucket plastic-ai-files >/dev/null 2>&1 ||
+          aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api create-bucket --bucket plastic-ai-files
     environment:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -200,7 +200,7 @@ services:
           aws --endpoint-url "http://ministack:${MINISTACK_PORT}" bedrock-agent create-data-source \
             --knowledge-base-id "$$kb_id" \
             --name "${BEDROCK_KB_DATA_SOURCE_NAME}" \
-            --data-source-configuration "{\"type\":\"S3\",\"s3Configuration\":{\"bucketArn\":\"arn:aws:s3:::librechat-files\",\"inclusionPrefixes\":[\"${BEDROCK_KB_DATA_SOURCE_PREFIX}\"]}}" \
+            --data-source-configuration "{\"type\":\"S3\",\"s3Configuration\":{\"bucketArn\":\"arn:aws:s3:::plastic-ai-files\",\"inclusionPrefixes\":[\"${BEDROCK_KB_DATA_SOURCE_PREFIX}\"]}}" \
             >/dev/null
         fi
     environment:
