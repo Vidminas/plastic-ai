@@ -1,0 +1,69 @@
+# patient.ai — real AWS (Bedrock) config
+version: 1.3.16
+cache: true
+
+fileStrategy: "s3"
+
+interface:
+  customWelcome: 'Welcome to LibreChat! Enjoy your experience.'
+  fileSearch: true
+
+  privacyPolicy:
+    externalUrl: 'https://librechat.ai/privacy-policy'
+    openNewTab: true
+
+  termsOfService:
+    externalUrl: 'https://librechat.ai/tos'
+    openNewTab: true
+    modalAcceptance: true
+    modalTitle: 'Terms of Service for patient.ai'
+    modalContent: |
+      Replace with your Terms of Service.
+
+  modelSelect: true
+  parameters: true
+  presets: false
+  prompts:
+    use: false
+    create: false
+    share: false
+    public: false
+  bookmarks: false
+  multiConvo: true
+  agents:
+    use: true
+    create: true
+    share: false
+    public: false
+  peoplePicker:
+    users: false
+    groups: false
+    roles: false
+  marketplace:
+    use: false
+  fileCitations: true
+  feedback: true
+
+registration:
+  socialLogins: ["openid"]
+
+actions:
+  allowedDomains:
+    - 'google.com'
+
+endpoints:
+  agents:
+    capabilities: ["file_search", "web_search", "context", "ask_user_question", "tools"]
+
+  bedrock:
+    models:
+      - 'eu.anthropic.claude-sonnet-5'
+
+modelSpecs:
+  list:
+    - name: 'bedrock-claude-sonnet-5'
+      label: 'Claude Sonnet 5 (Bedrock)'
+      description: 'Anthropic Claude Sonnet 5 via AWS Bedrock (eu-west-2, EU geo profile)'
+      preset:
+        endpoint: 'bedrock'
+        model: 'eu.anthropic.claude-sonnet-5'
