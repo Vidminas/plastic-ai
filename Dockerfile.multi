@@ -122,6 +122,24 @@ RUN npx cross-env NODE_ENV=test jest \
 FROM scratch AS legacy-api-test
 COPY --from=legacy-api-test-run /tmp/legacy-api-test /legacy-api-test
 
+# Run cognito-login-migration spec tests against source copied into Docker's Linux filesystem
+FROM base AS cognito-login-test-run
+WORKDIR /app
+COPY config ./config
+COPY skill ./skill
+COPY api ./api
+COPY --from=data-provider-build /app/packages/data-provider/dist ./packages/data-provider/dist
+COPY --from=data-schemas-build /app/packages/data-schemas/dist ./packages/data-schemas/dist
+COPY --from=api-package-build /app/packages/api/dist ./packages/api/dist
+WORKDIR /app/api
+RUN npx cross-env NODE_ENV=test jest \
+      --testPathPatterns="(server/routes/oauth|server/routes/cognito|strategies/openidStrategy|strategies/.*[Cc]ognito|server/cognitoLogin|test/cognito)" \
+      --testPathIgnorePatterns="integration" \
+    && touch /tmp/cognito-login-test
+
+FROM scratch AS cognito-login-test
+COPY --from=cognito-login-test-run /tmp/cognito-login-test /cognito-login-test
+
 # Build `client` package
 FROM base AS client-package-build
 WORKDIR /app/packages/client

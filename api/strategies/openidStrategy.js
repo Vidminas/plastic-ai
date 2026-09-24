@@ -2,6 +2,11 @@ const undici = require('undici');
 const { get } = require('lodash');
 const passport = require('passport');
 const client = require('openid-client');
+const {
+  CognitoIdentityProviderClient,
+  ListUserPoolsCommand,
+  ListUserPoolClientsCommand,
+} = require('@aws-sdk/client-cognito-identity-provider');
 const jwtDecode = require('jsonwebtoken/decode');
 const { hashToken, logger, tenantStorage } = require('@librechat/data-schemas');
 const { Strategy: OpenIDStrategy } = require('openid-client/passport');
@@ -899,8 +904,84 @@ const setupOpenIdAdmin = (openidConfig) => {
  * @returns {Promise<Configuration | null>} A promise that resolves when the OpenID strategy is set up and returns the openid client config object.
  * @throws {Error} If an error occurs during the setup process.
  */
+/**
+ * Local-emulator config discovery. ministack's Cognito CreateUserPool /
+ * CreateUserPoolClient return server-generated ids that cannot be pinned from
+ * compose or .env (same constraint the Bedrock KB resolver handles by name).
+ * When the insecure/local flag is on and OPENID_ISSUER / OPENID_CLIENT_ID are
+ * unset (or still the by-name placeholder), resolve them from COGNITO_POOL_NAME /
+ * COGNITO_CLIENT_NAME via the Cognito API, so config survives pool/client
+ * recreation without an external shim. Real AWS sets OPENID_ISSUER /
+ * OPENID_CLIENT_ID directly, so this is a no-op there.
+ *
+ * Mutates process.env.OPENID_ISSUER / OPENID_CLIENT_ID in place; safe to call
+ * repeatedly (setupOpenId may retry).
+ */
+async function resolveLocalCognitoConfig() {
+  if (!isEnabled(process.env.OPENID_ALLOW_INSECURE_REQUESTS)) {
+    return;
+  }
+  const poolName = process.env.COGNITO_POOL_NAME;
+  const clientName = process.env.COGNITO_CLIENT_NAME;
+  if (!poolName) {
+    return;
+  }
+  // A concrete issuer that already carries a pool id (…/<region>_<id>) is treated
+  // as authoritative; the by-name placeholder is not.
+  const issuer = process.env.OPENID_ISSUER ?? '';
+  const issuerLooksResolved = /_[A-Za-z0-9]+$/.test(issuer.replace(/\/$/, ''));
+  const clientLooksResolved =
+    !!process.env.OPENID_CLIENT_ID && process.env.OPENID_CLIENT_ID !== clientName;
+  if (issuerLooksResolved && clientLooksResolved) {
+    return;
+  }
+  const endpoint = process.env.AWS_ENDPOINT_URL;
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+  if (!endpoint || !region) {
+    logger.warn(
+      '[openidStrategy] OPENID_ALLOW_INSECURE_REQUESTS is set but AWS_ENDPOINT_URL/AWS_REGION are missing; cannot resolve Cognito config by name.',
+    );
+    return;
+  }
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const cognito = new CognitoIdentityProviderClient({
+    region,
+    endpoint,
+    ...(accessKeyId && secretAccessKey
+      ? { credentials: { accessKeyId, secretAccessKey } }
+      : {}),
+  });
+  const pools = await cognito.send(new ListUserPoolsCommand({ MaxResults: 60 }));
+  const pool = pools.UserPools?.find((p) => p.Name === poolName);
+  if (!pool?.Id) {
+    logger.warn(`[openidStrategy] Cognito pool named '${poolName}' not found for local resolution.`);
+    return;
+  }
+  // Issuer host is the compose-network address the API container reaches; the
+  // browser-facing hosted-UI/callback URLs are baked into the app client itself.
+  process.env.OPENID_ISSUER = `${endpoint.replace(/\/$/, '')}/${pool.Id}`;
+  if (clientName) {
+    const clients = await cognito.send(
+      new ListUserPoolClientsCommand({ UserPoolId: pool.Id, MaxResults: 60 }),
+    );
+    const appClient = clients.UserPoolClients?.find((c) => c.ClientName === clientName);
+    if (appClient?.ClientId) {
+      process.env.OPENID_CLIENT_ID = appClient.ClientId;
+    } else {
+      logger.warn(
+        `[openidStrategy] Cognito app client named '${clientName}' not found in pool ${pool.Id}.`,
+      );
+    }
+  }
+  logger.info(
+    `[openidStrategy] Resolved local Cognito config by name: issuer=${process.env.OPENID_ISSUER} clientId=${process.env.OPENID_CLIENT_ID}`,
+  );
+}
+
 async function setupOpenId() {
   try {
+    await resolveLocalCognitoConfig();
     const usePKCE = isEnabled(process.env.OPENID_USE_PKCE);
     const shouldGenerateNonce = isEnabled(process.env.OPENID_GENERATE_NONCE);
 
@@ -922,16 +1003,61 @@ async function setupOpenId() {
       clientMetadata.token_endpoint_auth_method = 'none';
     }
 
+    const allowInsecure = isEnabled(process.env.OPENID_ALLOW_INSECURE_REQUESTS);
+
     /** @type {Configuration} */
-    openidConfig = await client.discovery(
-      new URL(process.env.OPENID_ISSUER),
-      process.env.OPENID_CLIENT_ID,
-      clientMetadata,
-      undefined,
-      {
-        [client.customFetch]: customFetch,
-      },
-    );
+    if (allowInsecure) {
+      // Local emulator path (e.g. ministack): its discovery document advertises
+      // the real-AWS issuer (https://cognito-idp.<region>.amazonaws.com/<poolId>)
+      // while being served over http://ministack:4566, so client.discovery's
+      // issuer check rejects it. Fetch the metadata ourselves and build the
+      // Configuration directly, which skips that check. Guarded by
+      // OPENID_ALLOW_INSECURE_REQUESTS so real HTTPS providers keep full validation.
+      const metadataUrl = new URL(
+        `${process.env.OPENID_ISSUER.replace(/\/$/, '')}/.well-known/openid-configuration`,
+      );
+      const metadataResponse = await customFetch(metadataUrl, { method: 'GET' });
+      if (!metadataResponse.ok) {
+        throw new Error(
+          `discovery request failed: ${metadataResponse.status} ${metadataResponse.statusText}`,
+        );
+      }
+      const serverMetadata = await metadataResponse.json();
+      // Browser-vs-container reachability: the discovery doc advertises endpoints on the
+      // compose-network host (e.g. http://ministack:4566) which the browser cannot resolve.
+      // Rewrite only the browser-facing endpoints (authorization, end-session) to the
+      // host-reachable base from OPENID_PUBLIC_ENDPOINT_URL; server-to-server endpoints
+      // (token, jwks, userinfo) keep the internal host the API container reaches.
+      const publicBase = process.env.OPENID_PUBLIC_ENDPOINT_URL;
+      const internalBase = process.env.AWS_ENDPOINT_URL;
+      if (publicBase && internalBase) {
+        const internalOrigin = new URL(internalBase).origin;
+        const publicOrigin = new URL(publicBase).origin;
+        for (const key of ['authorization_endpoint', 'end_session_endpoint']) {
+          const value = serverMetadata[key];
+          if (typeof value === 'string' && value.startsWith(internalOrigin)) {
+            serverMetadata[key] = publicOrigin + value.slice(internalOrigin.length);
+          }
+        }
+      }
+      openidConfig = new client.Configuration(
+        serverMetadata,
+        process.env.OPENID_CLIENT_ID,
+        clientMetadata,
+      );
+      openidConfig[client.customFetch] = customFetch;
+      client.allowInsecureRequests(openidConfig);
+    } else {
+      openidConfig = await client.discovery(
+        new URL(process.env.OPENID_ISSUER),
+        process.env.OPENID_CLIENT_ID,
+        clientMetadata,
+        undefined,
+        {
+          [client.customFetch]: customFetch,
+        },
+      );
+    }
 
     logger.info(`[openidStrategy] OpenID authentication configuration`, {
       usePKCE,

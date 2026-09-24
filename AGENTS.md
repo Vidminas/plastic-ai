@@ -106,3 +106,43 @@ consumer sits outside the feature you are changing, leave that atom on Recoil an
 them in is what lets a feature move to its own workspace later without a rewrite, and it keeps the
 Jotai conversion scoped to the state a feature owns. See the detailed policy in `CLAUDE.md` under
 “Client State Ownership”.
+
+## Upstream mergeability
+
+This repository is a fork of upstream LibreChat, re-platformed onto ministack/AWS. Keep the fork as
+close as possible to upstream so future upstream changes merge with minimal conflict. Prefer these
+patterns, which are already the de-facto style across the migration; see `CLAUDE.md` under "Workspace
+Boundaries" for the companion module-placement policy.
+
+- **Comment out, do not delete.** When code is replaced or disabled, leave the upstream line in place
+  as a commented-out merge anchor so the three-way merge still lines up. This is the established
+  pattern: `api/db/connect.js` keeps the entire Mongoose connection block commented out, and
+  `api/server/routes/index.js` keeps `// const search = require('./search');` above each
+  `unsupported(...)` stub. `docker-compose.override.yml` keeps the legacy `MONGO_URI` and `RAG_API_URL`
+  values in comments beside their replacements.
+- **Interleave new code with the old it replaces.** Put the new line directly adjacent to the
+  commented-out original so a reviewer can see exactly where a merged upstream change maps, rather than
+  moving the replacement to a distant block.
+- **Make minimal changes.** Prefer the smallest edit that achieves the goal — env/config toggles and
+  additive wiring over rewrites. `ENDPOINTS=agents,bedrock` and `fileStrategy: "s3"` switch behavior
+  through configuration instead of editing the code paths they select.
+- **Create new files instead of replacing existing ones** where practical, so upstream files stay
+  byte-close to their origin. The DynamoDB port lives in new `packages/data-schemas/src/dynamo/*` and
+  `packages/api/src/dynamo/*`; the Bedrock Knowledge Base in `packages/api/src/bedrock-kb/*`; the 501
+  profile in `packages/api/src/http/unsupported.ts` — none rewrite the upstream Mongoose models in
+  place.
+
+## Configuration and Docker changes
+
+When a change introduces new configuration, add every new variable to **both** `.env` and
+`.env.example`, keyed the same, with the `.env.example` entry carrying a documenting comment and a
+safe placeholder (never a real secret). The two files must stay in lockstep so a fresh checkout of
+`.env.example` lists the same knobs the running `.env` uses.
+
+Make all Docker changes in `docker-compose.override.yml`, never by editing the upstream
+`docker-compose.yml`. The override file is where the fork adds and re-points services (new init
+containers such as `dynamodb-init`/`s3-init`/`bedrock-kb-init`, ministack endpoints, and the
+commented-out legacy `MONGO_URI`/`RAG_API_URL` anchors), which keeps the upstream compose file
+byte-close to its origin and every fork-specific service additive. `docker-compose.override.yml.example`
+is upstream LibreChat's commented override template, not a mirror of the fork's override — the fork's
+active services live only in `docker-compose.override.yml`, so do not mirror them into the example.

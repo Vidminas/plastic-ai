@@ -216,6 +216,48 @@ services:
     networks:
       - infra-network
 
+  # cognito-init: idempotently provisions the ministack Cognito User Pool + App Client for
+  # OIDC login. Resolves pool/client by name (list-then-create) like the siblings above.
+  # ministack local-dev caveats (hardcoded confirmation codes, in-memory MFA, browser-vs-
+  # container hosted-UI reachability) are documented in MIGRATION_ROADMAP.md Part B.2.
+  cognito-init:
+    image: amazon/aws-cli:2.36.44
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until aws --endpoint-url "http://ministack:${MINISTACK_PORT}" cognito-idp list-user-pools --max-results 60 >/dev/null 2>&1; do sleep 2; done
+        pool_id=$$(aws --endpoint-url "http://ministack:${MINISTACK_PORT}" cognito-idp list-user-pools --max-results 60 \
+          --query "UserPools[?Name=='${COGNITO_POOL_NAME}'].Id | [0]" --output text)
+        if [ "$$pool_id" = "None" ] || [ -z "$$pool_id" ]; then
+          pool_id=$$(aws --endpoint-url "http://ministack:${MINISTACK_PORT}" cognito-idp create-user-pool \
+            --pool-name "${COGNITO_POOL_NAME}" --query 'UserPool.Id' --output text)
+        fi
+        client_id=$$(aws --endpoint-url "http://ministack:${MINISTACK_PORT}" cognito-idp list-user-pool-clients \
+          --user-pool-id "$$pool_id" --max-results 60 \
+          --query "UserPoolClients[?ClientName=='${COGNITO_CLIENT_NAME}'].ClientId | [0]" --output text)
+        if [ "$$client_id" = "None" ] || [ -z "$$client_id" ]; then
+          aws --endpoint-url "http://ministack:${MINISTACK_PORT}" cognito-idp create-user-pool-client \
+            --user-pool-id "$$pool_id" \
+            --client-name "${COGNITO_CLIENT_NAME}" \
+            --no-generate-secret \
+            --allowed-o-auth-flows code \
+            --allowed-o-auth-scopes openid profile email \
+            --allowed-o-auth-flows-user-pool-client \
+            --supported-identity-providers COGNITO \
+            --callback-urls "${OPENID_CALLBACK_URL_ABSOLUTE:-http://localhost:3080/oauth/openid/callback}" \
+            >/dev/null
+        fi
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_REGION}
+    depends_on:
+      ministack:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - infra-network
+
   mongodb:
     # Legacy service remains declared in docker-compose.yml but is inactive by default.
     profiles:
@@ -231,6 +273,7 @@ services:
     # Legacy service remains declared in docker-compose.yml but is inactive by default.
     profiles:
       - legacy-rag
+
 
 networks:
   infra-network:

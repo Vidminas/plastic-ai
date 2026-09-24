@@ -345,8 +345,8 @@ interface:
 
 # Example Registration Object Structure (optional)
 registration:
-  # No social login credentials are configured in this deployment (ALLOW_SOCIAL_LOGIN=false).
-  socialLogins: []
+  # OpenID (Cognito) is the configured social login; this list drives the login-page buttons.
+  socialLogins: ["openid"]
   # allowedDomains:
   # - "gmail.com"
   # How long a started social login may take to return from the provider (ms, default 600000)
