@@ -6,7 +6,9 @@ fileStrategy: "s3"
 
 interface:
   customWelcome: 'Welcome to LibreChat! Enjoy your experience.'
-  fileSearch: true
+  # No RAG service runs here (rag_enabled in OpenTofu), so file search has
+  # nothing to search; attached files still reach the model directly.
+  fileSearch: false
 
   privacyPolicy:
     externalUrl: 'https://librechat.ai/privacy-policy'
@@ -132,7 +134,7 @@ actions:
 
 endpoints:
   agents:
-    capabilities: ["file_search", "context", "ask_user_question", "tools"]
+    capabilities: ["context", "ask_user_question", "tools"]
 
   # The sandbox is an AWS channel-program account: Bedrock refuses Anthropic
   # models there. These are the models it does serve on demand in eu-west-2, so
