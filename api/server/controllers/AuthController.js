@@ -11,6 +11,7 @@ const {
   isOpenIDSessionMissingError,
   isOpenIDSessionIdentityMatch,
   OPENID_EXPIRY_BUFFER_SECONDS,
+  getRefreshSessionState,
 } = require('@librechat/api');
 const {
   requestPasswordReset,
@@ -24,6 +25,7 @@ const {
   deleteAllUserSessions,
   getUserById,
   findSession,
+  deleteSession,
   updateUser,
   deleteTokens,
 } = require('~/models');
@@ -640,10 +642,17 @@ const refreshController = async (req, res) => {
       { lean: false },
     );
 
-    if (session && session.expiration > new Date()) {
+    const sessionState = getRefreshSessionState(session, {
+      idleTimeoutMs: math(process.env.SESSION_IDLE_TIMEOUT, 0),
+    });
+    // if (session && session.expiration > new Date()) {
+    if (sessionState === 'active') {
       const token = await setAuthTokens(userId, res, session, req);
 
       res.status(200).send({ token, user: sanitizeUserForAuthResponse(user) });
+    } else if (sessionState === 'idle') {
+      await deleteSession({ sessionId: session._id });
+      res.status(401).send('Session ended after inactivity');
     } else if (req?.query?.retry) {
       // Retrying from a refresh token request that failed (401)
       res.status(403).send('No session found');

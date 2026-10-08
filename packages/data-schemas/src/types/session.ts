@@ -5,6 +5,8 @@ export interface ISession extends Document {
   expiration: Date;
   user: Types.ObjectId;
   tenantId?: string;
+  /** When a refresh token was last issued for the session; drives `SESSION_IDLE_TIMEOUT` */
+  lastActivityAt?: Date;
 }
 
 export interface CreateSessionOptions {

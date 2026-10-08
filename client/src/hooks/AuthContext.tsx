@@ -33,12 +33,14 @@ import {
 import {
   useGetRole,
   useGetUserQuery,
+  useGetStartupConfig,
   useLoginUserMutation,
   useLogoutUserMutation,
   useRefreshTokenMutation,
 } from '~/data-provider';
 import { resetChatFilterSessionAtom } from '~/components/Conversations/chatFilters';
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
+import useIdleSignOut from './useIdleSignOut';
 import useTimeout from './useTimeout';
 import store from '~/store';
 
@@ -303,6 +305,13 @@ const AuthContextProvider = ({
     silentRefresh,
     setUserContext,
   ]);
+
+  const { data: startupConfig } = useGetStartupConfig();
+  useIdleSignOut({
+    timeoutMs: startupConfig?.sessionIdleTimeout,
+    enabled: isAuthenticated && authConfig?.test !== true,
+    onIdle: () => logout(),
+  });
 
   useEffect(() => {
     const handleTokenUpdate = (event: CustomEvent<string>) => {

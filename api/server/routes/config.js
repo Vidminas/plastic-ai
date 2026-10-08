@@ -1,5 +1,6 @@
 const express = require('express');
 const {
+  math,
   isEnabled,
   isLangfuseConnectionAvailable,
   isLangfuseFanoutEnabled,
@@ -317,6 +318,7 @@ router.get('/', async function (req, res) {
       langfuseConnectionAccess,
       insightsEnabled: isEnabled(process.env.ENABLE_INSIGHTS),
       compactionEnabled: appConfig?.summarization?.enabled !== false,
+      sessionIdleTimeout: math(process.env.SESSION_IDLE_TIMEOUT, 0) || undefined,
       ...(codeEnvironmentDecisionVersion != null ? { codeEnvironmentDecisionVersion } : {}),
       ...codeEnvironmentMoveCapabilities,
       ...(codeEnvironmentTransitionVersion != null ? { codeEnvironmentTransitionVersion } : {}),

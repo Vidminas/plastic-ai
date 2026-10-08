@@ -44,6 +44,7 @@ let mockCapturedLogoutOptions: {
 const mockRefreshMutate = jest.fn();
 
 jest.mock('~/data-provider', () => ({
+  useGetStartupConfig: jest.fn(() => ({ data: undefined })),
   useLoginUserMutation: jest.fn(
     (options: {
       onSuccess: (...args: unknown[]) => void;

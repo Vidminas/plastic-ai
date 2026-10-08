@@ -20,6 +20,9 @@ const sessionSchema: Schema<ISession> = new Schema({
     type: String,
     index: true,
   },
+  lastActivityAt: {
+    type: Date,
+  },
 });
 
 sessionSchema.index({ user: 1, refreshTokenHash: 1 }, { unique: true });

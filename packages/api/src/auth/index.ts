@@ -4,6 +4,8 @@ export * from './saml';
 export * from './proxy';
 export * from './exchange';
 export * from './refresh';
+export * from './idle';
+export * from './logout';
 export * from './googleRefresh';
 export * from './agent';
 export * from './password';
