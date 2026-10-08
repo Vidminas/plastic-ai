@@ -627,6 +627,8 @@
   "com_error_files_skipped_size": "Skipped file(s) over the {{0}} MB size limit: {{1}}",
   "com_error_files_unsupported": "This file type can't be attached here.",
   "com_error_files_upload": "An error occurred while uploading the file.",
+  "com_error_files_storage_limit": "You have used all of your file storage. Delete files you no longer need from My Files, then try again.",
+  "com_error_files_type_not_allowed": "This type of file can't be uploaded. You can upload documents, spreadsheets, presentations, ebooks, text files and images.",
   "com_error_files_upload_canceled": "The file upload request was canceled. Note: the file upload may still be processing and will need to be manually deleted.",
   "com_error_files_upload_too_large": "The file is too large. Please upload a file smaller than {{0}} MB.",
   "com_error_files_validation": "An error occurred while validating the file.",

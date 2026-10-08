@@ -50,6 +50,29 @@ describe('validateFiles', () => {
     endpointFileConfig = makeEndpointConfig();
   });
 
+  describe('with fileConfig.allowedExtensions', () => {
+    const restricted = {
+      ...defaultFileConfig,
+      allowedExtensions: ['pdf', 'md'],
+    } as FileConfig;
+
+    it('accepts a file with a listed extension', () => {
+      const fileList = [makeFile('Notes.MD', 'text/markdown', 1024)];
+      expect(
+        validateFiles({ files, fileList, setError, endpointFileConfig, fileConfig: restricted }),
+      ).toBe(true);
+      expect(setError).not.toHaveBeenCalled();
+    });
+
+    it('refuses an unlisted extension before checking its type', () => {
+      const fileList = [makeFile('archive.zip', 'application/zip', 1024)];
+      expect(
+        validateFiles({ files, fileList, setError, endpointFileConfig, fileConfig: restricted }),
+      ).toBe(false);
+      expect(setError).toHaveBeenCalledWith('com_error_files_type_not_allowed');
+    });
+  });
+
   it('returns true when all checks pass', () => {
     const fileList = [makeFile('doc.pdf', 'application/pdf', 1024)];
     const result = validateFiles({ files, fileList, setError, endpointFileConfig, fileConfig });

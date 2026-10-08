@@ -7,6 +7,7 @@ export * from './footer';
 export * from './theme';
 export * from './langchain';
 export * from './filters';
+export * from './uploads';
 export * from './session';
 export * from './file-config';
 export * from './resolve-llm-delivery-path';

@@ -4785,6 +4785,10 @@ export enum ErrorTypes {
    */
   MESSAGE_TOO_LONG = 'message_too_long',
   /**
+   * An upload would take a user's stored files past `fileConfig.userStorageLimit`
+   */
+  STORAGE_QUOTA_EXCEEDED = 'storage_quota_exceeded',
+  /**
    * Invalid request error, API rejected request
    */
   INVALID_REQUEST = 'invalid_request_error',

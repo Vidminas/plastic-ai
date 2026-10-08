@@ -7,7 +7,8 @@ const {
   uaParser,
   checkBan,
 } = require('~/server/middleware');
-const { restoreTenantContextFromReq } = require('@librechat/api');
+const { restoreTenantContextFromReq, createStorageQuotaCheck } = require('@librechat/api');
+const { getUserStorageBytes } = require('~/models');
 const { avatar: asstAvatarRouter } = require('~/server/routes/assistants/v1');
 const { avatar: agentAvatarRouter } = require('~/server/routes/agents/v1');
 const { createMulterInstance } = require('./multer');
@@ -56,8 +57,11 @@ const initialize = async () => {
     });
   });
 
-  router.post('/', upload.single('file'), restoreTenantContextFromReq);
-  router.post('/images', upload.single('file'), restoreTenantContextFromReq);
+  const storageQuota = createStorageQuotaCheck({ getUserStorageBytes });
+  // router.post('/', upload.single('file'), restoreTenantContextFromReq);
+  router.post('/', upload.single('file'), restoreTenantContextFromReq, storageQuota);
+  // router.post('/images', upload.single('file'), restoreTenantContextFromReq);
+  router.post('/images', upload.single('file'), restoreTenantContextFromReq, storageQuota);
   router.post('/images/avatar', upload.single('file'), restoreTenantContextFromReq);
   router.post(
     '/images/agents/:agent_id/avatar',

@@ -3,6 +3,7 @@ import type { EndpointFileConfig, FileConfig, RegexLike } from './types/files';
 import type { ResponsesApiRouting } from './types';
 import { EModelEndpoint, isAgentsEndpoint, isDocumentSupportedProvider } from './schemas';
 import { gpt6Tier, gptPointReleaseFamily } from './families';
+import { normalizeFileExtensions } from './uploads';
 import { normalizeEndpointName } from './utils';
 
 /** Parallel storage deletions during rollback of a failed skill archive import. */
@@ -662,6 +663,10 @@ export const fileConfigSchema = z.object({
   fileTokenLimit: z.number().min(0).optional(),
   fileContextSizeLimit: z.number().min(0).optional(),
   fileContextCharLimit: z.number().min(0).optional(),
+  /** Extensions every upload's file name must have (e.g. `pdf`); unset allows any. */
+  allowedExtensions: z.array(z.string().min(1)).optional(),
+  /** Megabytes of stored files one user may hold; an upload past it is refused. */
+  userStorageLimit: z.number().min(0).optional(),
   codeEnvLivenessSafeWindowMs: z.number().min(0).optional(),
   imageGeneration: z
     .object({
@@ -1296,6 +1301,14 @@ function buildMergedFileConfig(dynamic: DynamicFileConfig | undefined): FileConf
 
   if (dynamic.fileContextCharLimit !== undefined) {
     mergedConfig.fileContextCharLimit = dynamic.fileContextCharLimit;
+  }
+
+  if (dynamic.allowedExtensions !== undefined) {
+    mergedConfig.allowedExtensions = normalizeFileExtensions(dynamic.allowedExtensions);
+  }
+
+  if (dynamic.userStorageLimit !== undefined) {
+    mergedConfig.userStorageLimit = mbToBytes(dynamic.userStorageLimit);
   }
 
   if (dynamic.skills?.importCleanupConcurrency !== undefined) {
