@@ -70,8 +70,9 @@ interface:
   # The model calls and tool spans behind each response, read from Langfuse and
   # shown to the conversation's owner only. Inert until the stack points the app
   # at Langfuse (observability_enabled and langfuse_domain in sandbox.tfvars).
+  # Off: traces stay readable in Langfuse itself.
   traceViewer:
-    enabled: true
+    enabled: false
     showInputOutput: false
 
 registration:
