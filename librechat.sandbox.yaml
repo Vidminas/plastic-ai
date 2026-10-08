@@ -38,8 +38,8 @@ interface:
     share: false
     public: false
   agents:
-    use: true
-    create: true
+    use: false
+    create: false
     share: false
     public: false
   peoplePicker:
@@ -50,6 +50,21 @@ interface:
     use: false
   fileCitations: true
   feedback: true
+  # Not offered here: sharing (ALLOW_SHARED_LINKS=false also closes the server
+  # side), user-added MCP servers, web search (no provider configured),
+  # links that send a prompt when opened, unsaved chats, and two inert options
+  # (no memory or code service is configured).
+  sharedLinks: false
+  mcpServers:
+    use: false
+    create: false
+    share: false
+    public: false
+  webSearch: false
+  autoSubmitFromUrl: false
+  temporaryChat: false
+  memories: false
+  runCode: false
   # The model calls and tool spans behind each response, read from Langfuse and
   # shown to the conversation's owner only. Inert until the stack points the app
   # at Langfuse (observability_enabled and langfuse_domain in sandbox.tfvars).
@@ -117,7 +132,7 @@ actions:
 
 endpoints:
   agents:
-    capabilities: ["file_search", "web_search", "context", "ask_user_question", "tools"]
+    capabilities: ["file_search", "context", "ask_user_question", "tools"]
 
   # The sandbox is an AWS channel-program account: Bedrock refuses Anthropic
   # models there. These are the models it does serve on demand in eu-west-2, so

@@ -39,8 +39,8 @@ interface:
     share: false
     public: false
   agents:
-    use: true
-    create: true
+    use: false
+    create: false
     share: false
     public: false
   peoplePicker:
@@ -51,6 +51,21 @@ interface:
     use: false
   fileCitations: true
   feedback: true
+  # Not offered here: sharing (ALLOW_SHARED_LINKS=false also closes the server
+  # side), user-added MCP servers, web search (no provider configured),
+  # links that send a prompt when opened, unsaved chats, and two inert options
+  # (no memory or code service is configured).
+  sharedLinks: false
+  mcpServers:
+    use: false
+    create: false
+    share: false
+    public: false
+  webSearch: false
+  autoSubmitFromUrl: false
+  temporaryChat: false
+  memories: false
+  runCode: false
 
 registration:
   socialLogins: ["openid"]
@@ -112,7 +127,7 @@ actions:
 
 endpoints:
   agents:
-    capabilities: ["file_search", "web_search", "context", "ask_user_question", "tools"]
+    capabilities: ["file_search", "context", "ask_user_question", "tools"]
 
   bedrock:
     models:
