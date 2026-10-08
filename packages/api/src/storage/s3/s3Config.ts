@@ -52,6 +52,8 @@ export const s3Config: {
   S3_URL_EXPIRY_SECONDS: number;
   /** Custom refresh expiry in milliseconds (null = use default buffer logic) */
   S3_REFRESH_EXPIRY_MS: number | null;
+  /** Serve files through the app's own route instead of presigned S3 URLs */
+  S3_PROXY_FILES: boolean;
   /** Default base path for file storage */
   DEFAULT_BASE_PATH: string;
 } = {
@@ -67,6 +69,8 @@ export const s3Config: {
   S3_URL_EXPIRY_SECONDS: parseUrlExpiry(),
   /** Custom refresh expiry in milliseconds (null = use default buffer logic) */
   S3_REFRESH_EXPIRY_MS: parseRefreshExpiry(),
+  /** Serve files through the app's own route instead of presigned S3 URLs */
+  S3_PROXY_FILES: isEnabled(process.env.S3_PROXY_FILES),
   /** Default base path for file storage */
   DEFAULT_BASE_PATH,
 };
