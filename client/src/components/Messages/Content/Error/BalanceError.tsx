@@ -1,5 +1,12 @@
 import type { ErrorRendererProps, JsonValue } from './parts';
-import { ErrorBody, ErrorDetails, formatNumber, readNumber, readString } from './parts';
+import {
+  ErrorBody,
+  ErrorDetails,
+  formatNumber,
+  formatTimestamp,
+  readNumber,
+  readString,
+} from './parts';
 import { useBalanceDisplay } from '~/hooks/useBalanceSummary';
 import { formatBalanceAmount } from '~/utils';
 import { useLocalize } from '~/hooks';
@@ -41,6 +48,8 @@ export default function BalanceError({ json }: ErrorRendererProps) {
   const balance = readNumber(json, 'balance');
   const tokenCost = readNumber(json, 'tokenCost');
   const promptTokens = readNumber(json, 'promptTokens');
+  /** When auto-refill restores the credits; a row viewed after that moment says so instead. */
+  const resetAt = readNumber(json, 'resetAt');
   const generations = Array.isArray(json.generations)
     ? json.generations.map(readGeneration).filter((row): row is GenerationRow => row != null)
     : [];
@@ -64,6 +73,13 @@ export default function BalanceError({ json }: ErrorRendererProps) {
   return (
     <ErrorBody>
       <p>{summary}</p>
+      {resetAt != null ? (
+        <p className="text-text-secondary">
+          {resetAt > Date.now()
+            ? localize('com_error_token_balance_resets', { 0: formatTimestamp(resetAt) })
+            : localize('com_error_token_balance_reset')}
+        </p>
+      ) : null}
       {promptTokens != null ? (
         <p className="text-text-secondary">
           {localize('com_error_token_balance_prompt', { 0: formatNumber(promptTokens) })}
