@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { request } from 'librechat-data-provider';
+import { request, getSessionKeepAliveMs } from 'librechat-data-provider';
 
 /** Shared by every tab, so use in one keeps the others signed in. */
 const LAST_ACTIVITY_KEY = 'lastActivityAt';
@@ -28,6 +28,15 @@ function writeTime(key: string, value: number): void {
   }
 }
 
+/** Whether this tab is signing out for inactivity; read without clearing it. */
+export function isIdleSignOutPending(): boolean {
+  try {
+    return sessionStorage.getItem(SIGN_OUT_REASON_KEY) === 'idle';
+  } catch {
+    return false;
+  }
+}
+
 /** Reads and clears why the last session in this tab ended; `idle` after an idle sign-out. */
 export function consumeSignOutReason(): string | null {
   try {
@@ -50,7 +59,7 @@ function markIdleSignOut(): void {
 /**
  * Signs the user out after `timeoutMs` (`SESSION_IDLE_TIMEOUT`) without interaction in any
  * tab. Background requests don't count: an open, unattended tab still signs out. While the
- * user is active, the session is refreshed every third of the timeout, so the server's own
+ * user is active, the session is refreshed every keep-alive interval, so the server's own
  * idle check also sees use that sends no requests, such as reading a long reply.
  */
 export default function useIdleSignOut({
@@ -70,7 +79,7 @@ export default function useIdleSignOut({
       return;
     }
 
-    const keepAliveMs = timeoutMs / 3;
+    const keepAliveMs = getSessionKeepAliveMs(timeoutMs);
     const startedAt = Date.now();
     let lastRecorded = startedAt;
     let signedOut = false;

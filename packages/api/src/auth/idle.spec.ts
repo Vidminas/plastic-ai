@@ -19,12 +19,13 @@ describe('getRefreshSessionState', () => {
     expect(getRefreshSessionState(session(1, 0), { idleTimeoutMs, now })).toBe('expired');
   });
 
-  it('keeps a session refreshed within the idle window', () => {
-    expect(getRefreshSessionState(session(29), { idleTimeoutMs, now })).toBe('active');
+  it("keeps a session through the browser's own sign-out, so that sign-out can refresh", () => {
+    /** The last refresh can precede the last interaction by one keep-alive (5 minutes). */
+    expect(getRefreshSessionState(session(35), { idleTimeoutMs, now })).toBe('active');
   });
 
-  it('ends a session once the idle window has passed without a refresh', () => {
-    expect(getRefreshSessionState(session(30), { idleTimeoutMs, now })).toBe('idle');
+  it('ends a session once the server window (timeout + keep-alive + 1 minute) passes', () => {
+    expect(getRefreshSessionState(session(36), { idleTimeoutMs, now })).toBe('idle');
     expect(getRefreshSessionState(session(45), { idleTimeoutMs, now })).toBe('idle');
   });
 

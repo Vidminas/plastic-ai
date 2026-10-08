@@ -2422,7 +2422,7 @@ describe('refreshController – LibreChat path', () => {
       findSession.mockResolvedValue({
         _id: 'session-1',
         expiration: new Date(Date.now() + 60 * 60 * 1000),
-        lastActivityAt: new Date(Date.now() - 31 * 60 * 1000),
+        lastActivityAt: new Date(Date.now() - 37 * 60 * 1000),
       });
 
       await refreshController(req, res);

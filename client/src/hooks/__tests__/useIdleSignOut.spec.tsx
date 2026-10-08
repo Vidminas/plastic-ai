@@ -72,14 +72,14 @@ describe('useIdleSignOut', () => {
     expect(onIdle).not.toHaveBeenCalled();
   });
 
-  it('refreshes the session while active, at most every third of the timeout', async () => {
+  it('refreshes the session while active, at most every sixth of the timeout', async () => {
     renderHook(() => useIdleSignOut({ timeoutMs, enabled: true, onIdle: jest.fn() }));
 
-    wait(5 * MINUTE);
+    wait(4 * MINUTE);
     interact();
     expect(refreshToken).not.toHaveBeenCalled();
 
-    wait(6 * MINUTE);
+    wait(MINUTE);
     interact();
     expect(refreshToken).toHaveBeenCalledTimes(1);
     await act(async () => {

@@ -25,11 +25,18 @@ jest.mock('react-router-dom', () => ({
 
 const mockApiBaseUrl = jest.fn(() => '');
 
-jest.mock('librechat-data-provider', () => ({
-  ...jest.requireActual('librechat-data-provider'),
-  setTokenHeader: jest.fn(),
-  apiBaseUrl: () => mockApiBaseUrl(),
-}));
+const mockRefreshTokenRequest = jest.fn();
+const mockLogoutMutate = jest.fn();
+
+jest.mock('librechat-data-provider', () => {
+  const actual = jest.requireActual('librechat-data-provider');
+  return {
+    ...actual,
+    setTokenHeader: jest.fn(),
+    apiBaseUrl: () => mockApiBaseUrl(),
+    request: { ...actual.request, refreshToken: (...args) => mockRefreshTokenRequest(...args) },
+  };
+});
 
 let mockCapturedLoginOptions: {
   onSuccess: (...args: unknown[]) => void;
@@ -60,7 +67,7 @@ jest.mock('~/data-provider', () => ({
       onError: (...args: unknown[]) => void;
     }) => {
       mockCapturedLogoutOptions = options;
-      return { mutate: jest.fn() };
+      return { mutate: mockLogoutMutate };
     },
   ),
   useRefreshTokenMutation: jest.fn(() => ({ mutate: mockRefreshMutate })),
@@ -563,10 +570,82 @@ describe('AuthContextProvider — silentRefresh subdirectory deployment', () => 
   });
 });
 
+describe('AuthContextProvider — logout with an expired access token', () => {
+  const mockSetTokenHeader = jest.requireMock('librechat-data-provider').setTokenHeader;
+  let logout: (redirect?: string) => void = () => undefined;
+  function LogoutConsumer() {
+    logout = useAuthContext().logout;
+    return null;
+  }
+  const renderWithLogout = () => {
+    const queryClient = new QueryClient();
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <RecoilRoot>
+          <MemoryRouter>
+            <AuthContextProvider authConfig={authConfig}>
+              <LogoutConsumer />
+            </AuthContextProvider>
+          </MemoryRouter>
+        </RecoilRoot>
+      </QueryClientProvider>,
+    );
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sessionStorage.clear();
+  });
+
+  it('renews the access token before logging out, so the server can end the session', async () => {
+    mockRefreshTokenRequest.mockResolvedValue({ token: 'fresh-token' });
+    renderWithLogout();
+
+    await act(async () => {
+      logout();
+    });
+
+    expect(mockSetTokenHeader).toHaveBeenCalledWith('fresh-token');
+    expect(mockLogoutMutate).toHaveBeenCalledTimes(1);
+    expect(mockSetTokenHeader.mock.invocationCallOrder[0]).toBeLessThan(
+      mockLogoutMutate.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('still logs out when the server refuses the renewal', async () => {
+    mockRefreshTokenRequest.mockRejectedValue(new Error('403'));
+    renderWithLogout();
+
+    await act(async () => {
+      logout();
+    });
+
+    expect(mockLogoutMutate).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('AuthContextProvider — logout error handling', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    sessionStorage.clear();
     window.history.replaceState({}, '', '/c/some-chat');
+  });
+
+  it('shows no login error when an idle sign-out fails', () => {
+    jest.useFakeTimers();
+    sessionStorage.setItem('signOutReason', 'idle');
+    const { getByTestId } = renderProvider();
+
+    act(() => {
+      mockCapturedLogoutOptions.onError(new Error('Request failed with status code 401'));
+    });
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(getByTestId('consumer').getAttribute('data-error')).toBe('');
+    expect(getByTestId('consumer').getAttribute('data-authenticated')).toBe('false');
+    jest.useRealTimers();
   });
 
   afterEach(() => {

@@ -1,3 +1,5 @@
+import { getServerSessionIdleMs } from 'librechat-data-provider';
+
 /** What a refresh request may do with the session its refresh token names. */
 export type RefreshSessionState = 'active' | 'expired' | 'idle' | 'missing';
 
@@ -9,10 +11,12 @@ export interface RefreshableSession {
 }
 
 /**
- * Classifies a session for refresh. A session past its fixed expiry is `expired`; one with
- * no token issued within `idleTimeoutMs` (`SESSION_IDLE_TIMEOUT`) is `idle`. A session
- * issued before activity was recorded counts as active, so turning idle timeouts on does
- * not sign everyone out at once; its next refresh starts the clock.
+ * Classifies a session for refresh. A session past its fixed expiry is `expired`. One with no
+ * token issued within the server's window for `idleTimeoutMs` (`SESSION_IDLE_TIMEOUT`, see
+ * `getServerSessionIdleMs`) is `idle`: the window outlasts the browser's own idle sign-out, so
+ * that sign-out can still refresh and log out properly. A session issued before activity was
+ * recorded counts as active, so turning idle timeouts on does not sign everyone out at once;
+ * its next refresh starts the clock.
  */
 export function getRefreshSessionState(
   session: RefreshableSession | null | undefined,
@@ -26,7 +30,7 @@ export function getRefreshSessionState(
   }
   const lastActivity = session.lastActivityAt?.getTime();
   if (idleTimeoutMs != null && idleTimeoutMs > 0 && lastActivity != null) {
-    if (now - lastActivity >= idleTimeoutMs) {
+    if (now - lastActivity >= getServerSessionIdleMs(idleTimeoutMs)) {
       return 'idle';
     }
   }
