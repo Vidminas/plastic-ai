@@ -117,6 +117,7 @@ jest.mock('@librechat/api', () => {
     traceIdForMessage: jest.fn((messageId) => `trace-${messageId}`),
     CHILD_THREAD_READ_ONLY_ERROR: 'Child thread is view-only.',
     isSubagentThreadWriteBlocked: jest.fn().mockResolvedValue(false),
+    refreshMessageFileUrls: jest.fn(async (messages) => messages),
     requireFeedbackEnabled: (req, res, next) => next(),
   };
 });

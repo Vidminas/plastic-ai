@@ -39,6 +39,7 @@ jest.mock('@librechat/api', () => ({
   isPendingActionStale: jest.fn(() => false),
   CHILD_THREAD_READ_ONLY_ERROR: 'Child thread is view-only.',
   isSubagentThreadWriteBlocked: jest.fn().mockResolvedValue(false),
+  refreshMessageFileUrls: jest.fn(async (messages) => messages),
   requireFeedbackEnabled: (req, res, next) => next(),
 }));
 
