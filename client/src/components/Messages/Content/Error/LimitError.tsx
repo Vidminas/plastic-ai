@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ViolationTypes } from 'librechat-data-provider';
+import { ErrorTypes, ViolationTypes } from 'librechat-data-provider';
 import type { ErrorRendererProps } from './parts';
 import {
   ErrorBody,
@@ -110,6 +110,7 @@ export default function LimitError({ json, message }: ErrorRendererProps) {
   const createdAt = message?.createdAt as string | Date | undefined;
   const max = readNumber(json, 'max');
   const limit = readNumber(json, 'limit');
+  const length = readNumber(json, 'length');
   const windowInMinutes = readNumber(json, 'windowInMinutes');
   const windowLabel = useWindowLabel(windowInMinutes);
   const resetAt = readNumber(json, 'resetAt');
@@ -165,6 +166,15 @@ export default function LimitError({ json, message }: ErrorRendererProps) {
         max != null && windowLabel != null
           ? localize('com_error_stt_limit', { 0: formatNumber(max), 1: windowLabel })
           : localize('com_error_limit_reached');
+      break;
+    case ErrorTypes.MESSAGE_TOO_LONG:
+      headline =
+        length != null && max != null
+          ? localize('com_error_message_too_long', {
+              0: formatNumber(length),
+              1: formatNumber(max),
+            })
+          : localize('com_error_message_too_long_unknown');
       break;
     default:
       headline = localize('com_error_limit_reached');

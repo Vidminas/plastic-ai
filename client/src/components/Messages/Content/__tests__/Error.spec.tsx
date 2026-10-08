@@ -653,6 +653,28 @@ describe('Error — user key and limits', () => {
     ).toBeInTheDocument();
   });
 
+  it('names the length and the limit of a message that was too long to send', () => {
+    renderError({ type: ErrorTypes.MESSAGE_TOO_LONG, length: 20512, max: 20000 }, limitRow());
+
+    expect(
+      screen.getByText(
+        localized(
+          'com_error_message_too_long',
+          numberFormat.format(20512),
+          numberFormat.format(20000),
+        ),
+      ),
+    ).toBeInTheDocument();
+    expectReadable();
+  });
+
+  it('keeps generic copy for a too-long message without its numbers', () => {
+    renderError({ type: ErrorTypes.MESSAGE_TOO_LONG }, limitRow());
+
+    expect(screen.getByText(catalog.com_error_message_too_long_unknown)).toBeInTheDocument();
+    expectReadable();
+  });
+
   it('renders a message-limit countdown from a future reset time', () => {
     renderError(
       {

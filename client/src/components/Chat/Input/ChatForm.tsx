@@ -14,6 +14,7 @@ import {
   PermissionTypes,
   isAgentsEndpoint,
   isAssistantsEndpoint,
+  exceedsMessageLength,
 } from 'librechat-data-provider';
 import type { TChatProject, TMessage, TConversation } from 'librechat-data-provider';
 import type { SetterOrUpdater } from 'recoil';
@@ -75,6 +76,7 @@ import PromptsCommand from './PromptsCommand';
 import { submitFromComposer } from './submit';
 import SkillsCommand from './SkillsCommand';
 import AutoPlayAudio from './AutoPlayAudio';
+import MessageLength from './MessageLength';
 import Waveform from './Composer/Waveform';
 import { mainTextareaId } from '~/common';
 import CollapseChat from './CollapseChat';
@@ -664,6 +666,8 @@ const ChatForm = memo(function ChatForm({
      until then Enter already queues while this slot still offered the ordinary
      send button, disabled. The slot decides for itself between the during-run
      control, Stop, and nothing, so an empty one falls through to send. */
+  /** `messageLimits.maxUserMessageChars`: a longer message stays in the composer, unsent. */
+  const maxMessageChars = startupConfig?.maxUserMessageChars;
   const actionSlot = useMemo(
     () =>
       isSubmitting && !answerMode.composerAnswers && duringRunSlot != null
@@ -673,6 +677,7 @@ const ChatForm = memo(function ChatForm({
               ref={submitButtonRef}
               control={methods.control}
               fileCount={submittableFileCount}
+              maxLength={maxMessageChars}
               disabled={
                 filesLoading ||
                 isPreparingFromUrl ||
@@ -696,6 +701,7 @@ const ChatForm = memo(function ChatForm({
       answerMode.composerAnswers,
       answerMode.composerLocked,
       submittableFileCount,
+      maxMessageChars,
       methods.control,
     ],
   );
@@ -732,22 +738,24 @@ const ChatForm = memo(function ChatForm({
    *  for typed, dictated, and shortcut-bound submissions. */
   const submitComposerText = useCallback(
     (data: { text: string }): false | void =>
-      submitFromComposer(
-        {
-          answerMode,
-          steering,
-          submitMessage: (message) => {
-            const result = submitMessage(message);
-            if (result !== false) {
-              clearAllDrafts(getPendingDraftId(index));
-            }
-            return result;
-          },
-          reset: () => methods.reset(),
-        },
-        data,
-      ),
-    [answerMode, steering, submitMessage, methods, index],
+      exceedsMessageLength(data.text, maxMessageChars)
+        ? false
+        : submitFromComposer(
+            {
+              answerMode,
+              steering,
+              submitMessage: (message) => {
+                const result = submitMessage(message);
+                if (result !== false) {
+                  clearAllDrafts(getPendingDraftId(index));
+                }
+                return result;
+              },
+              reset: () => methods.reset(),
+            },
+            data,
+          ),
+    [answerMode, steering, submitMessage, methods, index, maxMessageChars],
   );
 
   return (
@@ -987,6 +995,9 @@ const ChatForm = memo(function ChatForm({
                 >
                   {localize('com_error_code_workspace_required')}
                 </p>
+              )}
+              {maxMessageChars != null && (
+                <MessageLength control={methods.control} max={maxMessageChars} />
               )}
               {/* The composer is what keeps MCP connection and authorization state
                   current wherever its ephemeral tools apply; the Agent Builder's

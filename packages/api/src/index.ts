@@ -64,6 +64,8 @@ export * from './crypto';
 export * from './flow/manager';
 /* Middleware */
 export * from './middleware';
+/* Message and output limits */
+export * from './limits';
 /* Security */
 export * from './security';
 /* Content protection */

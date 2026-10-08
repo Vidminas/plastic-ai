@@ -30,6 +30,7 @@ const {
   buildCompletionUsage,
   createSafeUser,
   validateRequest,
+  checkApiMessageLength,
   initializeAgent,
   getBalanceConfig,
   injectSkillPrimes,
@@ -1269,6 +1270,19 @@ const OpenAIChatCompletionController = async (req, res) => {
   const validation = validateRequest(req.body);
   if (isChatCompletionValidationFailure(validation)) {
     return sendErrorResponse(res, 400, validation.error);
+  }
+  const lengthCheck = checkApiMessageLength(
+    { protocol: 'chat.completions', messages: validation.request.messages },
+    req.config?.messageLimits,
+  );
+  if (!lengthCheck.ok) {
+    return sendErrorResponse(
+      res,
+      400,
+      lengthCheck.error.message,
+      undefined,
+      lengthCheck.error.code,
+    );
   }
 
   let envelope;

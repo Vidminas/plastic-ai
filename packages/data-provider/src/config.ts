@@ -81,6 +81,8 @@ export {
   MAX_CHAT_PROJECT_FILES_CEILING,
   MAX_CHAT_PROJECT_DESCRIPTION_LENGTH_CEILING,
   MAX_CHAT_PROJECT_INSTRUCTIONS_LENGTH_CEILING,
+  countMessageCharacters,
+  exceedsMessageLength,
 } from './limits';
 
 /** Legacy mark-unread writers remove this catch-up watermark too. */
@@ -3140,6 +3142,8 @@ export type TStartupConfig = {
   compactionEnabled?: boolean;
   /** `SESSION_IDLE_TIMEOUT` in milliseconds; the client signs out after this long without use. */
   sessionIdleTimeout?: number;
+  /** `messageLimits.maxUserMessageChars`, so the composer can stop an oversized send early. */
+  maxUserMessageChars?: number;
   /** Conversation-owned code-environment decision protocol supported by the API.
    * Clients must not emit selection-less decisions unless this is advertised. */
   codeEnvironmentDecisionVersion?: typeof CODE_ENVIRONMENT_DECISION_VERSION;
@@ -3656,6 +3660,19 @@ export const messageFilterPiiSchema = z
 
 export type MessageFilterPiiConfig = z.infer<typeof messageFilterPiiSchema>;
 
+/**
+ * Per-message limits enforced on the server. Unset fields keep today's behavior: no
+ * length limit on what a user sends, and whatever output budget the request or agent asks for.
+ */
+export const messageLimitsSchema = z.object({
+  /** Most characters a user may send in one message (typed text or an ask-user answer). */
+  maxUserMessageChars: z.number().int().positive().optional(),
+  /** Most tokens a model may generate for one response; lower requested budgets are kept. */
+  maxOutputTokens: z.number().int().positive().optional(),
+});
+
+export type TMessageLimits = z.infer<typeof messageLimitsSchema>;
+
 export const messageFilterSchema = z.object({
   pii: messageFilterPiiSchema.optional(),
 });
@@ -4069,6 +4086,7 @@ export const configSchema = z.object({
   modelSpecs: specsConfigSchema.optional(),
   filters: filtersConfigSchema.optional(),
   messageFilter: messageFilterSchema.optional(),
+  messageLimits: messageLimitsSchema.optional(),
   endpoints: z
     .object({
       allowedAddresses: allowedAddressesSchema,
@@ -4762,6 +4780,10 @@ export enum ErrorTypes {
    * Prompt exceeds max length
    */
   INPUT_LENGTH = 'INPUT_LENGTH',
+  /**
+   * A user message exceeds `messageLimits.maxUserMessageChars`
+   */
+  MESSAGE_TOO_LONG = 'message_too_long',
   /**
    * Invalid request error, API rejected request
    */

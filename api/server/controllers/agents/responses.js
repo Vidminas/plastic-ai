@@ -75,6 +75,7 @@ const {
   buildResponsesUsage,
   createResponseAggregator,
   sendResponsesErrorResponse,
+  checkApiMessageLength,
   createResponsesEventHandlers,
   createAggregatorEventHandlers,
   createClientToolHandoff,
@@ -1735,6 +1736,19 @@ const createResponse = async (req, res) => {
   const validation = validateResponseRequest(req.body);
   if (isValidationFailure(validation)) {
     return sendResponsesErrorResponse(res, 400, validation.error);
+  }
+  const lengthCheck = checkApiMessageLength(
+    { protocol: 'responses', input: validation.request.input },
+    req.config?.messageLimits,
+  );
+  if (!lengthCheck.ok) {
+    return sendResponsesErrorResponse(
+      res,
+      400,
+      lengthCheck.error.message,
+      undefined,
+      lengthCheck.error.code,
+    );
   }
 
   let envelope;

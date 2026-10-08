@@ -9,6 +9,7 @@ const {
   applyResumeRequest,
   GenerationJobManager,
   getSafeErrorMetadata,
+  createMessageLengthLimit,
 } = require('@librechat/api');
 const { PermissionTypes, Permissions, PermissionBits } = require('librechat-data-provider');
 const {
@@ -23,6 +24,7 @@ const guardSubagentThreadTurn = require('~/server/middleware/validate/subagentTh
 const AgentController = require('~/server/controllers/agents/request');
 const ResumeController = require('~/server/controllers/agents/resume');
 const addTitle = require('~/server/services/Endpoints/agents/title');
+const denyRequest = require('~/server/middleware/denyRequest');
 const { getFiles, getRoleByName } = require('~/models');
 
 const router = express.Router();
@@ -62,6 +64,7 @@ const restoreResumeContext = async (req, res, next) => {
 };
 
 router.use(restoreResumeContext);
+router.use(createMessageLengthLimit({ deny: denyRequest }));
 router.use(
   createMessageFilterPii({
     onTraversalFailure: reportLocatorTraversalFailure,

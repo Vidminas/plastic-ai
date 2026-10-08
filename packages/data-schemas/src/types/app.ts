@@ -72,6 +72,8 @@ export interface AppConfig {
   filters?: FiltersConfig;
   /** Message filter configuration (PII and future filter types) */
   messageFilter?: TCustomConfig['messageFilter'];
+  /** Per-message input and output limits */
+  messageLimits?: TCustomConfig['messageLimits'];
   /** Langfuse tracing configuration */
   langfuse?: TCustomConfig['langfuse'];
   /** Skill sync configuration */

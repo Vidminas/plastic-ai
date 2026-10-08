@@ -333,6 +333,7 @@ router.get('/', async function (req, res) {
       insightsEnabled: isEnabled(process.env.ENABLE_INSIGHTS),
       compactionEnabled: appConfig?.summarization?.enabled !== false,
       sessionIdleTimeout: math(process.env.SESSION_IDLE_TIMEOUT, 0) || undefined,
+      maxUserMessageChars: appConfig?.messageLimits?.maxUserMessageChars,
       ...(codeEnvironmentDecisionVersion != null ? { codeEnvironmentDecisionVersion } : {}),
       mcpApps: resolveMCPAppsPolicy(
         appConfig?.mcpSettings?.apps,
