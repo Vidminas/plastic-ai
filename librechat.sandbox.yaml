@@ -66,6 +66,20 @@ messageLimits:
   maxUserMessageChars: 20000
   maxOutputTokens: 8192
 
+# Per-user usage quota: $1.50 of model cost per 5-hour session (1,000,000
+# credits = $1, charged at each model's price). That is about 100 typical
+# Sonnet 5 turns (3,000 tokens in, history included, and 800 out). A user who
+# runs out is refused until 5 hours after their last refill; their next request
+# then refills them. Refills only top up an exhausted balance, so unused quota
+# does not pile up.
+balance:
+  enabled: true
+  startBalance: 1500000
+  autoRefillEnabled: true
+  refillIntervalValue: 5
+  refillIntervalUnit: 'hours'
+  refillAmount: 1500000
+
 actions:
   allowedDomains:
     - 'google.com'
