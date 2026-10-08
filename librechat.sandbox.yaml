@@ -53,6 +53,12 @@ interface:
 registration:
   socialLogins: ["openid"]
 
+# Voice input starts off. This is only a default: a browser that already saved a
+# choice keeps it, and users can turn it on again in Settings > Speech.
+speech:
+  speechTab:
+    speechToText: false
+
 # Enforced on the server for every chat, agent and API request. A message over
 # maxUserMessageChars is refused before it reaches a model; maxOutputTokens caps
 # each response, reasoning included (Bedrock counts both against one budget).
