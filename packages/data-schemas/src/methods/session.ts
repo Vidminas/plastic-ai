@@ -307,6 +307,7 @@ export function createSessionMethods(mongoose: typeof import('mongoose')): {
       });
 
       session.refreshTokenHash = await hashToken(refreshToken);
+      session.lastActivityAt = new Date();
       await session.save();
 
       return refreshToken;

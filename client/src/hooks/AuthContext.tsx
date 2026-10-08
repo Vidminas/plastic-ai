@@ -12,6 +12,7 @@ import { getDefaultStore } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import {
+  request,
   apiBaseUrl,
   ErrorTypes,
   SystemRoles,
@@ -33,12 +34,14 @@ import {
 import {
   useGetRole,
   useGetUserQuery,
+  useGetStartupConfig,
   useLoginUserMutation,
   useLogoutUserMutation,
   useRefreshTokenMutation,
 } from '~/data-provider';
 import { resetChatFilterSessionAtom } from '~/components/Conversations/chatFilters';
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
+import useIdleSignOut, { isIdleSignOutPending } from './useIdleSignOut';
 import useTimeout from './useTimeout';
 import store from '~/store';
 
@@ -184,7 +187,11 @@ const AuthContextProvider = ({
     },
     onError: (error) => {
       endSessionClientState();
-      doSetError((error as Error).message);
+      /** An idle sign-out whose session the server already ended is still a sign-out; the
+       * sign-in page explains it instead of showing a login error. */
+      if (!isIdleSignOutPending()) {
+        doSetError((error as Error).message);
+      }
       setUserContext({
         token: undefined,
         isAuthenticated: false,
@@ -200,7 +207,19 @@ const AuthContextProvider = ({
       if (redirect) {
         logoutRedirectRef.current = redirect;
       }
-      logoutUser.mutate(undefined);
+      /** Logout needs a valid access token, and a tab left alone longer than its lifetime no
+       * longer has one; logout is excluded from the 401 refresh-and-retry, so it would fail and
+       * leave the session (and its refresh token) alive. Renewing first lets the server end the
+       * session and return the IdP's sign-out. A refresh the server refuses has already ended it. */
+      request
+        .refreshToken()
+        .then((response) => {
+          if (response?.token) {
+            setTokenHeader(response.token);
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => logoutUser.mutate(undefined));
     },
     [logoutUser],
   );
@@ -303,6 +322,13 @@ const AuthContextProvider = ({
     silentRefresh,
     setUserContext,
   ]);
+
+  const { data: startupConfig } = useGetStartupConfig();
+  useIdleSignOut({
+    timeoutMs: startupConfig?.sessionIdleTimeout,
+    enabled: isAuthenticated && authConfig?.test !== true,
+    onIdle: () => logout(),
+  });
 
   useEffect(() => {
     const handleTokenUpdate = (event: CustomEvent<string>) => {

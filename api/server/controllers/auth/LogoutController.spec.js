@@ -13,6 +13,9 @@ jest.mock('@librechat/api', () => ({
   isEnabled: (...args) => mockIsEnabled(...args),
   math: (_value, fallback) => fallback,
   clearCloudFrontCookies: (...args) => mockClearCloudFrontCookies(...args),
+  /** The real helper, so the Cognito case below checks the URL Cognito would receive. */
+  applyProviderLogoutParams: (...args) =>
+    jest.requireActual('@librechat/api').applyProviderLogoutParams(...args),
 }));
 jest.mock('@librechat/data-schemas', () => ({
   logger: mockLogger,
@@ -85,6 +88,27 @@ afterAll(() => {
 });
 
 describe('LogoutController', () => {
+  describe('Amazon Cognito', () => {
+    it("adds the client_id and logout_uri Cognito's /logout requires", async () => {
+      process.env.OPENID_ISSUER = 'https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_abc';
+      mockGetOpenIdConfig.mockReturnValue({
+        serverMetadata: () => ({
+          end_session_endpoint: 'https://app-123.auth.eu-west-2.amazoncognito.com/logout',
+        }),
+      });
+
+      const res = buildRes();
+      await logoutController(buildReq(), res);
+
+      const redirect = new URL(res.send.mock.calls[0][0].redirect);
+      expect(redirect.origin + redirect.pathname).toBe(
+        'https://app-123.auth.eu-west-2.amazoncognito.com/logout',
+      );
+      expect(redirect.searchParams.get('client_id')).toBe('my-client-id');
+      expect(redirect.searchParams.get('logout_uri')).toBe('https://app.example.com/login');
+    });
+  });
+
   describe('id_token_hint from session', () => {
     it('sets id_token_hint when session has idToken', async () => {
       const req = buildReq();

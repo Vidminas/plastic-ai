@@ -2487,6 +2487,8 @@ export type TStartupConfig = {
   /** Manual context compaction, gated by the same `summarization.enabled`
    *  switch that governs the automatic detour. */
   compactionEnabled?: boolean;
+  /** `SESSION_IDLE_TIMEOUT` in milliseconds; the client signs out after this long without use. */
+  sessionIdleTimeout?: number;
   /** Conversation-owned code-environment decision protocol supported by the API.
    * Clients must not emit selection-less decisions unless this is advertised. */
   codeEnvironmentDecisionVersion?: typeof CODE_ENVIRONMENT_DECISION_VERSION;

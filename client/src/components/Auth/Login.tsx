@@ -6,6 +6,7 @@ import type { TLoginLayoutContext } from '~/common';
 import type { TranslationKeys } from '~/hooks';
 import { getLoginError, persistRedirectToSession } from '~/utils';
 import { ErrorMessage } from '~/components/Auth/ErrorMessage';
+import { consumeSignOutReason } from '~/hooks/useIdleSignOut';
 import SocialButton from '~/components/Auth/SocialButton';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useLocalize } from '~/hooks';
@@ -70,6 +71,14 @@ function Login() {
       setSearchParams(newParams, { replace: true });
     }
   }, [disableAutoRedirect, searchParams, setSearchParams]);
+
+  /** Once per arrival: the reason is cleared as it is read, so a reload shows nothing. */
+  useEffect(() => {
+    if (consumeSignOutReason() === 'idle') {
+      showToast({ message: localize('com_auth_signed_out_idle'), status: 'info' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const shouldAutoRedirect =
     startupConfig?.openidLoginEnabled &&

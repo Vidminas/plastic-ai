@@ -119,7 +119,7 @@ const { createHash } = require('node:crypto');
 const openIdClient = require('openid-client');
 const jwt = require('jsonwebtoken');
 const { logger } = require('@librechat/data-schemas');
-const { isEnabled, findOpenIDUser, buildOpenIDRefreshParams } = require('@librechat/api');
+const { math, isEnabled, findOpenIDUser, buildOpenIDRefreshParams } = require('@librechat/api');
 const {
   graphTokenController,
   refreshController,
@@ -2385,6 +2385,51 @@ describe('refreshController – LibreChat path', () => {
         _id: 'local-user-id',
         email: 'local@example.com',
       },
+    });
+  });
+
+  describe('with SESSION_IDLE_TIMEOUT', () => {
+    const idleTimeoutMs = 30 * 60 * 1000;
+
+    beforeEach(() => {
+      getUserById.mockResolvedValue({ toObject: () => ({ _id: 'local-user-id' }) });
+      math.mockImplementation((value, fallback) =>
+        value === String(idleTimeoutMs) ? idleTimeoutMs : fallback,
+      );
+      process.env.SESSION_IDLE_TIMEOUT = String(idleTimeoutMs);
+    });
+
+    afterEach(() => {
+      delete process.env.SESSION_IDLE_TIMEOUT;
+      math.mockImplementation((value, fallback) => fallback);
+    });
+
+    it('refreshes a session used within the idle window', async () => {
+      findSession.mockResolvedValue({
+        _id: 'session-1',
+        expiration: new Date(Date.now() + 60 * 60 * 1000),
+        lastActivityAt: new Date(Date.now() - 10 * 60 * 1000),
+      });
+
+      await refreshController(req, res);
+
+      expect(setAuthTokens).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(deleteSession).not.toHaveBeenCalled();
+    });
+
+    it('ends a session left idle past the window instead of refreshing it', async () => {
+      findSession.mockResolvedValue({
+        _id: 'session-1',
+        expiration: new Date(Date.now() + 60 * 60 * 1000),
+        lastActivityAt: new Date(Date.now() - 37 * 60 * 1000),
+      });
+
+      await refreshController(req, res);
+
+      expect(setAuthTokens).not.toHaveBeenCalled();
+      expect(deleteSession).toHaveBeenCalledWith({ sessionId: 'session-1' });
+      expect(res.status).toHaveBeenCalledWith(401);
     });
   });
 });
