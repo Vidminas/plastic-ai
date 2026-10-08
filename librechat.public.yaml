@@ -48,6 +48,13 @@ interface:
 registration:
   socialLogins: ["openid"]
 
+# Enforced on the server for every chat, agent and API request. A message over
+# maxUserMessageChars is refused before it reaches a model; maxOutputTokens caps
+# each response, reasoning included (Bedrock counts both against one budget).
+messageLimits:
+  maxUserMessageChars: 20000
+  maxOutputTokens: 8192
+
 actions:
   allowedDomains:
     - 'google.com'
