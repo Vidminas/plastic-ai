@@ -30,6 +30,13 @@ interface:
     public: false
   bookmarks: false
   multiConvo: true
+  # Skill imports take .zip/.skill archives and files of any type, which the
+  # upload policy does not allow, so users cannot create skills.
+  skills:
+    use: true
+    create: false
+    share: false
+    public: false
   agents:
     use: true
     create: true
@@ -52,6 +59,30 @@ interface:
 
 registration:
   socialLogins: ["openid"]
+
+# Uploads: documents, ebooks, text and images only, at most 100 MB a file and
+# 2 GB of stored files per user (userStorageLimit counts every file a user
+# holds). Every upload's extension must be listed, and its MIME type must match
+# supportedMimeTypes as well. The limits are set for agents and bedrock too,
+# because those built-in endpoints carry their own defaults.
+fileConfig:
+  serverFileSizeLimit: 100
+  userStorageLimit: 2048
+  allowedExtensions:
+    [doc, docx, rtf, pdf, xls, xlsx, csv, tsv, ppt, pptx,
+     epub,
+     txt, htm, html, json, xml, yaml, yml, md,
+     png, jpg, jpeg, jpe, tif, tiff, gif, bmp, webp, svg, jp2, heic]
+  endpoints:
+    default: &uploads
+      fileSizeLimit: 100
+      supportedMimeTypes:
+        - '^application/(msword|rtf|pdf|json|xml|yaml|x-yaml|epub\+zip|vnd\.ms-excel|vnd\.ms-powerpoint)$'
+        - '^application/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)$'
+        - '^text/(plain|html|csv|tab-separated-values|xml|yaml|x-yaml|markdown|x-markdown|rtf)$'
+        - '^image/(png|jpeg|tiff|gif|bmp|webp|svg\+xml|jp2|heic|heif)$'
+    agents: *uploads
+    bedrock: *uploads
 
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.
