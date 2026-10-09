@@ -125,7 +125,7 @@ export function readStoredTheme(): StoredTheme | undefined {
  * rebuilt one. The cache event is checked by key alone, since it fires for every
  * query in the app, and the re-render is deferred past the render that built it.
  */
-function useRebindOnStartupConfigRebuild() {
+export function useRebindOnStartupConfigRebuild() {
   const queryClient = useQueryClient();
   const [, rebind] = useReducer((count: number) => count + 1, 0);
   useEffect(

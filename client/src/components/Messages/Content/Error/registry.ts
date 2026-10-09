@@ -37,6 +37,7 @@ export const errorCopy: Record<string, TranslationKeys> = {
   [ErrorTypes.AUTH_BANNED]: 'com_error_auth_banned',
   [ErrorTypes.AUTH_CROSS_ORIGIN]: 'com_auth_error_login_cross_origin',
   [ErrorTypes.STORAGE_QUOTA_EXCEEDED]: 'com_error_files_storage_limit',
+  [ErrorTypes.OUTSIDE_OPENING_HOURS]: 'com_error_outside_opening_hours',
   [ViolationTypes.BAN]: 'com_error_ban',
   [ViolationTypes.CONVO_ACCESS]: 'com_error_convo_access',
   [ViolationTypes.TOOL_CALL_LIMIT]: 'com_error_tool_call_limit',

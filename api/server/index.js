@@ -27,6 +27,7 @@ const {
   ErrorController,
   memoryDiagnostics,
   createSecurityHeaders,
+  createOpeningHoursGate,
   performStartupChecks,
   handleJsonParseError,
   excludeRumBodyParser,
@@ -398,6 +399,12 @@ const startServer = async () => {
 
   /* Per-request capability cache — must be registered before any route that calls hasCapability */
   app.use(capabilityContextMiddleware);
+
+  /* Closes the API outside `openingHours`; the browser shows its resting page meanwhile. */
+  app.use(
+    '/api',
+    createOpeningHoursGate(() => appConfig.openingHours),
+  );
 
   /* Pre-auth tenant context for unauthenticated routes that need tenant scoping.
    * The reverse proxy / auth gateway sets `X-Tenant-Id` header for multi-tenant deployments. */

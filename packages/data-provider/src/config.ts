@@ -3144,6 +3144,8 @@ export type TStartupConfig = {
   sessionIdleTimeout?: number;
   /** `messageLimits.maxUserMessageChars`, so the composer can stop an oversized send early. */
   maxUserMessageChars?: number;
+  /** `openingHours`, with the server's clock (ms) when sent, so the browser shows the resting page on time. */
+  openingHours?: TOpeningHours & { serverTime: number };
   /** Conversation-owned code-environment decision protocol supported by the API.
    * Clients must not emit selection-less decisions unless this is advertised. */
   codeEnvironmentDecisionVersion?: typeof CODE_ENVIRONMENT_DECISION_VERSION;
@@ -3673,6 +3675,52 @@ export const messageLimitsSchema = z.object({
 
 export type TMessageLimits = z.infer<typeof messageLimitsSchema>;
 
+/** A wall-clock time of day, `HH:MM` in 24-hour form. */
+const clockTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Expected HH:MM (24-hour)');
+
+/** A service the resting page points people to, such as a helpline. */
+export const supportServiceSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  /** Shown as a `tel:` link. */
+  phone: z.string().optional(),
+  /** How to reach the service by text message, shown as written. */
+  text: z.string().optional(),
+  url: z.string().url().optional(),
+});
+
+export type TSupportService = z.infer<typeof supportServiceSchema>;
+
+/**
+ * The daily window in which the app can be used, the same for every user. Outside it the
+ * server refuses API requests and the browser shows a resting page listing `support`.
+ * Unset, the app is always available. A window may run past midnight (`close` before `open`).
+ */
+export const openingHoursSchema = z
+  .object({
+    open: clockTimeSchema,
+    close: clockTimeSchema,
+    /** IANA time zone the times are in; daylight saving follows it. */
+    timezone: z
+      .string()
+      .default('Europe/London')
+      .refine((timeZone) => {
+        try {
+          new Intl.DateTimeFormat('en-GB', { timeZone });
+          return true;
+        } catch {
+          return false;
+        }
+      }, 'Unknown time zone'),
+    support: z.array(supportServiceSchema).optional(),
+  })
+  .refine((hours) => hours.open !== hours.close, {
+    message: 'open and close must differ',
+    path: ['close'],
+  });
+
+export type TOpeningHours = z.infer<typeof openingHoursSchema>;
+
 export const messageFilterSchema = z.object({
   pii: messageFilterPiiSchema.optional(),
 });
@@ -4087,6 +4135,7 @@ export const configSchema = z.object({
   filters: filtersConfigSchema.optional(),
   messageFilter: messageFilterSchema.optional(),
   messageLimits: messageLimitsSchema.optional(),
+  openingHours: openingHoursSchema.optional(),
   endpoints: z
     .object({
       allowedAddresses: allowedAddressesSchema,
@@ -4788,6 +4837,10 @@ export enum ErrorTypes {
    * An upload would take a user's stored files past `fileConfig.userStorageLimit`
    */
   STORAGE_QUOTA_EXCEEDED = 'storage_quota_exceeded',
+  /**
+   * A request arrived outside `openingHours`
+   */
+  OUTSIDE_OPENING_HOURS = 'outside_opening_hours',
   /**
    * Invalid request error, API rejected request
    */

@@ -111,6 +111,31 @@ speech:
 # Enforced on the server for every chat, agent and API request. A message over
 # maxUserMessageChars is refused before it reaches a model; maxOutputTokens caps
 # each response, reasoning included (Bedrock counts both against one budget).
+# Available 06:00-22:00 UK time every day, the same for everyone, so any
+# safeguarding alert arises while the safeguarding team is working. Outside
+# these hours the API answers 503 and the browser shows a resting page that
+# points to these services.
+openingHours:
+  open: "06:00"
+  close: "22:00"
+  timezone: "Europe/London"
+  support:
+    - name: "In an emergency"
+      description: "If you or someone else is in danger right now, call 999."
+      phone: "999"
+    - name: "Childline"
+      description: "Free, private and confidential support for anyone under 19, about anything."
+      phone: "0800 1111"
+      url: "https://www.childline.org.uk"
+    - name: "Shout"
+      description: "Free, confidential support by text message, any time."
+      text: "Text SHOUT to 85258"
+      url: "https://giveusashout.org"
+    - name: "Samaritans"
+      description: "Someone to talk to, any time, whatever you are going through."
+      phone: "116 123"
+      url: "https://www.samaritans.org"
+
 messageLimits:
   maxUserMessageChars: 20000
   maxOutputTokens: 8192

@@ -74,6 +74,8 @@ export interface AppConfig {
   messageFilter?: TCustomConfig['messageFilter'];
   /** Per-message input and output limits */
   messageLimits?: TCustomConfig['messageLimits'];
+  /** Daily window in which the app can be used */
+  openingHours?: TCustomConfig['openingHours'];
   /** Langfuse tracing configuration */
   langfuse?: TCustomConfig['langfuse'];
   /** Skill sync configuration */
