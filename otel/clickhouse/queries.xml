@@ -1,0 +1,24 @@
+<!--
+  Stops ClickHouse recording the queries it runs in system.query_log.
+
+  Nearly every query here is Langfuse's and HyperDX's own background work
+  (Langfuse's worker polls ClickHouse every minute, the collector inserts
+  telemetry), not anything a user or a model did. On AWS each logged batch is
+  a new part on EFS, which bills every small write as at least 32 KiB, so the
+  log was most of the file system's traffic while the app sat idle.
+
+  Langfuse reads query_log every 15 minutes, but only to count calls to its own
+  public REST API, which LibreChat never makes. The table stays, so that query
+  finds no rows instead of failing. To look at slow queries, turn logging back
+  on for one session with SET log_queries = 1.
+
+  Mounted into /etc/clickhouse-server/users.d/ by docker-compose.override.yml and
+  embedded into the ClickHouse task by terraform/clickhouse.tf.
+-->
+<clickhouse>
+  <profiles>
+    <default>
+      <log_queries>0</log_queries>
+    </default>
+  </profiles>
+</clickhouse>

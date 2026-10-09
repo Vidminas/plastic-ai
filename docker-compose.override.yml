@@ -236,6 +236,14 @@ services:
         source: ./otel/clickhouse/hyperdx.xml
         target: /etc/clickhouse-server/users.d/hyperdx.xml
         read_only: true
+      - type: bind
+        source: ./otel/clickhouse/queries.xml
+        target: /etc/clickhouse-server/users.d/queries.xml
+        read_only: true
+      - type: bind
+        source: ./otel/clickhouse/logs.xml
+        target: /etc/clickhouse-server/config.d/logs.xml
+        read_only: true
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
       interval: 5s

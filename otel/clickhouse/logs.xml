@@ -1,0 +1,43 @@
+<!--
+  ClickHouse's own diagnostics, cut to what this deployment uses.
+
+  By default ClickHouse records its metrics, stack samples, server log, part
+  operations and query internals into system.*_log tables, flushing every few
+  seconds and merging the results again in the background. On AWS the data
+  directory is EFS, which bills every byte written: these tables were nearly
+  all of the file system's traffic and of ClickHouse's idle CPU, while Langfuse
+  and HyperDX data was a few megabytes. Only query_log stays, because Langfuse
+  reads it; queries.xml stops anything being logged into it, and if logging is
+  turned back on it keeps a week, flushed once a minute rather than every 7.5
+  seconds so that it adds fewer parts to merge. The server log goes to the
+  console at warning.
+
+  Mounted into /etc/clickhouse-server/config.d/ by docker-compose.override.yml
+  and embedded into the ClickHouse task by terraform/clickhouse.tf.
+-->
+<clickhouse>
+  <logger>
+    <level>warning</level>
+  </logger>
+
+  <query_log>
+    <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+  </query_log>
+
+  <asynchronous_insert_log remove="1" />
+  <asynchronous_metric_log remove="1" />
+  <background_schedule_pool_log remove="1" />
+  <blob_storage_log remove="1" />
+  <error_log remove="1" />
+  <latency_log remove="1" />
+  <metric_log remove="1" />
+  <opentelemetry_span_log remove="1" />
+  <part_log remove="1" />
+  <processors_profile_log remove="1" />
+  <query_metric_log remove="1" />
+  <query_thread_log remove="1" />
+  <query_views_log remove="1" />
+  <text_log remove="1" />
+  <trace_log remove="1" />
+</clickhouse>

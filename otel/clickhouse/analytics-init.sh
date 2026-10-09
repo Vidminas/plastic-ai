@@ -1,5 +1,6 @@
 #!/bin/sh
-# Creates the usage analytics views (analytics.sql) as the ClickHouse admin.
+# Creates the usage analytics views (analytics.sql) as the ClickHouse admin, and
+# makes sure system.query_log exists.
 #
 # The views read tables other services create: Langfuse's migrations and the
 # HyperDX collector's schema. This waits for them, then applies the SQL. It runs
@@ -34,4 +35,9 @@ until [ "$(client --query "SELECT count() FROM system.tables WHERE (database, na
 done
 
 client --multiquery < "$sql_file"
+
+# queries.xml stops ClickHouse logging queries, so on a new data directory it
+# never creates query_log, and Langfuse's 15-minute job that reads it fails.
+# A flush creates the system log tables, empty, and they persist.
+client --query "SYSTEM FLUSH LOGS"
 echo "Usage analytics views are up to date: $(client --query "SELECT arrayStringConcat(groupArray(name), ', ') FROM system.tables WHERE database = 'analytics'")"
