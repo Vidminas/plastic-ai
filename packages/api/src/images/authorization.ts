@@ -51,7 +51,7 @@ type ResolvedImageConfig = {
   assistantEndpoints: AssistantConfig[];
 };
 
-export type CookieAuthResult =
+type CookieAuthResult =
   | { status: 'missing' }
   | { status: 'invalid' }
   | { status: 'authenticated'; userId: string };
@@ -203,10 +203,9 @@ function getStoredPathCandidates(canonicalPath: string): string[] {
   return [canonicalPath, `${canonicalPath}?manual=false`, `${canonicalPath}?manual=true`];
 }
 
-/** Identifies the signed-in user from the session cookie; image tags send no bearer token. */
-export async function authenticateRequest(
+async function authenticateRequest(
   req: ImageRequest,
-  deps: Pick<ImageAuthorizationDeps, 'parseCookies' | 'isOpenIdReuseEnabled' | 'findSession'>,
+  deps: ImageAuthorizationDeps,
 ): Promise<CookieAuthResult> {
   const cookieHeader = req.headers.cookie;
   if (!cookieHeader) {

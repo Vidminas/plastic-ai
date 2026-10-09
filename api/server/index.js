@@ -15,7 +15,6 @@ const mongoSanitize = require('express-mongo-sanitize');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
 const {
   isEnabled,
-  S3_PROXY_ROUTE,
   issueCsp,
   apiNotFound,
   createMetrics,
@@ -433,9 +432,6 @@ const startServer = async () => {
   app.use('/api/models', routes.models);
   app.use('/api/config', preAuthTenantMiddleware, optionalJwtAuth, routes.config);
   app.use('/api/assistants', routes.assistants);
-  if (isEnabled(process.env.S3_PROXY_FILES)) {
-    app.use(S3_PROXY_ROUTE, routes.s3Files);
-  }
   app.use('/api/files', await routes.files.initialize());
   app.use(
     '/images/',

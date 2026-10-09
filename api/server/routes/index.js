@@ -14,7 +14,6 @@ const adminUsers = require('./admin/users');
 const adminAuditLog = require('./admin/audit');
 const endpoints = require('./endpoints');
 const staticRoute = require('./static');
-const s3Files = require('./s3Files');
 const messages = require('./messages');
 const memories = require('./memories');
 const presets = require('./presets');
@@ -90,6 +89,5 @@ module.exports = {
   assistants,
   categories,
   staticRoute,
-  s3Files,
   accessPermissions,
 };
