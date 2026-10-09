@@ -27,6 +27,7 @@ const {
   mergeUserSubmittedMessageFieldPaths,
   isContentFilterError,
   withoutTraceRefs,
+  refreshMessageFileUrls,
 } = require('@librechat/api');
 const subagentThreadTaskStore = require('~/server/services/Endpoints/agents/subagentThreadStore');
 const { findAllArtifacts, replaceArtifactContent } = require('~/server/services/Artifacts/update');
@@ -510,7 +511,8 @@ router.get('/:conversationId', prepareMessageRequestValidation, async (req, res)
       throw messagesResult.error;
     }
 
-    const messages = messagesResult?.messages ?? [];
+    // const messages = messagesResult?.messages ?? [];
+    const messages = await refreshMessageFileUrls(messagesResult?.messages ?? []);
     res.status(200).json(messages);
   } catch (error) {
     logger.error('Error fetching messages:', error);

@@ -51,6 +51,7 @@ import {
   assertPathSegment,
   sanitizeContentDispositionFilename,
 } from '~/storage/validation';
+import { getKeyFromS3ProxyURL, getS3ProxyURL } from './link';
 import { getSafeErrorMetadata } from '~/utils/errors';
 import { initializeS3 } from '~/cdn/s3';
 import { deleteRagFile } from '~/files';
@@ -62,6 +63,7 @@ const {
   AWS_FORCE_PATH_STYLE: forcePathStyle,
   S3_URL_EXPIRY_SECONDS: s3UrlExpirySeconds,
   S3_REFRESH_EXPIRY_MS: s3RefreshExpiryMs,
+  S3_PROXY_FILES: s3ProxyFiles,
 } = s3Config;
 
 const MULTIPART_UPLOAD_PART_SIZE = 5 * 1024 * 1024;
@@ -295,6 +297,10 @@ async function getS3URLForKey({
   customFilename?: string | null;
   contentType?: string | null;
 }): Promise<string> {
+  if (s3ProxyFiles) {
+    return getS3ProxyURL(key, customFilename);
+  }
+
   const params: GetObjectCommandInput = { Bucket: bucketName, Key: key };
 
   if (customFilename) {
@@ -664,6 +670,11 @@ export function extractKeyFromS3Url(fileUrlOrKey: string): string {
     throw new Error('Invalid input: URL or key is empty');
   }
 
+  const proxiedKey = getKeyFromS3ProxyURL(fileUrlOrKey);
+  if (proxiedKey != null) {
+    return proxiedKey;
+  }
+
   if (!fileUrlOrKey.startsWith('http://') && !fileUrlOrKey.startsWith('https://')) {
     return fileUrlOrKey.startsWith('/') ? fileUrlOrKey.substring(1) : fileUrlOrKey;
   }
@@ -887,11 +898,18 @@ export async function getS3DownloadURL({
 }
 
 export function needsRefresh(signedUrl: string, bufferSeconds: number): boolean {
+  if (getKeyFromS3ProxyURL(signedUrl) != null) {
+    return false;
+  }
   try {
     const url = new URL(signedUrl);
 
     if (!url.searchParams.has('X-Amz-Signature')) {
       return false;
+    }
+    /** A presigned link stored before the switch to app links is replaced with one. */
+    if (s3ProxyFiles) {
+      return true;
     }
 
     const expiresParam = url.searchParams.get('X-Amz-Expires');
