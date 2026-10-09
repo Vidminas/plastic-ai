@@ -1,14 +1,15 @@
 name: Playwright E2E Tests
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  pull_request:
-    paths:
-      - '**'
-      - '!**.md'
-      - '!.github/workflows/**'
-      - '.github/workflows/playwright-mock.yml'
-  schedule:
-    - cron: '0 5 * * *'
+#   pull_request:
+#     paths:
+#       - '**'
+#       - '!**.md'
+#       - '!.github/workflows/**'
+#       - '.github/workflows/playwright-mock.yml'
+#   schedule:
+#     - cron: '0 5 * * *'
   workflow_dispatch:
     inputs:
       reason:

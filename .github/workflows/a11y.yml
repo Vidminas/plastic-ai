@@ -1,10 +1,11 @@
 name: Lint for accessibility issues
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  pull_request:
-    paths:
-      - 'client/src/**'
-      - '!**.md'
+#   pull_request:
+#     paths:
+#       - 'client/src/**'
+#       - '!**.md'
   workflow_dispatch:
     inputs:
       run_workflow:

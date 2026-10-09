@@ -1,12 +1,13 @@
 name: Bombadil Property Exploration
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  pull_request:
-    paths:
-      - '**'
-      - '!**.md'
-      - '!.github/workflows/**'
-      - '.github/workflows/playwright-bombadil.yml'
+#   pull_request:
+#     paths:
+#       - '**'
+#       - '!**.md'
+#       - '!.github/workflows/**'
+#       - '.github/workflows/playwright-bombadil.yml'
   workflow_dispatch:
     inputs:
       reason:

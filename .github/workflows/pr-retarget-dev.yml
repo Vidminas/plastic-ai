@@ -1,10 +1,11 @@
 name: Retarget PRs to dev
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  pull_request_target:
-    types: [opened, reopened, synchronize]
-    # A deliberate canary base is never retargeted; the script also enforces this for sweeps.
-    branches: [main]
+#   pull_request_target:
+#     types: [opened, reopened, synchronize]
+#     # A deliberate canary base is never retargeted; the script also enforces this for sweeps.
+#     branches: [main]
   workflow_dispatch:
     inputs:
       dry_run:

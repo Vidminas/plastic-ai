@@ -1,9 +1,11 @@
 name: Docker Images Build on Tag
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  push:
-    tags:
-      - 'v*'
+#   push:
+#     tags:
+#       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: read

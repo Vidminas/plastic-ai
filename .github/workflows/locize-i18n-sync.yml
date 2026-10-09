@@ -1,12 +1,13 @@
 name: Sync Locize Translations & Create Translation PR
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  push:
-    branches: [dev]
-    paths:
-      - 'client/src/locales/en/**'
-  repository_dispatch:
-    types: [locize/versionPublished]
+#   push:
+#     branches: [dev]
+#     paths:
+#       - 'client/src/locales/en/**'
+#   repository_dispatch:
+#     types: [locize/versionPublished]
   workflow_dispatch:
 
 concurrency:

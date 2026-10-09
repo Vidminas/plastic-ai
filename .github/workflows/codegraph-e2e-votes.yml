@@ -19,15 +19,17 @@
 # CODEGRAPH_E2E_VOTES=off once the election passes.
 name: Codegraph E2E Votes
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  push:
-    branches:
-      - dev
-    paths:
-      - '**'
-      - '!**.md'
-      - '!.github/workflows/**'
-      - '.github/workflows/codegraph-e2e-votes.yml'
+#   push:
+#     branches:
+#       - dev
+#     paths:
+#       - '**'
+#       - '!**.md'
+#       - '!.github/workflows/**'
+#       - '.github/workflows/codegraph-e2e-votes.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read

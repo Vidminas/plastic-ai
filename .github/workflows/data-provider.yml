@@ -1,11 +1,12 @@
 name: Publish `librechat-data-provider` to NPM
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'packages/data-provider/package.json'
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - 'packages/data-provider/package.json'
   workflow_dispatch:
     inputs:
       reason:

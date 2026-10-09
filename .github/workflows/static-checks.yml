@@ -2,6 +2,9 @@ name: Static Checks
 
 on:
   pull_request:
+    # Fork: started by hand only. No branch name can contain `~`, so no pull request
+    # matches; upstream's paths stay live because the static checks read them.
+    branches: ['~manual-only']
     paths:
       - 'api/**'
       - 'client/**'
@@ -19,6 +22,7 @@ on:
       - '**/eslint-suppressions.json'
       - '.github/workflows/static-checks.yml'
       - '!**.md'
+  workflow_dispatch:
 
 permissions:
   contents: read

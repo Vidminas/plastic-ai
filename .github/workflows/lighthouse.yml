@@ -1,17 +1,18 @@
 name: Lighthouse CI
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  pull_request:
-    paths:
-      - 'api/**'
-      - 'client/**'
-      - 'config/**'
-      - 'packages/**'
-      - 'e2e/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/lighthouse.yml'
-      - '!**.md'
+#   pull_request:
+#     paths:
+#       - 'api/**'
+#       - 'client/**'
+#       - 'config/**'
+#       - 'packages/**'
+#       - 'e2e/**'
+#       - 'package.json'
+#       - 'package-lock.json'
+#       - '.github/workflows/lighthouse.yml'
+#       - '!**.md'
   workflow_dispatch:
 
 permissions:

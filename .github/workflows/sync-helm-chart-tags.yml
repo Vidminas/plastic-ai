@@ -1,11 +1,12 @@
 name: Sync Helm Chart Tags
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
+#   push:
+#     branches:
+#       - main
+#     paths-ignore:
+#       - '**.md'
   workflow_dispatch:
     inputs:
       release_existing_tag:

@@ -1,11 +1,12 @@
 name: Publish `@librechat/data-schemas` to NPM
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'packages/data-schemas/package.json'
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - 'packages/data-schemas/package.json'
   workflow_dispatch:
     inputs:
       reason:

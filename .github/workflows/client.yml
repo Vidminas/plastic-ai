@@ -1,11 +1,12 @@
 name: Publish `@librechat/client` to NPM
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'packages/client/package.json'
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - 'packages/client/package.json'
   workflow_dispatch:
     inputs:
       reason:

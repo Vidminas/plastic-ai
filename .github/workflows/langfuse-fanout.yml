@@ -1,12 +1,13 @@
 name: Langfuse Fanout
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/langfuse-fanout.yml'
-      - 'otel/langfuse-fanout/**'
-      - '!**.md'
+#   pull_request:
+#     paths:
+#       - '.github/workflows/langfuse-fanout.yml'
+#       - 'otel/langfuse-fanout/**'
+#       - '!**.md'
 
 permissions:
   contents: read

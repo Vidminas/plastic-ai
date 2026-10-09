@@ -9,9 +9,11 @@
 # Requires repo secrets: CODEGRAPH_URL (https endpoint), CODEGRAPH_TOKEN (bearer).
 name: Codegraph Select (observe)
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+#   pull_request:
+#     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read

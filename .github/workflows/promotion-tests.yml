@@ -1,24 +1,26 @@
 name: Main Promotion Policy Tests
 
+# Fork: started by hand only; upstream's automatic triggers are commented out below.
 on:
-  pull_request:
-    branches: [dev]
-    paths:
-      - '.github/workflows/promote-main.yml'
-      - '.github/workflows/promotion-tests.yml'
-      - '.github/workflows/backend-review.yml'
-      - '.github/workflows/frontend-review.yml'
-      - '.github/scripts/test_main_promotion.py'
-      - '.github/CODEOWNERS'
-  push:
-    branches: [dev]
-    paths:
-      - '.github/workflows/promote-main.yml'
-      - '.github/workflows/promotion-tests.yml'
-      - '.github/workflows/backend-review.yml'
-      - '.github/workflows/frontend-review.yml'
-      - '.github/scripts/test_main_promotion.py'
-      - '.github/CODEOWNERS'
+#   pull_request:
+#     branches: [dev]
+#     paths:
+#       - '.github/workflows/promote-main.yml'
+#       - '.github/workflows/promotion-tests.yml'
+#       - '.github/workflows/backend-review.yml'
+#       - '.github/workflows/frontend-review.yml'
+#       - '.github/scripts/test_main_promotion.py'
+#       - '.github/CODEOWNERS'
+#   push:
+#     branches: [dev]
+#     paths:
+#       - '.github/workflows/promote-main.yml'
+#       - '.github/workflows/promotion-tests.yml'
+#       - '.github/workflows/backend-review.yml'
+#       - '.github/workflows/frontend-review.yml'
+#       - '.github/scripts/test_main_promotion.py'
+#       - '.github/CODEOWNERS'
+  workflow_dispatch:
 
 permissions:
   contents: read
