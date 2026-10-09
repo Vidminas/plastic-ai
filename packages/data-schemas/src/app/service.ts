@@ -199,6 +199,8 @@ export const AppService = async (params?: {
   const speech = config.speech;
   const filters = loadFiltersConfig(config);
   const messageFilter = config.messageFilter;
+  const messageLimits = config.messageLimits;
+  const openingHours = config.openingHours;
   const langfuse = loadLangfuseConfig(config);
 
   const defaultConfig = {
@@ -225,6 +227,8 @@ export const AppService = async (params?: {
     filters,
     langfuse,
     messageFilter,
+    messageLimits,
+    openingHours,
     summarization,
     availableTools,
     imageOutputType,

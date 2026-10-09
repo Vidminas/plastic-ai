@@ -6,7 +6,9 @@ fileStrategy: "s3"
 
 interface:
   customWelcome: 'Welcome to LibreChat! Enjoy your experience.'
-  fileSearch: true
+  # No RAG service runs here (rag_enabled in OpenTofu), so file search has
+  # nothing to search; attached files still reach the model directly.
+  fileSearch: false
 
   privacyPolicy:
     externalUrl: 'https://librechat.ai/privacy-policy'
@@ -30,9 +32,16 @@ interface:
     public: false
   bookmarks: false
   multiConvo: true
-  agents:
+  # Skill imports take .zip/.skill archives and files of any type, which the
+  # upload policy does not allow, so users cannot create skills.
+  skills:
     use: true
-    create: true
+    create: false
+    share: false
+    public: false
+  agents:
+    use: false
+    create: false
     share: false
     public: false
   peoplePicker:
@@ -43,15 +52,107 @@ interface:
     use: false
   fileCitations: true
   feedback: true
+  # Not offered here: sharing (ALLOW_SHARED_LINKS=false also closes the server
+  # side), user-added MCP servers, web search (no provider configured),
+  # links that send a prompt when opened, unsaved chats, and two inert options
+  # (no memory or code service is configured).
+  sharedLinks: false
+  mcpServers:
+    use: false
+    create: false
+    share: false
+    public: false
+  webSearch: false
+  autoSubmitFromUrl: false
+  temporaryChat: false
+  memories: false
+  runCode: false
   # The model calls and tool spans behind each response, read from Langfuse and
   # shown to the conversation's owner only. Inert until the stack points the app
   # at Langfuse (observability_enabled and langfuse_domain in sandbox.tfvars).
+  # Off: traces stay readable in Langfuse itself.
   traceViewer:
-    enabled: true
+    enabled: false
     showInputOutput: false
 
 registration:
   socialLogins: ["openid"]
+
+# Uploads: documents, ebooks, text and images only, at most 100 MB a file and
+# 2 GB of stored files per user (userStorageLimit counts every file a user
+# holds). Every upload's extension must be listed, and its MIME type must match
+# supportedMimeTypes as well. The limits are set for agents and bedrock too,
+# because those built-in endpoints carry their own defaults.
+fileConfig:
+  serverFileSizeLimit: 100
+  userStorageLimit: 2048
+  allowedExtensions:
+    [doc, docx, rtf, pdf, xls, xlsx, csv, tsv, ppt, pptx,
+     epub,
+     txt, htm, html, json, xml, yaml, yml, md,
+     png, jpg, jpeg, jpe, tif, tiff, gif, bmp, webp, svg, jp2, heic]
+  endpoints:
+    default: &uploads
+      fileSizeLimit: 100
+      supportedMimeTypes:
+        - '^application/(msword|rtf|pdf|json|xml|yaml|x-yaml|epub\+zip|vnd\.ms-excel|vnd\.ms-powerpoint)$'
+        - '^application/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)$'
+        - '^text/(plain|html|csv|tab-separated-values|xml|yaml|x-yaml|markdown|x-markdown|rtf)$'
+        - '^image/(png|jpeg|tiff|gif|bmp|webp|svg\+xml|jp2|heic|heif)$'
+    agents: *uploads
+    bedrock: *uploads
+
+# Voice input starts off. This is only a default: a browser that already saved a
+# choice keeps it, and users can turn it on again in Settings > Speech.
+speech:
+  speechTab:
+    speechToText: false
+
+# Enforced on the server for every chat, agent and API request. A message over
+# maxUserMessageChars is refused before it reaches a model; maxOutputTokens caps
+# each response, reasoning included (Bedrock counts both against one budget).
+# Available 06:00-22:00 UK time every day, the same for everyone, so any
+# safeguarding alert arises while the safeguarding team is working. Outside
+# these hours the API answers 503 and the browser shows a resting page that
+# points to these services.
+openingHours:
+  open: "06:00"
+  close: "22:00"
+  timezone: "Europe/London"
+  support:
+    - name: "In an emergency"
+      description: "If you or someone else is in danger right now, call 999."
+      phone: "999"
+    - name: "Childline"
+      description: "Free, private and confidential support for anyone under 19, about anything."
+      phone: "0800 1111"
+      url: "https://www.childline.org.uk"
+    - name: "Shout"
+      description: "Free, confidential support by text message, any time."
+      text: "Text SHOUT to 85258"
+      url: "https://giveusashout.org"
+    - name: "Samaritans"
+      description: "Someone to talk to, any time, whatever you are going through."
+      phone: "116 123"
+      url: "https://www.samaritans.org"
+
+messageLimits:
+  maxUserMessageChars: 20000
+  maxOutputTokens: 8192
+
+# Per-user usage quota: $1.50 of model cost per 5-hour session (1,000,000
+# credits = $1, charged at each model's price). That is about 100 typical
+# Sonnet 5 turns (3,000 tokens in, history included, and 800 out). A user who
+# runs out is refused until 5 hours after their last refill; their next request
+# then refills them. Refills only top up an exhausted balance, so unused quota
+# does not pile up.
+balance:
+  enabled: true
+  startBalance: 1500000
+  autoRefillEnabled: true
+  refillIntervalValue: 5
+  refillIntervalUnit: 'hours'
+  refillAmount: 1500000
 
 actions:
   allowedDomains:
@@ -59,7 +160,7 @@ actions:
 
 endpoints:
   agents:
-    capabilities: ["file_search", "web_search", "context", "ask_user_question", "tools"]
+    capabilities: ["context", "ask_user_question", "tools"]
 
   # The sandbox is an AWS channel-program account: Bedrock refuses Anthropic
   # models there. These are the models it does serve on demand in eu-west-2, so

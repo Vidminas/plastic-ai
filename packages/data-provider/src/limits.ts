@@ -44,3 +44,25 @@ export const DEFAULT_MAX_RETAINED_TOOL_COUNT_CHARS = 8 * 1024 * 1024;
  *  user context (`endpoints.agents.askUserQuestion.retainedAnswers.maxTokens`).
  *  Older answers drop first once the block exceeds it; the newest set is always kept. */
 export const DEFAULT_RETAINED_ANSWER_TOKENS = 4096;
+
+/**
+ * Counts characters the way a reader does: by Unicode code point, so an emoji counts
+ * once rather than as the two UTF-16 units `String.prototype.length` reports. The
+ * composer and the server both count with this, so they agree on what is too long.
+ */
+export function countMessageCharacters(text: string): number {
+  let count = 0;
+  for (const _character of text) {
+    count++;
+  }
+  return count;
+}
+
+/** Whether `text` is longer than `max` characters (`messageLimits.maxUserMessageChars`). */
+export function exceedsMessageLength(text: string, max: number | undefined): boolean {
+  if (max == null) {
+    return false;
+  }
+  /** A string never holds more code points than UTF-16 units, so short ones skip the count. */
+  return text.length > max && countMessageCharacters(text) > max;
+}

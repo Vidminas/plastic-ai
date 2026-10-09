@@ -8,6 +8,7 @@ const {
   mergeFileConfig,
   inferMimeType,
   isAgentsEndpoint,
+  isAllowedFileExtension,
   getEndpointFileConfig,
   fileConfig: defaultFileConfig,
 } = require('librechat-data-provider');
@@ -92,6 +93,12 @@ const createFileFilter = (customFileConfig, resolveEndpoint) => {
   const fileFilter = (req, file, cb) => {
     if (!file) {
       return cb(createCustomError(400, 'No file provided'), false);
+    }
+
+    /* `fileConfig.allowedExtensions` applies to every upload this filter sees, audio for
+     * transcription included; the message is the composer's translation key. */
+    if (!isAllowedFileExtension(file.originalname || '', customFileConfig?.allowedExtensions)) {
+      return cb(createCustomError(415, 'com_error_files_type_not_allowed'), false);
     }
 
     const mimeType = normalizeUploadMimeType(file);

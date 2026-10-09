@@ -241,6 +241,9 @@ router.get('/', async function (req, res) {
         socialLogins: baseConfig?.registration?.socialLogins ?? defaultSocialLogins,
         turnstile: baseConfig?.turnstileConfig,
         ...(rum ? { rum } : {}),
+        ...(baseConfig?.openingHours
+          ? { openingHours: { ...baseConfig.openingHours, serverTime: Date.now() } }
+          : {}),
       };
 
       const interfaceConfig = baseConfig?.interfaceConfig;
@@ -333,6 +336,10 @@ router.get('/', async function (req, res) {
       insightsEnabled: isEnabled(process.env.ENABLE_INSIGHTS),
       compactionEnabled: appConfig?.summarization?.enabled !== false,
       sessionIdleTimeout: math(process.env.SESSION_IDLE_TIMEOUT, 0) || undefined,
+      maxUserMessageChars: appConfig?.messageLimits?.maxUserMessageChars,
+      ...(appConfig?.openingHours
+        ? { openingHours: { ...appConfig.openingHours, serverTime: Date.now() } }
+        : {}),
       ...(codeEnvironmentDecisionVersion != null ? { codeEnvironmentDecisionVersion } : {}),
       mcpApps: resolveMCPAppsPolicy(
         appConfig?.mcpSettings?.apps,

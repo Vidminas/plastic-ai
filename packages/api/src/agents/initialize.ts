@@ -147,6 +147,7 @@ import { applyTurnDelivery } from './files/delivery';
 import { generateArtifactsPrompt } from '~/prompts';
 import { getProviderConfig } from '~/endpoints';
 import { primeResources } from './resources';
+import { capOutputTokens } from '~/limits';
 
 /**
  * Fraction of context budget reserved as headroom when no explicit maxContextTokens is set.
@@ -1561,6 +1562,11 @@ export async function initializeAgent(
   });
 
   const llmConfig = options.llmConfig as Record<string, unknown>;
+  capOutputTokens({
+    llmConfig,
+    provider: agent.provider,
+    max: appConfig?.messageLimits?.maxOutputTokens,
+  });
   const webSearchDenied =
     hasProviderWebSearch(options.tools, llmConfig) &&
     !(await resolveWebSearchGrant({

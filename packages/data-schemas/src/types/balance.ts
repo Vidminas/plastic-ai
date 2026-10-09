@@ -83,4 +83,6 @@ export interface BalanceReservationResult {
   reserved: boolean;
   /** Credits not held by other in-flight requests, after any auto-refill */
   balance: number;
+  /** When a refused request's auto-refill next becomes due; absent without auto-refill */
+  refillAt?: Date;
 }

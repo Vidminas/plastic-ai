@@ -73,6 +73,10 @@ export type FileConfig = {
   fileContextCharLimit?: number;
   serverFileSizeLimit?: number;
   avatarSizeLimit?: number;
+  /** Lower-cased extensions, without dots, every upload's file name must have */
+  allowedExtensions?: string[];
+  /** Bytes of stored files one user may hold */
+  userStorageLimit?: number;
   clientImageResize?: {
     enabled?: boolean;
     maxWidth?: number;

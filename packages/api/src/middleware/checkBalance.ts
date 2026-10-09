@@ -269,6 +269,11 @@ export async function checkBalance(
     errorMessage.generations = txData.generations;
   }
 
+  /** Epoch milliseconds, as other limit errors carry `resetAt`, so the chat can say when to retry. */
+  if (result?.refillAt) {
+    errorMessage.resetAt = result.refillAt.getTime();
+  }
+
   await deps.logViolation(req, res, type, errorMessage, 0);
   throw new Error(JSON.stringify(errorMessage));
 }

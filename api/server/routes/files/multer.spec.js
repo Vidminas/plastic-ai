@@ -449,6 +449,66 @@ describe('Multer Configuration', () => {
     });
   });
 
+  describe('fileConfig.allowedExtensions', () => {
+    const { mergeFileConfig } = require('librechat-data-provider');
+    const restricted = () =>
+      createFileFilter(mergeFileConfig({ allowedExtensions: ['pdf', 'md', 'png'] }));
+    const filterResult = (fileFilter, file, req = mockReq) =>
+      new Promise((resolve) => fileFilter(req, file, (err, ok) => resolve({ err, ok })));
+
+    it('accepts a file whose extension is listed', async () => {
+      const { err, ok } = await filterResult(restricted(), {
+        ...mockFile,
+        originalname: 'Report.PDF',
+        mimetype: 'application/pdf',
+      });
+      expect(err).toBeNull();
+      expect(ok).toBe(true);
+    });
+
+    it('refuses archives, code and audio even when their MIME type would pass', async () => {
+      for (const [originalname, mimetype] of [
+        ['archive.zip', 'application/zip'],
+        ['script.py', 'text/x-python'],
+        ['invoice.pdf.exe', 'application/pdf'],
+        ['no-extension', 'text/plain'],
+      ]) {
+        const { err, ok } = await filterResult(restricted(), {
+          ...mockFile,
+          originalname,
+          mimetype,
+        });
+        expect(ok).toBe(false);
+        expect(err.statusCode).toBe(415);
+        expect(err.message).toBe('com_error_files_type_not_allowed');
+      }
+    });
+
+    it('refuses audio sent for transcription', async () => {
+      const { ok } = await filterResult(
+        restricted(),
+        { ...mockFile, originalname: 'voice.webm', mimetype: 'audio/webm' },
+        { ...mockReq, originalUrl: '/api/files/speech/stt' },
+      );
+      expect(ok).toBe(false);
+    });
+
+    it('still applies the MIME allowlist to an allowed extension', async () => {
+      const fileFilter = createFileFilter(
+        mergeFileConfig({
+          allowedExtensions: ['pdf'],
+          endpoints: { default: { supportedMimeTypes: ['^image/.*$'] } },
+        }),
+      );
+      const { ok } = await filterResult(fileFilter, {
+        ...mockFile,
+        originalname: 'doc.pdf',
+        mimetype: 'application/pdf',
+      });
+      expect(ok).toBe(false);
+    });
+  });
+
   describe('createMulterInstance with Real Functions', () => {
     it('should create a multer instance with correct configuration', async () => {
       const multerInstance = await createMulterInstance();

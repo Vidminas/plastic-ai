@@ -12,6 +12,7 @@ import QueryDevtoolsGate from '~/components/QueryDevtoolsGate';
 import LanguageSync from '~/components/System/LanguageSync';
 import DeploymentTheme from '~/Providers/DeploymentTheme';
 import UiScaleSync from '~/components/System/UiScaleSync';
+import OpeningHoursGate from '~/components/System/Resting';
 import { initializeFontSize } from '~/store/fontSize';
 import { LiveAnnouncer } from '~/a11y';
 import { router } from './routes';
@@ -73,7 +74,9 @@ const App = () => {
                       transition-safe reads are gated behind
                       `_TRANSITION_SUPPORT_UNSTABLE` hooks this app does not use.
                       Worth revisiting once that state has moved to Jotai. */}
-                  <RouterProvider router={router} useTransitions={false} />
+                  <OpeningHoursGate>
+                    <RouterProvider router={router} useTransitions={false} />
+                  </OpeningHoursGate>
                   <WakeLockManager />
                   <QueryDevtoolsGate />
                   <Toast />

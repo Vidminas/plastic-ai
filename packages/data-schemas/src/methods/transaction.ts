@@ -1,4 +1,4 @@
-import { isBalanceRefillDue } from 'librechat-data-provider';
+import { isBalanceRefillDue, getRefillEligibilityDate } from 'librechat-data-provider';
 import type { AnyBulkWriteOperation, FilterQuery, Model, Types } from 'mongoose';
 import type {
   BalanceReservationRequest,
@@ -292,6 +292,23 @@ export function createTransactionMethods(
     );
   }
 
+  /** When the record's next auto-refill becomes due; undefined when it has none. */
+  function getNextRefillDate(record: IBalance): Date | undefined {
+    if (!record.autoRefillEnabled || !(record.refillAmount > 0)) {
+      return undefined;
+    }
+    const intervalValue = record.refillIntervalValue ?? 0;
+    /* A reset needs a whole, positive interval to be due at all (see isBalanceRefillDue). */
+    if (record.refillMode === 'reset' && !(Number.isInteger(intervalValue) && intervalValue > 0)) {
+      return undefined;
+    }
+    const lastRefill = new Date(record.lastRefill ?? 0);
+    if (isNaN(lastRefill.getTime())) {
+      return undefined;
+    }
+    return getRefillEligibilityDate(lastRefill, intervalValue, record.refillIntervalUnit ?? 'days');
+  }
+
   function isDuplicateKeyError(error: unknown): boolean {
     return error instanceof Error && 'code' in error && (error as { code: number }).code === 11000;
   }
@@ -528,7 +545,11 @@ export function createTransactionMethods(
       }
 
       const reserved = balance >= amount;
-      if (!reserved || !(amount > 0)) {
+      if (!reserved) {
+        const refillAt = getNextRefillDate(record);
+        return refillAt ? { reserved, balance, refillAt } : { reserved, balance };
+      }
+      if (!(amount > 0)) {
         return { reserved, balance };
       }
 

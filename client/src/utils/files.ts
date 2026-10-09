@@ -14,6 +14,7 @@ import {
   inferMimeType,
   excelMimeTypes,
   EToolResources,
+  isAllowedFileExtension,
   EModelEndpoint,
   retrievalMimeTypes,
   isEphemeralAgentId,
@@ -520,6 +521,11 @@ export const validateFiles = ({
 
   for (let i = 0; i < fileList.length; i++) {
     let originalFile = fileList[i];
+    /** The server refuses these too (`fileConfig.allowedExtensions`); refusing here saves the upload. */
+    if (!isAllowedFileExtension(originalFile.name, fileConfig?.allowedExtensions)) {
+      setError('com_error_files_type_not_allowed');
+      return false;
+    }
     const fileType = inferMimeType(originalFile.name, originalFile.type);
 
     // Check if the file type is still empty after the extension check

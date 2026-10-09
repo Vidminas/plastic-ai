@@ -1710,13 +1710,13 @@ describe('Balance Reservations', () => {
     });
 
     test.each([
-      ['lastRefill advances', { lastRefill: new Date() }, 0],
-      ['auto-refill is disabled', { autoRefillEnabled: false }, 0],
-      ['the refill amount changes', { refillAmount: 10 }, 10],
-      ['the refill interval lengthens', { refillIntervalValue: 100_000 }, 0],
+      ['lastRefill advances', { lastRefill: new Date() }, 0, true],
+      ['auto-refill is disabled', { autoRefillEnabled: false }, 0, false],
+      ['the refill amount changes', { refillAmount: 10 }, 10, true],
+      ['the refill interval lengthens', { refillIntervalValue: 100_000 }, 0, true],
     ])(
       'applies the current refill settings when %s mid-attempt',
-      async (_case, change, credits) => {
+      async (_case, change, credits, refills) => {
         const user = new mongoose.Types.ObjectId();
         await Balance.create({ user, ...refillable });
 
@@ -1725,6 +1725,7 @@ describe('Balance Reservations', () => {
         await expect(reserve(user.toString(), 150)).resolves.toEqual({
           reserved: false,
           balance: credits,
+          ...(refills ? { refillAt: expect.any(Date) } : {}),
         });
         expect((await readState(user))?.tokenCredits).toBe(credits);
         expect(await Transaction.countDocuments({ user, context: 'autoRefill' })).toBe(
@@ -1760,6 +1761,7 @@ describe('Balance Reservations', () => {
       await expect(reserve(user.toString(), 500)).resolves.toEqual({
         reserved: false,
         balance: 100,
+        refillAt: expect.any(Date),
       });
       const stored = await readState(user);
       expect(stored?.tokenCredits).toBe(100);
@@ -1778,11 +1780,32 @@ describe('Balance Reservations', () => {
         await expect(reserve(user.toString(), 100)).resolves.toEqual({
           reserved,
           balance: credits,
+          ...(reserved ? {} : { refillAt: expect.any(Date) }),
         });
         expect((await readState(user))?.tokenCredits).toBe(credits);
         expect(await Transaction.countDocuments({ user, context: 'autoRefill' })).toBe(1);
       },
     );
+
+    test('tells a refused request when its session quota is refilled', async () => {
+      const user = new mongoose.Types.ObjectId();
+      const lastRefill = new Date(Date.now() - 60 * 60 * 1000);
+      await Balance.create({
+        user,
+        ...refillable,
+        tokenCredits: 50,
+        refillIntervalValue: 5,
+        refillIntervalUnit: 'hours',
+        lastRefill,
+      });
+
+      await expect(reserve(user.toString(), 100)).resolves.toEqual({
+        reserved: false,
+        balance: 50,
+        refillAt: new Date(lastRefill.getTime() + 5 * 60 * 60 * 1000),
+      });
+      expect(await Transaction.countDocuments({ user, context: 'autoRefill' })).toBe(0);
+    });
 
     test('does not refill while the unreserved balance covers the request', async () => {
       const user = new mongoose.Types.ObjectId();

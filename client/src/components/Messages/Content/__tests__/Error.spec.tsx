@@ -653,6 +653,28 @@ describe('Error — user key and limits', () => {
     ).toBeInTheDocument();
   });
 
+  it('names the length and the limit of a message that was too long to send', () => {
+    renderError({ type: ErrorTypes.MESSAGE_TOO_LONG, length: 20512, max: 20000 }, limitRow());
+
+    expect(
+      screen.getByText(
+        localized(
+          'com_error_message_too_long',
+          numberFormat.format(20512),
+          numberFormat.format(20000),
+        ),
+      ),
+    ).toBeInTheDocument();
+    expectReadable();
+  });
+
+  it('keeps generic copy for a too-long message without its numbers', () => {
+    renderError({ type: ErrorTypes.MESSAGE_TOO_LONG }, limitRow());
+
+    expect(screen.getByText(catalog.com_error_message_too_long_unknown)).toBeInTheDocument();
+    expectReadable();
+  });
+
   it('renders a message-limit countdown from a future reset time', () => {
     renderError(
       {
@@ -766,6 +788,29 @@ describe('Error — user key and limits', () => {
 });
 
 describe('Error — token balance and context budget', () => {
+  it('says when an exhausted usage quota refills', () => {
+    const resetAt = Date.now() + 2 * 60 * 60 * 1000;
+    renderError({ type: ViolationTypes.TOKEN_BALANCE, balance: 10, tokenCost: 900, resetAt });
+
+    expect(
+      screen.getByText(
+        localized('com_error_token_balance_resets', dateTimeFormat.format(new Date(resetAt))),
+      ),
+    ).toBeInTheDocument();
+    expectReadable();
+  });
+
+  it('says the quota has refilled when the error is viewed after its reset time', () => {
+    renderError({
+      type: ViolationTypes.TOKEN_BALANCE,
+      balance: 10,
+      tokenCost: 900,
+      resetAt: Date.now() - 1000,
+    });
+
+    expect(screen.getByText(catalog.com_error_token_balance_reset)).toBeInTheDocument();
+  });
+
   it('formats token credits and keeps generation rows behind a disclosure', () => {
     renderError({
       type: ViolationTypes.TOKEN_BALANCE,

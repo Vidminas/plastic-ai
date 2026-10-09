@@ -29,6 +29,7 @@ import {
 import { createSessionMethods, DEFAULT_REFRESH_TOKEN_EXPIRY, type SessionMethods } from './session';
 import { createPasskeyMethods, type PasskeyMethods } from './passkey';
 import { createUserMethods, DEFAULT_SESSION_EXPIRY, type UserMethods } from './user';
+import { createStorageMethods, type StorageMethods } from './storage';
 import { createTokenMethods, type TokenMethods } from './token';
 import { createRoleMethods, RoleConflictError } from './role';
 import { createKeyMethods, type KeyMethods } from './key';
@@ -258,6 +259,7 @@ export type AllMethods = ToolApprovalGrantStorage &
   RoleMethods &
   KeyMethods &
   FileMethods &
+  StorageMethods &
   MemoryMethods &
   ToolFavoriteMethods &
   AgentCategoryMethods &
@@ -496,6 +498,7 @@ export function createMethods(
     ...roleMethods,
     ...createKeyMethods(mongoose),
     ...createFileMethods(mongoose),
+    ...createStorageMethods(mongoose),
     ...createMemoryMethods(mongoose),
     ...createToolFavoriteMethods(mongoose),
     ...createAgentCategoryMethods(mongoose),
@@ -562,6 +565,7 @@ export type {
   KeyMethods,
   MemoryMethods,
   FileMethods,
+  StorageMethods,
   FileOwnerScope,
   AvailableProjectFileRecord,
   AvailableProjectFilesOptions,

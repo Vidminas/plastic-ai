@@ -103,6 +103,33 @@ describe('checkBalance', () => {
     );
   });
 
+  it('tells the user when an auto-refill restores their credits', async () => {
+    const refillAt = new Date('2026-10-08T15:40:00.000Z');
+    const deps = createMockDeps({
+      reserveBalance: jest.fn().mockResolvedValue({ reserved: false, balance: 10, refillAt }),
+    });
+
+    const error = await checkBalance({ req, res, txData: { ...baseTxData, amount: 100 } }, deps)
+      .then(() => undefined)
+      .catch((thrown: Error) => thrown);
+
+    expect(JSON.parse(error?.message ?? '{}')).toEqual(
+      expect.objectContaining({ type: ViolationTypes.TOKEN_BALANCE, resetAt: refillAt.getTime() }),
+    );
+  });
+
+  it('omits a reset time without auto-refill', async () => {
+    const deps = createMockDeps({
+      reserveBalance: jest.fn().mockResolvedValue({ reserved: false, balance: 10 }),
+    });
+
+    const error = await checkBalance({ req, res, txData: baseTxData }, deps)
+      .then(() => undefined)
+      .catch((thrown: Error) => thrown);
+
+    expect(JSON.parse(error?.message ?? '{}')).not.toHaveProperty('resetAt');
+  });
+
   it('reports no less than zero balance when reservations exceed the credits', async () => {
     const deps = createMockDeps({
       reserveBalance: jest.fn().mockResolvedValue({ reserved: false, balance: -200 }),
