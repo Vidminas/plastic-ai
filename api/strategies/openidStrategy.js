@@ -18,9 +18,11 @@ const {
   findOpenIDUser,
   getOpenIdEmail,
   getOpenIdIssuer,
+  createOpenIDUser,
   getBalanceConfig,
   selectOpenIdRole,
   getTokenCacheTtlMs,
+  applyOpenIDProfile,
   getAvatarSaveParams,
   isEmailDomainAllowed,
   getAvatarFileStrategy,
@@ -33,7 +35,13 @@ const {
 } = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { resizeAvatar } = require('~/server/services/Files/images/avatar');
-const { findUser, createUser, updateUser, findRolesByNames } = require('~/models');
+const {
+  findUser,
+  updateUser,
+  findRolesByNames,
+  findBalanceByUser,
+  createUserIfAbsent,
+} = require('~/models');
 const { getAppConfig } = require('~/server/services/Config');
 const getLogStores = require('~/cache/getLogStores');
 
@@ -585,14 +593,15 @@ async function processOpenIDAuth(tokenset, existingUsersOnly = false) {
     throw new Error('Email domain not allowed');
   }
 
-  const result = await findOpenIDUser({
+  const lookup = {
     findUser,
     email: email,
     openidId: claims.sub || userinfo.sub,
     openidIssuer,
     idOnTheSource: claims.oid || userinfo.oid,
     strategyName: 'openidStrategy',
-  });
+  };
+  const result = await findOpenIDUser(lookup);
   let user = result.user;
   const error = result.error;
 
@@ -600,7 +609,7 @@ async function processOpenIDAuth(tokenset, existingUsersOnly = false) {
     throw new Error(ErrorTypes.AUTH_FAILED);
   }
 
-  const appConfig = user?.tenantId ? await resolveAppConfigForUser(getAppConfig, user) : baseConfig;
+  let appConfig = user?.tenantId ? await resolveAppConfigForUser(getAppConfig, user) : baseConfig;
 
   if (!isEmailDomainAllowed(email, appConfig?.registration?.allowedDomains)) {
     logger.error(
@@ -681,33 +690,28 @@ async function processOpenIDAuth(tokenset, existingUsersOnly = false) {
     throw new Error('User does not exist');
   }
 
-  if (!user) {
-    user = {
-      provider: 'openid',
-      openidId: userinfo.sub,
-      username,
-      email: email || '',
-      emailVerified: userinfo.email_verified || false,
-      name: fullName,
-      idOnTheSource: userinfo.oid,
-      openidIssuer,
-    };
+  const profile = {
+    openidId: userinfo.sub,
+    openidIssuer,
+    username,
+    name: fullName,
+    email,
+    emailVerified: userinfo.email_verified || false,
+    idOnTheSource: userinfo.oid,
+  };
 
-    const balanceConfig = getBalanceConfig(appConfig);
-    user = await createUser(user, balanceConfig, true, true);
+  if (!user) {
+    ({ user, appConfig } = await createOpenIDUser({
+      lookup,
+      profile,
+      appConfig,
+      getAppConfig,
+      getBalanceConfig,
+      createUserIfAbsent,
+      findBalanceByUser,
+    }));
   } else {
-    user.provider = 'openid';
-    user.openidId = userinfo.sub;
-    if (openidIssuer) {
-      user.openidIssuer = openidIssuer;
-    }
-    user.username = username;
-    user.name = fullName;
-    user.idOnTheSource = userinfo.oid;
-    if (email && email !== user.email) {
-      user.email = email;
-      user.emailVerified = userinfo.email_verified || false;
-    }
+    user = applyOpenIDProfile(user, profile);
   }
 
   const adminRole = process.env.OPENID_ADMIN_ROLE;
@@ -948,14 +952,14 @@ async function resolveLocalCognitoConfig() {
   const cognito = new CognitoIdentityProviderClient({
     region,
     endpoint,
-    ...(accessKeyId && secretAccessKey
-      ? { credentials: { accessKeyId, secretAccessKey } }
-      : {}),
+    ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
   });
   const pools = await cognito.send(new ListUserPoolsCommand({ MaxResults: 60 }));
   const pool = pools.UserPools?.find((p) => p.Name === poolName);
   if (!pool?.Id) {
-    logger.warn(`[openidStrategy] Cognito pool named '${poolName}' not found for local resolution.`);
+    logger.warn(
+      `[openidStrategy] Cognito pool named '${poolName}' not found for local resolution.`,
+    );
     return;
   }
   // Issuer host is the compose-network address the API container reaches; the

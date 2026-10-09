@@ -199,3 +199,6 @@ scripts/activity-labels/results/
 infra/
 /ministack/state/
 /ollama/
+# Chrome user-data directories a Lighthouse run leaves in the repository root when the browser
+# is handed a Windows profile path from WSL: the whole path arrives as one directory name.
+/*lighthouse.[0-9]*/
