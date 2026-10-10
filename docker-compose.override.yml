@@ -55,6 +55,7 @@ services:
       AWS_DEFAULT_REGION: ${AWS_REGION}
       AWS_SDK_LOAD_CONFIG: "1"
       AWS_BUCKET_NAME: plastic-ai-files
+      AWS_QUARANTINE_BUCKET_NAME: plastic-ai-quarantine
       AWS_ENDPOINT_URL: http://ministack:${MINISTACK_PORT}
       # The global endpoint keeps local AWS services on ministack. Bedrock uses
       # its explicit librechat.yaml baseURL, while profile/SSO resolution must
@@ -142,6 +143,8 @@ services:
           aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api create-bucket --bucket plastic-ai-files
         aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api head-bucket --bucket plastic-ai-langfuse >/dev/null 2>&1 ||
           aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api create-bucket --bucket plastic-ai-langfuse
+        aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api head-bucket --bucket plastic-ai-quarantine >/dev/null 2>&1 ||
+          aws --endpoint-url "http://ministack:${MINISTACK_PORT}" s3api create-bucket --bucket plastic-ai-quarantine
     environment:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}

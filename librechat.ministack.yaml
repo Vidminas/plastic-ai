@@ -1161,6 +1161,10 @@ modelSpecs:
 # # See the Custom Configuration Guide for more information on Assistants Config:
 # # https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/assistants_endpoint
 
+# Upload quarantine (optional): holds each upload in AWS_QUARANTINE_BUCKET_NAME
+# while it is handled, and deletes it from there afterwards.
+# uploadScreening: {}
+
 # Web Search Configuration (optional)
 # webSearch:
 #   # Jina Reranking Configuration

@@ -3721,6 +3721,36 @@ export const openingHoursSchema = z
 
 export type TOpeningHours = z.infer<typeof openingHoursSchema>;
 
+/**
+ * Holds every upload in a quarantine bucket (`AWS_QUARANTINE_BUCKET_NAME`) before it is
+ * processed, and deletes it from there once handled. Unset, uploads are processed as before.
+ */
+export const uploadScreeningSchema = z.object({});
+
+export type TUploadScreening = z.infer<typeof uploadScreeningSchema>;
+
+/** Why `uploadScreening` refused an upload; the composer shows `com_error_files_<reason>`. */
+export const UPLOAD_REJECTION_REASONS = ['scan_unavailable'] as const;
+export type UploadRejectionReason = (typeof UPLOAD_REJECTION_REASONS)[number];
+
+/** The body of a refused upload (422, or 503 for `scan_unavailable`). */
+export type TUploadRejection = {
+  message: string;
+  code: ErrorTypes.UPLOAD_REJECTED;
+  reason: UploadRejectionReason;
+};
+
+export function isUploadRejection(data: unknown): data is TUploadRejection {
+  if (typeof data !== 'object' || data == null) {
+    return false;
+  }
+  const { code, reason } = data as Record<string, unknown>;
+  return (
+    code === ErrorTypes.UPLOAD_REJECTED &&
+    (UPLOAD_REJECTION_REASONS as readonly unknown[]).includes(reason)
+  );
+}
+
 export const messageFilterSchema = z.object({
   pii: messageFilterPiiSchema.optional(),
 });
@@ -4136,6 +4166,7 @@ export const configSchema = z.object({
   messageFilter: messageFilterSchema.optional(),
   messageLimits: messageLimitsSchema.optional(),
   openingHours: openingHoursSchema.optional(),
+  uploadScreening: uploadScreeningSchema.optional(),
   endpoints: z
     .object({
       allowedAddresses: allowedAddressesSchema,
@@ -4841,6 +4872,10 @@ export enum ErrorTypes {
    * A request arrived outside `openingHours`
    */
   OUTSIDE_OPENING_HOURS = 'outside_opening_hours',
+  /**
+   * `uploadScreening` refused an upload; the response's `reason` says why
+   */
+  UPLOAD_REJECTED = 'upload_rejected',
   /**
    * Invalid request error, API rejected request
    */

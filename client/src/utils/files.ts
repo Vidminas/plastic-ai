@@ -32,8 +32,11 @@ import type {
   FileConfig,
   FileSources,
   RegexLike,
+  TUploadRejection,
+  UploadRejectionReason,
 } from 'librechat-data-provider';
 import type { QueryClient } from '@tanstack/react-query';
+import type { TranslationKeys } from '~/hooks';
 import type { ExtendedFile } from '~/common';
 
 export const partialTypes = ['text/x-'];
@@ -1176,4 +1179,16 @@ export function sortPagesByRelevance(
  */
 export function normalizeExportFilename(filename: string): string {
   return filename.replace(/\s+/g, '_');
+}
+
+const UPLOAD_REJECTION_KEYS: Record<UploadRejectionReason, TranslationKeys> = {
+  scan_unavailable: 'com_error_files_scan_unavailable',
+};
+
+/** The composer's message for an upload `uploadScreening` refused. */
+export function localizeUploadRejection(
+  rejection: TUploadRejection,
+  localize: (key: TranslationKeys) => string,
+): string {
+  return localize(UPLOAD_REJECTION_KEYS[rejection.reason]);
 }

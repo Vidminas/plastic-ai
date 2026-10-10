@@ -10,6 +10,7 @@ import {
   Constants,
   EToolResources,
   mergeFileConfig,
+  isUploadRejection,
   isAssistantsEndpoint,
   getEndpointFileConfig,
   defaultAssistantsVersion,
@@ -33,6 +34,7 @@ import {
   getCachedPreview,
   removePreviewEntry,
   validateFileDuplicates,
+  localizeUploadRejection,
 } from '~/utils';
 import { useGetFileConfig, useUploadFileMutation } from '~/data-provider';
 import useAgentUploadTarget from '~/hooks/Agents/useAgentUploadTarget';
@@ -339,6 +341,8 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
 
         if (error?.code === 'ERR_CANCELED') {
           errorMessage = 'com_error_files_upload_canceled';
+        } else if (isUploadRejection(error?.response?.data)) {
+          errorMessage = localizeUploadRejection(error.response.data, localize);
         } else if (error?.response?.data?.message) {
           errorMessage = error.response.data.message;
         }
