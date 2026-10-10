@@ -31,6 +31,23 @@ describe('ErrorController', () => {
     mockNext = jest.fn();
   });
 
+  describe('upload size limit', () => {
+    it("answers multer's file size error with 413 and a stable code", () => {
+      const sizeError = Object.assign(new Error('File too large'), {
+        name: 'MulterError',
+        code: 'LIMIT_FILE_SIZE',
+      });
+
+      ErrorController(sizeError, mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(413);
+      expect(mockRes.send).toHaveBeenCalledWith({
+        message: 'File too large',
+        code: 'LIMIT_FILE_SIZE',
+      });
+    });
+  });
+
   describe('ValidationError handling', () => {
     it('should handle ValidationError with single error', () => {
       const validationError = {

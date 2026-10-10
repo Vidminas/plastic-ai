@@ -102,10 +102,13 @@ fileConfig:
     agents: *uploads
     bedrock: *uploads
 
-# Every upload is first copied to the quarantine bucket (AWS_QUARANTINE_BUCKET_NAME),
-# which only the app can reach, and deleted from there once handled. If the bucket
-# cannot be reached, the upload is refused and the user asked to try again.
-uploadScreening: {}
+# Every upload is screened before it is processed or stored. Its bytes must match
+# its extension, and it waits in the quarantine bucket (AWS_QUARANTINE_BUCKET_NAME)
+# until GuardDuty Malware Protection tags it clean. A refused upload is deleted and
+# the user is told why.
+uploadScreening:
+  malware: guardduty
+  scanTimeoutSeconds: 60
 
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.

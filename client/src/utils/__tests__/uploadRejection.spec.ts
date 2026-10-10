@@ -8,15 +8,17 @@ const strings = translation as Record<string, string>;
 const localize = (key: TranslationKeys) => strings[key] ?? key;
 
 describe('localizeUploadRejection', () => {
-  it.each<TUploadRejection['reason']>(['scan_unavailable'])(
-    'has an English message for %s',
-    (reason) => {
-      const message = localizeUploadRejection(
-        { message: `com_error_files_${reason}`, code: ErrorTypes.UPLOAD_REJECTED, reason },
-        localize,
-      );
-      expect(message).toBe(strings[`com_error_files_${reason}`]);
-      expect(message).not.toMatch(/^com_/);
-    },
-  );
+  it.each<TUploadRejection['reason']>([
+    'unsupported_type',
+    'type_mismatch',
+    'malware',
+    'scan_unavailable',
+  ])('has an English message for %s', (reason) => {
+    const message = localizeUploadRejection(
+      { message: `com_error_files_${reason}`, code: ErrorTypes.UPLOAD_REJECTED, reason },
+      localize,
+    );
+    expect(message).toBe(strings[`com_error_files_${reason}`]);
+    expect(message).not.toMatch(/^com_/);
+  });
 });

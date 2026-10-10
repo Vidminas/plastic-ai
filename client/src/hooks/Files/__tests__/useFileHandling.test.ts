@@ -273,6 +273,22 @@ describe('useFileHandling', () => {
     consoleLog.mockRestore();
   });
 
+  it("shows the size message when the server refuses a file over multer's limit", async () => {
+    const useFileHandling = await loadHook();
+    const { result } = renderHook(() => useFileHandling());
+    await act(async () => {
+      await result.current.handleFiles([new File(['text'], 'notes.txt', { type: 'text/plain' })]);
+    });
+    const body = mockMutate.mock.calls[0][0] as FormData;
+    act(() =>
+      mockUploadOptions.onError?.(
+        { response: { status: 413, data: { message: 'File too large', code: 'LIMIT_FILE_SIZE' } } },
+        body,
+      ),
+    );
+    await waitFor(() => expect(mockLocalize).toHaveBeenCalledWith('com_error_files_size_limit'));
+  });
+
   describe('endpointOverride', () => {
     it('clears the loading state when file validation throws', async () => {
       const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);

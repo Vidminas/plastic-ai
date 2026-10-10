@@ -3722,15 +3722,26 @@ export const openingHoursSchema = z
 export type TOpeningHours = z.infer<typeof openingHoursSchema>;
 
 /**
- * Holds every upload in a quarantine bucket (`AWS_QUARANTINE_BUCKET_NAME`) before it is
- * processed, and deletes it from there once handled. Unset, uploads are processed as before.
+ * Checks every upload before it is processed: the bytes must match the file type, and the
+ * file is held in a quarantine bucket (`AWS_QUARANTINE_BUCKET_NAME`) until a malware scan
+ * passes. Unset, uploads are processed as before.
  */
-export const uploadScreeningSchema = z.object({});
+export const uploadScreeningSchema = z.object({
+  /** `guardduty` waits for GuardDuty Malware Protection's tag on the quarantined object. */
+  malware: z.enum(['guardduty', 'none']).default('guardduty'),
+  /** How long to wait for the malware verdict before refusing the upload. */
+  scanTimeoutSeconds: z.number().int().positive().max(600).default(60),
+});
 
 export type TUploadScreening = z.infer<typeof uploadScreeningSchema>;
 
 /** Why `uploadScreening` refused an upload; the composer shows `com_error_files_<reason>`. */
-export const UPLOAD_REJECTION_REASONS = ['scan_unavailable'] as const;
+export const UPLOAD_REJECTION_REASONS = [
+  'unsupported_type',
+  'type_mismatch',
+  'malware',
+  'scan_unavailable',
+] as const;
 export type UploadRejectionReason = (typeof UPLOAD_REJECTION_REASONS)[number];
 
 /** The body of a refused upload (422, or 503 for `scan_unavailable`). */

@@ -7,10 +7,12 @@ import type {
   UploadRejectionReason,
 } from 'librechat-data-provider';
 import type { NextFunction, Request, Response } from 'express';
-import type { QuarantineStore } from './quarantine';
-import { createS3Quarantine } from './quarantine';
+import type { MalwareScanner, QuarantineStore } from './quarantine';
+import { createGuardDutyScanner, createS3Quarantine, noMalwareScanner } from './quarantine';
+import { checkFileContent } from './content';
 import { initializeS3 } from '../../cdn/s3';
 
+export * from './content';
 export * from './quarantine';
 
 export type UploadScreeningResult =
@@ -19,6 +21,7 @@ export type UploadScreeningResult =
 
 export interface UploadScreeningServices {
   readonly quarantine: QuarantineStore;
+  readonly scanner: MalwareScanner;
 }
 
 const reject = (reason: UploadRejectionReason): UploadScreeningResult => ({
@@ -27,13 +30,17 @@ const reject = (reason: UploadRejectionReason): UploadScreeningResult => ({
 });
 
 /**
- * Holds one upload in quarantine before anything else processes or stores it. The
- * quarantined copy is always deleted before this returns. Throws only when a service
+ * Screens one upload before anything else processes or stores it:
+ * 1. its first bytes must match its extension;
+ * 2. it is copied to quarantine and must pass the malware scan.
+ *
+ * The quarantined copy is always deleted before this returns. Throws only when a service
  * fails; every refusal is a result.
  */
 export async function screenUpload({
   file,
   key,
+  config,
   services,
 }: {
   file: Express.Multer.File;
@@ -41,8 +48,20 @@ export async function screenUpload({
   config: TUploadScreening;
   services: UploadScreeningServices;
 }): Promise<UploadScreeningResult> {
+  const content = await checkFileContent(file.path, file.originalname);
+  if (!content.ok) {
+    return reject(content.reason);
+  }
+
   await services.quarantine.put(key, file);
   try {
+    const verdict = await services.scanner.verdict(key, config.scanTimeoutSeconds * 1000);
+    if (verdict === 'infected') {
+      return reject('malware');
+    }
+    if (verdict !== 'clean') {
+      return reject('scan_unavailable');
+    }
     return { ok: true };
   } finally {
     await services.quarantine.remove(key);
@@ -54,7 +73,7 @@ export async function screenUpload({
  * the S3 client is the app's own (`initializeS3`), so it shares its endpoint and credentials.
  */
 export function createUploadScreeningServices(
-  _config: TUploadScreening,
+  config: TUploadScreening,
   env: NodeJS.ProcessEnv = process.env,
 ): UploadScreeningServices {
   const bucket = env.AWS_QUARANTINE_BUCKET_NAME;
@@ -65,7 +84,13 @@ export function createUploadScreeningServices(
   if (s3 == null) {
     throw new Error('uploadScreening needs S3, but AWS_REGION is not set');
   }
-  return { quarantine: createS3Quarantine({ client: s3, bucket }) };
+  return {
+    quarantine: createS3Quarantine({ client: s3, bucket }),
+    scanner:
+      config.malware === 'guardduty'
+        ? createGuardDutyScanner({ client: s3, bucket })
+        : noMalwareScanner,
+  };
 }
 
 type ScreeningRequest = Request & {

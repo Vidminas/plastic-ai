@@ -1182,6 +1182,9 @@ export function normalizeExportFilename(filename: string): string {
 }
 
 const UPLOAD_REJECTION_KEYS: Record<UploadRejectionReason, TranslationKeys> = {
+  unsupported_type: 'com_error_files_unsupported_type',
+  type_mismatch: 'com_error_files_type_mismatch',
+  malware: 'com_error_files_malware',
   scan_unavailable: 'com_error_files_scan_unavailable',
 };
 

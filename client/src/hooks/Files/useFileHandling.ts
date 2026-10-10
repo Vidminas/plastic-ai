@@ -343,6 +343,8 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
           errorMessage = 'com_error_files_upload_canceled';
         } else if (isUploadRejection(error?.response?.data)) {
           errorMessage = localizeUploadRejection(error.response.data, localize);
+        } else if (error?.response?.status === 413) {
+          errorMessage = 'com_error_files_size_limit';
         } else if (error?.response?.data?.message) {
           errorMessage = error.response.data.message;
         }

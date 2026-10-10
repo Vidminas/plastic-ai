@@ -81,6 +81,11 @@ export const ErrorController = (
       return handleValidationError(error, res);
     }
 
+    /** multer's `limits.fileSize`; the composer maps the 413 to its own message. */
+    if (error.name === 'MulterError' && error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).send({ message: 'File too large', code: 'LIMIT_FILE_SIZE' });
+    }
+
     if (isMongoServerError(error)) {
       return handleDuplicateKeyError(error, res);
     }
