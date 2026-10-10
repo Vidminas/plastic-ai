@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { MCPIcon, OpenAIMinimalIcon } from '@librechat/client';
+import { useSetAtom } from 'jotai';
+import { MCPIcon, AttachmentIcon, OpenAIMinimalIcon } from '@librechat/client';
 import {
   Bot,
   Brain,
@@ -33,6 +34,7 @@ import PanelSwitch from '~/components/SidePanel/Builder/PanelSwitch';
 import { SchedulePanel } from '~/components/SidePanel/Schedules';
 import Parameters from '~/components/SidePanel/Parameters/Panel';
 import { MemoryPanel } from '~/components/SidePanel/Memories';
+import { showFilesDialogAtom } from '~/store/filesDialog';
 import { PromptsAccordion } from '~/components/Prompts';
 import { SkillsAccordion } from '~/components/Skills';
 
@@ -53,6 +55,7 @@ export default function useSideNavLinks({
   endpointsConfig: TEndpointsConfig;
   includeHidePanel?: boolean;
 }) {
+  const setShowFiles = useSetAtom(showFilesDialogAtom);
   const hasAccessToPrompts = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,
     permission: Permissions.USE,
@@ -195,6 +198,16 @@ export default function useSideNavLinks({
       });
     }
 
+    /* Where the Attach Files panel was before the composer redesign removed it: opens the
+     * shell's My Files dialog, so uploads can be found and deleted from the sidebar too. */
+    links.push({
+      title: 'com_nav_my_files',
+      label: '',
+      icon: AttachmentIcon,
+      id: 'files',
+      onClick: () => setShowFiles(true),
+    });
+
     if (
       interfaceConfig.parameters === true &&
       isParamEndpoint(endpoint ?? '', endpointType ?? '') === true &&
@@ -250,6 +263,7 @@ export default function useSideNavLinks({
     interfaceConfig.parameters,
     endpointType,
     hasAccessToBookmarks,
+    setShowFiles,
     availableMCPServers,
     hasAccessToUseMCPSettings,
     hasAccessToCreateMCP,
