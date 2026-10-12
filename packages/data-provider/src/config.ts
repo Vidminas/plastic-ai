@@ -1531,6 +1531,11 @@ export const agentsEndpointSchema = baseEndpointSchema
         .min(0)
         .max(1_000_000)
         .default(DEFAULT_MAX_PROVIDER_ERROR_CHARS),
+      /**
+       * Log the model provider's error message (up to `maxProviderErrorChars`) with an upstream
+       * model error. It can echo submitted content, so with `piiMasking` it is masked first.
+       */
+      logProviderErrors: z.boolean().optional(),
       /** Maximum inactivity between provider response body chunks; 0 disables the idle timeout. */
       modelResponseBodyTimeoutMs: z
         .number()

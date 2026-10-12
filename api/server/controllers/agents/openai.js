@@ -372,6 +372,8 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
   const responseId = `chatcmpl-${nanoid()}`;
   const terminalRunError = createTerminalRunErrorObserver({
     maxProviderErrorChars: appConfig?.endpoints?.agents?.maxProviderErrorChars,
+    logProviderErrors: appConfig?.endpoints?.agents?.logProviderErrors === true,
+    maskText: getGuardrailTextMasker(appConfig),
     logger,
     responseMessageId: responseId,
     source: '[OpenAI API]',

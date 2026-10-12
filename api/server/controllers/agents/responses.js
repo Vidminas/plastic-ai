@@ -620,6 +620,8 @@ const executeResponse = async (envelope, { req, res }) => {
   const responseId = generateResponseId();
   const terminalRunError = createTerminalRunErrorObserver({
     maxProviderErrorChars: appConfig?.endpoints?.agents?.maxProviderErrorChars,
+    logProviderErrors: appConfig?.endpoints?.agents?.logProviderErrors === true,
+    maskText: getGuardrailTextMasker(appConfig),
     logger,
     responseMessageId: responseId,
     source: '[Responses API]',
