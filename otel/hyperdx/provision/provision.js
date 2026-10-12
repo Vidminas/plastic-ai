@@ -16,7 +16,6 @@
  * document: { sources, searches, dashboards }) or HYPERDX_PROVISION_DIR.
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 const BUILD = '/app/packages/api/build';
@@ -26,8 +25,40 @@ const Connection = require(`${BUILD}/models/connection`).default;
 const Dashboard = require(`${BUILD}/models/dashboard`).default;
 const { Source } = require(`${BUILD}/models/source`);
 const { SavedSearch } = require(`${BUILD}/models/savedSearch`);
-const { readDashboardFiles, syncDashboards } = require(`${BUILD}/tasks/provisionDashboards`);
-const { SourceSchema } = require('/app/node_modules/@hyperdx/common-utils/dist/types');
+const COMMON_UTILS = '/app/node_modules/@hyperdx/common-utils/dist';
+const {
+  SourceSchema,
+  DashboardWithoutIdSchema,
+  walkRawDashboardTileColors,
+  resolveChartPaletteToken,
+} = require(`${COMMON_UTILS}/types`);
+const { validateDashboardFilterOptionUniqueness } = require(`${COMMON_UTILS}/dashboardValidation`);
+
+/**
+ * HyperDX's dashboard provisioner (build/tasks/provisionDashboards) reads its
+ * dashboards from files, which a task with a read-only filesystem cannot write.
+ * This validates and stores them in memory instead, with the same steps: the
+ * same schema and filter check, the same legacy tile-colour migration, and the
+ * same upsert, keyed by name, team and `provisioned: true`. Check it against
+ * that module when upgrading HyperDX.
+ */
+const provisionedDashboardSchema = DashboardWithoutIdSchema.superRefine((data, ctx) =>
+  validateDashboardFilterOptionUniqueness(data.filters ?? [], ctx),
+);
+
+function parseDashboard(raw) {
+  const migrated = walkRawDashboardTileColors(
+    raw,
+    (current) => resolveChartPaletteToken(current) ?? current,
+  );
+  const parsed = provisionedDashboardSchema.safeParse({ tags: [], ...migrated });
+  if (!parsed.success) {
+    throw new Error(
+      `Dashboard "${raw.name}" failed HyperDX's validation: ${JSON.stringify(parsed.error.issues)}`,
+    );
+  }
+  return parsed.data;
+}
 
 /** Fields of a source that link it to another source, by id. */
 const SOURCE_LINKS = ['logSourceId', 'traceSourceId', 'metricSourceId', 'sessionSourceId'];
@@ -58,21 +89,31 @@ function loadInput() {
 async function upsertSource(teamId, definition) {
   const connection = await Connection.findOne({ team: teamId, name: definition.connection });
   if (!connection) {
-    throw new Error(`Source "${definition.name}": the team has no connection named "${definition.connection}"`);
+    throw new Error(
+      `Source "${definition.name}": the team has no connection named "${definition.connection}"`,
+    );
   }
   const fields = { ...definition, connection: connection._id.toString() };
   const parsed = SourceSchema.safeParse({ ...fields, id: 'provisioned' });
   if (!parsed.success) {
-    throw new Error(`Source "${definition.name}" is invalid: ${JSON.stringify(parsed.error.issues)}`);
+    throw new Error(
+      `Source "${definition.name}" is invalid: ${JSON.stringify(parsed.error.issues)}`,
+    );
   }
 
   const existing = await Source.findOne({ team: teamId, name: definition.name });
   if (existing && existing.kind !== definition.kind) {
-    throw new Error(`Source "${definition.name}" exists as a ${existing.kind} source, not ${definition.kind}`);
+    throw new Error(
+      `Source "${definition.name}" exists as a ${existing.kind} source, not ${definition.kind}`,
+    );
   }
   const Model = Source.discriminators[definition.kind];
   if (existing) {
-    await Model.updateOne({ _id: existing._id }, { $set: { ...fields, team: teamId } }, { runValidators: true });
+    await Model.updateOne(
+      { _id: existing._id },
+      { $set: { ...fields, team: teamId } },
+      { runValidators: true },
+    );
     return existing._id.toString();
   }
   const created = await Model.create({ ...fields, team: teamId });
@@ -106,26 +147,37 @@ function withSourceIds(dashboard, sourceIds) {
 }
 
 async function provisionDashboards(teamId, dashboards, sourceIds) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hyperdx-dashboards-'));
-  try {
-    dashboards.forEach((dashboard, index) => {
-      fs.writeFileSync(path.join(dir, `${index}.json`), JSON.stringify(withSourceIds(dashboard, sourceIds)));
-    });
-    // HyperDX's own reader validates each file and skips (with a warning) any it
-    // rejects; a skipped dashboard is a bug in the files, so fail instead.
-    const valid = readDashboardFiles(dir);
-    if (valid.length !== dashboards.length) {
-      throw new Error(`${dashboards.length - valid.length} dashboard file(s) failed HyperDX's validation; see the warnings above`);
-    }
-    await syncDashboards(teamId, dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+  // Validate every dashboard before storing any, so a bad file changes nothing.
+  const parsed = dashboards.map((dashboard) => parseDashboard(withSourceIds(dashboard, sourceIds)));
+  for (const dashboard of parsed) {
+    await Dashboard.findOneAndUpdate(
+      { name: dashboard.name, team: teamId, provisioned: true },
+      {
+        $set: {
+          tiles: dashboard.tiles || [],
+          tags: dashboard.tags || [],
+          filters: dashboard.filters || [],
+          savedQuery: dashboard.savedQuery ?? null,
+          savedQueryLanguage: dashboard.savedQueryLanguage ?? null,
+          savedFilterValues: dashboard.savedFilterValues || [],
+          containers: dashboard.containers || [],
+        },
+        $setOnInsert: { name: dashboard.name, team: teamId, provisioned: true },
+      },
+      { upsert: true },
+    );
   }
 
   const names = dashboards.map((dashboard) => dashboard.name);
-  const stored = await Dashboard.countDocuments({ team: teamId, provisioned: true, name: { $in: names } });
+  const stored = await Dashboard.countDocuments({
+    team: teamId,
+    provisioned: true,
+    name: { $in: names },
+  });
   if (stored !== names.length) {
-    throw new Error(`Only ${stored} of ${names.length} dashboards were stored; see the errors above`);
+    throw new Error(
+      `Only ${stored} of ${names.length} dashboards were stored; see the errors above`,
+    );
   }
 }
 
@@ -135,7 +187,11 @@ async function upsertSearch(teamId, search, sourceIds) {
     source: resolveSource(sourceIds, search.source, `Saved search "${search.name}"`),
     team: teamId,
   };
-  await SavedSearch.updateOne({ team: teamId, name: search.name }, { $set: fields }, { upsert: true, runValidators: true });
+  await SavedSearch.updateOne(
+    { team: teamId, name: search.name },
+    { $set: fields },
+    { upsert: true, runValidators: true },
+  );
 }
 
 async function findSourceIds(teamId) {
@@ -160,7 +216,9 @@ async function provisionTeam(teamId, input) {
     const where = `Source "${definition.name}"`;
     await upsertSource(teamId, {
       ...definition,
-      ...Object.fromEntries(links.map((key) => [key, resolveSource(sourceIds, definition[key], where)])),
+      ...Object.fromEntries(
+        links.map((key) => [key, resolveSource(sourceIds, definition[key], where)]),
+      ),
     });
   }
 
