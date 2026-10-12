@@ -2,6 +2,7 @@ import { ErrorTypes, ViolationTypes } from 'librechat-data-provider';
 import type { ComponentType } from 'react';
 import type { ErrorRendererProps } from './parts';
 import type { TranslationKeys } from '~/hooks';
+import SafeguardingNotice from '~/components/Safeguarding/Notice';
 import { ProviderErrorCodes } from './parts';
 import ProviderError from './ProviderError';
 import UserKeyError from './UserKeyError';
@@ -82,4 +83,5 @@ export const errorRenderers: Record<string, ComponentType<ErrorRendererProps>> =
   [ViolationTypes.STT_LIMIT]: LimitError,
   [ErrorTypes.MESSAGE_TOO_LONG]: LimitError,
   [ErrorTypes.UPLOAD_REJECTED]: UploadError,
+  [ErrorTypes.SAFEGUARDING]: SafeguardingNotice,
 };

@@ -22,6 +22,7 @@ let mockEndpointsData: Record<string, Record<string, unknown>> | undefined = {
 };
 let mockStartupData: {
   compactionEnabled: boolean;
+  safeguardingSupport?: Array<{ name: string; url?: string; phone?: string; text?: string }>;
   interface?: { contextUsage?: boolean; currency?: { code: string; rate: number } };
   balance?: { enabled: boolean; display: string };
 } = {
@@ -393,6 +394,90 @@ describe('Error — reader-facing provider and fallback copy', () => {
 });
 
 describe('Error — provider and model identity', () => {
+  describe('safeguarding', () => {
+    afterEach(() => {
+      mockStartupData = { compactionEnabled: false };
+    });
+
+    it('says why a response was blocked and where to find support', () => {
+      mockStartupData = {
+        compactionEnabled: false,
+        safeguardingSupport: [
+          { name: 'Childline', url: 'https://www.childline.org.uk/', phone: '0800 1111' },
+        ],
+      };
+      renderError(
+        {
+          type: ErrorTypes.SAFEGUARDING,
+          info: {
+            source: 'response',
+            reasons: [
+              { type: 'content', name: 'VIOLENCE' },
+              { type: 'topic', name: 'self-harm' },
+            ],
+          },
+        },
+        providerMessage,
+      );
+
+      expect(screen.getByText(catalog.com_safeguarding_blocked_response)).toBeInTheDocument();
+      expect(
+        screen.getByText(localized('com_safeguarding_reason', 'violence and self-harm')),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Childline')).toBeInTheDocument();
+      expect(
+        screen.getByRole('link', {
+          name: localized('com_ui_resting_call').replace('{{phone}}', '0800 1111'),
+        }),
+      ).toHaveAttribute('href', 'tel:08001111');
+      expectReadable();
+    });
+
+    it('names an unknown topic generically and shows no support list without one', () => {
+      renderError(
+        {
+          type: ErrorTypes.SAFEGUARDING,
+          info: { source: 'prompt', reasons: [{ type: 'topic', name: 'made-up' }] },
+        },
+        providerMessage,
+      );
+
+      expect(screen.getByText(catalog.com_safeguarding_blocked_prompt)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          localized('com_safeguarding_reason', catalog.com_safeguarding_category_other),
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    });
+
+    it("names the model's own safety filter as the reason a reply was hidden", () => {
+      renderError(
+        {
+          type: ErrorTypes.SAFEGUARDING,
+          info: { source: 'response', reasons: [{ type: 'model', name: 'MODEL_FILTER' }] },
+        },
+        providerMessage,
+      );
+      expect(
+        screen.getByText(
+          localized('com_safeguarding_reason', catalog.com_safeguarding_category_model_filter),
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('asks to try again when the message could not be checked', () => {
+      renderError(
+        {
+          type: ErrorTypes.SAFEGUARDING,
+          info: { source: 'prompt', reasons: [], unavailable: true },
+        },
+        providerMessage,
+      );
+      expect(screen.getByText(catalog.com_safeguarding_unavailable)).toBeInTheDocument();
+    });
+  });
+
   it('names the selected model for a refusal without stale Claude copy', () => {
     renderError(
       { type: ErrorTypes.REFUSAL, info: "I can't help with that request." },

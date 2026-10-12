@@ -2073,6 +2073,7 @@ const initializeClientWithProvider = async ({
     eventChildActivity,
     resolveMcpServerName,
     toolTimingReplayEvents,
+    safeguarding: appConfig?.safeguarding ? { appConfig, user: req.user } : null,
   });
 
   const client = new AgentClient({

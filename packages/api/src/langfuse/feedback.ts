@@ -34,9 +34,9 @@ const ENVIRONMENT = process.env.LANGFUSE_TRACING_ENVIRONMENT;
 type LangfuseScorePayload = {
   id: string;
   traceId: string;
-  name: 'user-feedback';
-  value: number;
-  dataType: 'BOOLEAN';
+  name: 'user-feedback' | 'safeguarding';
+  value: number | string;
+  dataType: 'BOOLEAN' | 'CATEGORICAL';
   comment?: string;
   metadata: Record<string, string | number | boolean>;
   observationId?: string;
@@ -179,5 +179,50 @@ export async function sendFeedbackScore({
 
   if (failures.length > 0) {
     throw new Error(failures.join('; '));
+  }
+}
+
+/**
+ * Marks a turn's trace with a `safeguarding` score (`flag` or `block`), naming the filters
+ * in its comment, so the safeguarding team can find and read flagged turns in Langfuse. One
+ * score per trace and source: a later one replaces it.
+ */
+export async function sendSafeguardingScore({
+  traceId,
+  severity,
+  source,
+  filters,
+  appConfig,
+}: {
+  traceId: string;
+  severity: 'flag' | 'block';
+  source: string;
+  filters: string[];
+  appConfig?: AppConfig;
+}): Promise<void> {
+  const destinations = await getScoreDestinations(appConfig, traceId);
+  if (destinations.length === 0) {
+    return;
+  }
+  const payload: LangfuseScorePayload = {
+    id: `safeguarding-${source}-${traceId}`,
+    traceId,
+    name: 'safeguarding',
+    value: severity,
+    dataType: 'CATEGORICAL',
+    comment: filters.join(', ') || undefined,
+    metadata: { source },
+    ...(ENVIRONMENT ? { environment: ENVIRONMENT } : {}),
+  };
+  const results = await Promise.allSettled(
+    destinations.map((destination) => createScore(destination, payload)),
+  );
+  const failures = results.filter(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (failures.length > 0) {
+    throw new Error(
+      `safeguarding score failed: ${failures.map(({ reason }) => (reason instanceof Error ? reason.message : String(reason))).join('; ')}`,
+    );
   }
 }

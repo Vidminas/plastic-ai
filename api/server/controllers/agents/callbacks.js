@@ -38,6 +38,8 @@ const {
   createToolTimingAdapter,
   stampCommandExecutor,
   reportGuardrailOutputDetections,
+  checkModelOutput,
+  participantOf,
 } = require('@librechat/api');
 const { processFileCitations } = require('~/server/services/Files/Citations');
 const { processCodeOutput, runPreviewFinalize } = require('~/server/services/Files/Code/process');
@@ -104,14 +106,22 @@ class ModelEndHandler {
    *   a no-op for them even when the map is provided.
    * @param {(data: Record<string, unknown>) => Promise<void> | void} [emitUsage] Optional
    *   callback to stream per-call token usage to the client.
+   * @param {{ appConfig?: AppConfig; user?: { id?: string; openidId?: string } } | null} [safeguarding]
+   *   The request's config and user, for `safeguarding` to screen responses.
    */
-  constructor(collectedUsage, collectedThoughtSignatures = null, emitUsage = null) {
+  constructor(
+    collectedUsage,
+    collectedThoughtSignatures = null,
+    emitUsage = null,
+    safeguarding = null,
+  ) {
     if (!Array.isArray(collectedUsage)) {
       throw new Error('collectedUsage must be an array');
     }
     this.collectedUsage = collectedUsage;
     this.collectedThoughtSignatures = collectedThoughtSignatures;
     this.emitUsage = emitUsage;
+    this.safeguarding = safeguarding;
   }
 
   finalize(errorMessage) {
@@ -137,13 +147,26 @@ class ModelEndHandler {
     /** @type {string | undefined} */
     let errorMessage;
     try {
+      const blocked = this.safeguarding?.user
+        ? checkModelOutput({
+            appConfig: this.safeguarding.appConfig,
+            output: data?.output,
+            event: {
+              participant: participantOf(this.safeguarding.user),
+              messageId: metadata.run_id,
+              conversationId: metadata.thread_id,
+            },
+          })
+        : undefined;
       reportGuardrailOutputDetections(data?.output, {
         messageId: metadata.run_id,
         conversationId: metadata.thread_id,
       });
       const agentContext = graph.getAgentContext(metadata);
-      const refusalInfo = getModelRefusalInfo(data?.output);
-      if (refusalInfo) {
+      const refusalInfo = blocked ? undefined : getModelRefusalInfo(data?.output);
+      if (blocked) {
+        errorMessage = JSON.stringify({ type: ErrorTypes.SAFEGUARDING, info: blocked });
+      } else if (refusalInfo) {
         errorMessage = JSON.stringify({
           type: ErrorTypes.REFUSAL,
           info: refusalInfo,
@@ -417,6 +440,7 @@ function getDefaultHandlers({
   eventChildActivity = null,
   resolveMcpServerName = null,
   toolTimingReplayEvents = [],
+  safeguarding = null,
 }) {
   if (!res || !aggregateContent) {
     throw new Error(
@@ -527,6 +551,7 @@ function getDefaultHandlers({
       collectedUsage,
       collectedThoughtSignatures,
       emitTokenUsage,
+      safeguarding,
     ),
     [GraphEvents.TOOL_END]: createOwnedToolEndHandler(toolEndCallback, logger),
     [GraphEvents.ON_RUN_STEP]: {

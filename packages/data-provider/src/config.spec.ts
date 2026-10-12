@@ -26,6 +26,7 @@ import {
   endpointSchema,
   isTwoFactorPolicyProvider,
   resolveEndpointType,
+  safeguardingSchema,
   webSearchSchema,
 } from './config';
 import { EModelEndpoint, isDocumentSupportedProvider } from './schemas';
@@ -473,6 +474,49 @@ describe('excludedKeys', () => {
 
   it('does not exclude tenantId (plugin-level guard owns this)', () => {
     expect(excludedKeys.has('tenantId')).toBe(false);
+  });
+});
+
+describe('safeguardingSchema', () => {
+  const guardrail = {
+    guardrailIdentifier: '${BEDROCK_SAFEGUARDING_GUARDRAIL_ID}',
+    guardrailVersion: '1',
+  };
+
+  it('flags at MEDIUM and blocks at HIGH unless told otherwise', () => {
+    const parsed = safeguardingSchema.parse({ guardrail, block: { PROMPT_ATTACK: 'MEDIUM' } });
+
+    expect(parsed.flag).toEqual({
+      HATE: 'MEDIUM',
+      INSULTS: 'MEDIUM',
+      SEXUAL: 'MEDIUM',
+      VIOLENCE: 'MEDIUM',
+      MISCONDUCT: 'MEDIUM',
+      PROMPT_ATTACK: 'MEDIUM',
+    });
+    expect(parsed.block.PROMPT_ATTACK).toBe('MEDIUM');
+    expect(parsed.block.HATE).toBe('HIGH');
+    expect(parsed).toMatchObject({ topics: {}, words: 'flag', onError: 'refuse' });
+    expect(parsed.signposting).toBeUndefined();
+    expect(parsed.alerts).toBeUndefined();
+  });
+
+  it('rejects unknown confidences, topic actions and support links', () => {
+    expect(safeguardingSchema.safeParse({ guardrail, flag: { HATE: 'SOME' } }).success).toBe(false);
+    expect(
+      safeguardingSchema.safeParse({ guardrail, topics: { bullying: 'withhold' } }).success,
+    ).toBe(false);
+    expect(
+      safeguardingSchema.safeParse({ guardrail, signposting: [{ name: 'Childline', url: 'x' }] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('is optional in configSchema', () => {
+    expect(configSchema.safeParse({ version: '1.0' }).success).toBe(true);
+    expect(configSchema.safeParse({ version: '1.0', safeguarding: { guardrail } }).success).toBe(
+      true,
+    );
   });
 });
 
