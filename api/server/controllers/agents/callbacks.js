@@ -37,6 +37,7 @@ const {
   collectToolCallIds,
   createToolTimingAdapter,
   stampCommandExecutor,
+  reportGuardrailOutputDetections,
 } = require('@librechat/api');
 const { processFileCitations } = require('~/server/services/Files/Citations');
 const { processCodeOutput, runPreviewFinalize } = require('~/server/services/Files/Code/process');
@@ -136,6 +137,10 @@ class ModelEndHandler {
     /** @type {string | undefined} */
     let errorMessage;
     try {
+      reportGuardrailOutputDetections(data?.output, {
+        messageId: metadata.run_id,
+        conversationId: metadata.thread_id,
+      });
       const agentContext = graph.getAgentContext(metadata);
       const refusalInfo = getModelRefusalInfo(data?.output);
       if (refusalInfo) {

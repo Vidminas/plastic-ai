@@ -3748,9 +3748,10 @@ export type TUploadScreening = z.infer<typeof uploadScreeningSchema>;
  * they set or give a duplicate. Before a model call, the text of every message in an agent
  * run is masked again, for history stored before masking and for model responses, which are
  * stored as written; so are a title's input and answers to the model's clarifying questions.
- * The model and the user see `{EMAIL}`, `{PHONE}` and so on. It masks every Langfuse
- * trace too. System prompts, tool results and files are not masked. Unset, nothing is
- * masked.
+ * The model and the user see `{EMAIL}`, `{PHONE}` and so on. Model responses are checked by
+ * the guardrail on the model calls (`endpoints.bedrock.guardrailConfig`), not this one. It
+ * masks every Langfuse trace too. System prompts, tool results and files are not masked.
+ * Unset, nothing is masked.
  */
 export const piiMaskingSchema = z.object({
   guardrail: guardrailReferenceSchema,
