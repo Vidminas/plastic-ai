@@ -34,7 +34,11 @@ jest.mock('@librechat/client', () => {
     useToastContext: () => ({ showToast: jest.fn() }),
   };
 });
+const mockStartupConfig: { current: { interface?: { deletionLogNotice?: boolean } } } = {
+  current: {},
+};
 jest.mock('~/data-provider', () => ({
+  useGetStartupConfig: () => ({ data: mockStartupConfig.current }),
   useDeleteConversationMutation: (options: { onSuccess?: () => void }) => {
     mockDeleteOptions.current = options;
     return { mutate: jest.fn(), isLoading: false };
@@ -85,5 +89,19 @@ describe('DeleteConversationDialog', () => {
 
     expect(mockNewConversation).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('/c/new', { replace: true });
+  });
+
+  it('notes that deleting leaves the study records, only when the deployment asks for it', () => {
+    const { queryByText, unmount } = renderDialog();
+    expect(queryByText('com_ui_delete_log_notice')).toBeNull();
+    unmount();
+
+    mockStartupConfig.current = { interface: { deletionLogNotice: true } };
+    const { getByText } = renderDialog();
+    expect(getByText('com_ui_delete_log_notice')).toHaveAttribute(
+      'id',
+      'delete-conversation-notice',
+    );
+    mockStartupConfig.current = {};
   });
 });

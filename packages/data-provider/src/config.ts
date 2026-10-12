@@ -2654,6 +2654,9 @@ export const interfaceSchema = z
       .optional(),
     termsOfService: termsOfServiceSchema.optional(),
     customWelcome: z.string().optional(),
+    /** Adds a note to the dialogs that delete conversations and files: deleting removes them
+     * from the app, but not from records kept outside it (interaction logs and traces). */
+    deletionLogNotice: z.boolean().optional(),
     mcpServers: mcpServersSchema.optional(),
     modelSelect: z.boolean().optional(),
     /** Set to false during a rolling upgrade, until every API replica supports title ownership and old title jobs drain. */
