@@ -6,15 +6,20 @@ import type {
   TPiiMasking,
   TUploadRejection,
   TUploadScreening,
+  TSafeguardingReason,
   UploadRejectionReason,
 } from 'librechat-data-provider';
 import type { NextFunction, Request, Response } from 'express';
+import type { AppConfig } from '@librechat/data-schemas';
 import type { MalwareScanner, QuarantineStore } from './quarantine';
+import type { SafeguardingCheck } from '~/safeguarding/service';
 import type { ImageTextReader } from './ocr';
 import type { PiiDetector } from './pii';
 import { createGuardDutyScanner, createS3Quarantine, noMalwareScanner } from './quarantine';
+import { participantOf, screenForSafeguarding } from '~/safeguarding/service';
 import { createGuardrailDetector, noPiiDetector } from './pii';
 import { getGuardrailTarget } from '~/guardrails/runtime';
+import { maskUserText } from '~/guardrails/stored';
 import { extractScreeningText } from './extract';
 import { createTextractReader } from './ocr';
 import { checkFileContent } from './content';
@@ -38,10 +43,21 @@ export interface UploadScreeningServices {
   readonly imageReader: ImageTextReader | null;
 }
 
-const reject = (reason: UploadRejectionReason, identifiers?: string[]): UploadScreeningResult => ({
+const reject = (
+  reason: UploadRejectionReason,
+  { identifiers, reasons }: { identifiers?: string[]; reasons?: TSafeguardingReason[] } = {},
+): UploadScreeningResult => ({
   ok: false,
-  error: { code: ErrorTypes.UPLOAD_REJECTED, reason, ...(identifiers ? { identifiers } : {}) },
+  error: {
+    code: ErrorTypes.UPLOAD_REJECTED,
+    reason,
+    ...(identifiers ? { identifiers } : {}),
+    ...(reasons ? { reasons } : {}),
+  },
 });
+
+/** Screens an upload's text for `safeguarding`, after it has passed the PII check. */
+export type UploadSafeguard = (text: string) => Promise<SafeguardingCheck>;
 
 /**
  * Screens one upload before anything else processes or stores it:
@@ -49,7 +65,8 @@ const reject = (reason: UploadRejectionReason, identifiers?: string[]): UploadSc
  * 2. it is copied to quarantine and must pass the malware scan;
  * 3. a document or text file must yield readable text, and so must an image when an
  *    `imageReader` is set; that text must contain none of the configured identifiers
- *    (the guardrail's built-in PII types).
+ *    (the guardrail's built-in PII types);
+ * 4. with `safeguard`, that text must not be blocked by `safeguarding`.
  *
  * The quarantined copy is always deleted before this returns. Throws only when a service
  * fails; every refusal is a result.
@@ -59,11 +76,13 @@ export async function screenUpload({
   key,
   config,
   services,
+  safeguard,
 }: {
   file: Express.Multer.File;
   key: string;
   config: TUploadScreening;
   services: UploadScreeningServices;
+  safeguard?: UploadSafeguard;
 }): Promise<UploadScreeningResult> {
   const content = await checkFileContent(file.path, file.originalname);
   if (!content.ok) {
@@ -91,16 +110,23 @@ export async function screenUpload({
     if (!extracted.ok) {
       return reject('unreadable');
     }
-    return await screenText(extracted.text, { config, detector: services.detector });
+    return await screenText(extracted.text, { config, detector: services.detector, safeguard });
   } finally {
     await services.quarantine.remove(key);
   }
 }
 
-/** Refuses text that is too long to screen or contains one of the configured identifiers. */
+/**
+ * Refuses text that is too long to screen, contains one of the configured identifiers, or is
+ * blocked by `safeguard`; text that could not be safeguarded is refused as `scan_unavailable`.
+ */
 async function screenText(
   text: string,
-  { config, detector }: { config: TUploadScreening; detector: PiiDetector },
+  {
+    config,
+    detector,
+    safeguard,
+  }: { config: TUploadScreening; detector: PiiDetector; safeguard?: UploadSafeguard },
 ): Promise<UploadScreeningResult> {
   if (text.length > config.pii.maxCharacters) {
     return reject('too_long');
@@ -109,7 +135,19 @@ async function screenText(
     return { ok: true };
   }
   const identifiers = await detector.detect(text);
-  return identifiers.length > 0 ? reject('identifiers', identifiers) : { ok: true };
+  if (identifiers.length > 0) {
+    return reject('identifiers', { identifiers });
+  }
+  if (safeguard == null) {
+    return { ok: true };
+  }
+  const check = await safeguard(text);
+  if (check.ok) {
+    return { ok: true };
+  }
+  return check.info.unavailable
+    ? reject('scan_unavailable')
+    : reject('safeguarding', { reasons: check.info.reasons });
 }
 
 /**
@@ -173,11 +211,8 @@ function createDetector(
 type ScreeningRequest = Request & {
   file?: Express.Multer.File;
   file_id?: string;
-  user?: { id?: string };
-  config?: {
-    uploadScreening?: TUploadScreening;
-    piiMasking?: TPiiMasking;
-  };
+  user?: { id?: string; openidId?: string };
+  config?: Partial<AppConfig>;
 };
 
 type UploadScreeningCheck = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
@@ -223,6 +258,19 @@ export function createUploadScreeningCheck({
         key,
         config: screening,
         services: getServices(screening, config?.piiMasking?.guardrail),
+        safeguard:
+          config?.safeguarding == null
+            ? undefined
+            : async (text) =>
+                screenForSafeguarding({
+                  appConfig: config,
+                  text: await maskUserText(config, text),
+                  event: {
+                    source: 'upload',
+                    participant: participantOf(user),
+                    ...(file_id ? { fileId: file_id } : {}),
+                  },
+                }),
       });
     } catch (error) {
       logger.error('[uploadScreening] Could not screen an upload', { file_id, error });
@@ -234,6 +282,7 @@ export function createUploadScreeningCheck({
     const { reason, identifiers } = result.error;
     logger.info(`[uploadScreening] Refused an upload: ${reason}`, {
       file_id,
+      userId: user.id,
       reason,
       identifiers,
     });

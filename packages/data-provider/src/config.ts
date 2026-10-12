@@ -3920,6 +3920,7 @@ export const UPLOAD_REJECTION_REASONS = [
   'unreadable',
   'too_long',
   'identifiers',
+  'safeguarding',
 ] as const;
 export type UploadRejectionReason = (typeof UPLOAD_REJECTION_REASONS)[number];
 
@@ -3930,6 +3931,8 @@ export type TUploadRejection = {
   reason: UploadRejectionReason;
   /** Guardrail PII entity types, never the matched text. */
   identifiers?: string[];
+  /** For `safeguarding`: the filters that blocked the file. */
+  reasons?: TSafeguardingReason[];
 };
 
 export function isUploadRejection(data: unknown): data is TUploadRejection {

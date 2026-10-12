@@ -1190,6 +1190,7 @@ const UPLOAD_REJECTION_KEYS: Record<UploadRejectionReason, TranslationKeys> = {
   unreadable: 'com_error_files_unreadable',
   too_long: 'com_error_files_too_long',
   identifiers: 'com_error_files_identifiers',
+  safeguarding: 'com_safeguarding_blocked_upload',
 };
 
 /** Labels for every guardrail PII type screening may report. */
