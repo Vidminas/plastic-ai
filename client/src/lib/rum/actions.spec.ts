@@ -1,4 +1,4 @@
-import { setActionClient, trackAction } from './actions';
+import { setActionClient, trackAction, trackDownload } from './actions';
 
 describe('rum actions', () => {
   const addAction = jest.fn();
@@ -60,5 +60,36 @@ describe('rum actions', () => {
     });
 
     expect(() => trackAction('message.stop')).not.toThrow();
+  });
+
+  describe('trackDownload', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it('records the extension and the open conversation, never the file name', () => {
+      setActionClient({ addAction });
+      window.history.replaceState(null, '', '/c/convo-7');
+
+      trackDownload('Payroll for Sam Smith.XLSX');
+
+      expect(addAction).toHaveBeenCalledWith('file.download', {
+        fileType: 'xlsx',
+        conversationId: 'convo-7',
+      });
+      expect(JSON.stringify(addAction.mock.calls)).not.toContain('Sam');
+    });
+
+    it('prefers the conversation the caller names, and leaves out what it cannot tell', () => {
+      setActionClient({ addAction });
+      window.history.replaceState(null, '', '/c/new');
+
+      trackDownload('chat.json', 'convo-2');
+      trackDownload('image');
+
+      expect(addAction).toHaveBeenNthCalledWith(1, 'file.download', {
+        fileType: 'json',
+        conversationId: 'convo-2',
+      });
+      expect(addAction).toHaveBeenNthCalledWith(2, 'file.download', {});
+    });
   });
 });

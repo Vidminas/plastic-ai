@@ -69,6 +69,11 @@ let mockFileConfig: ReturnType<typeof mergeFileConfig> | null = null;
 let mockIsConfigPending = false;
 let mockIsTemporary = false;
 let mockUploadOptions: MockUploadMutationOptions = {};
+const mockTrackAction = jest.fn();
+
+jest.mock('~/lib/rum/actions', () => ({
+  trackAction: (...args: unknown[]) => mockTrackAction(...args),
+}));
 
 let mockAgentsMap: Record<string, unknown> = {};
 let mockEndpointsConfig: Record<string, unknown> | undefined = undefined;
@@ -170,8 +175,13 @@ jest.mock('../useUpdateFiles', () => ({
 }));
 
 jest.mock('~/utils', () => {
-  const { partitionUploads, validateFileSizes, validateFileLimit, validateFileDuplicates } =
-    jest.requireActual('~/utils/files');
+  const {
+    partitionUploads,
+    validateFileSizes,
+    validateFileLimit,
+    validateFileDuplicates,
+    localizeUploadRejection,
+  } = jest.requireActual('~/utils/files');
   return {
     logger: { log: jest.fn() },
     validateFiles: jest.fn(() => true),
@@ -179,6 +189,7 @@ jest.mock('~/utils', () => {
     validateFileSizes: jest.fn(validateFileSizes),
     validateFileLimit: jest.fn(validateFileLimit),
     validateFileDuplicates: jest.fn(validateFileDuplicates),
+    localizeUploadRejection,
     cachePreview: jest.fn(),
     getCachedPreview: jest.fn(() => undefined),
     removePreviewEntry: jest.fn(),
@@ -270,6 +281,42 @@ describe('useFileHandling', () => {
       await result.current.handleFiles([new File(['audio'], 'clip.wav', { type: 'audio/wav' })]);
     });
     expect(mockMutate).toHaveBeenCalledTimes(2);
+    consoleLog.mockRestore();
+  });
+
+  it('records a refused upload by its reason and identifier types, never the file name', async () => {
+    const consoleLog = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const useFileHandling = await loadHook();
+    const { result } = renderHook(() => useFileHandling());
+    await act(async () => {
+      await result.current.handleFiles([new File(['x'], 'sam-smith.txt', { type: 'text/plain' })]);
+    });
+    const body = mockMutate.mock.calls[0][0] as FormData;
+    act(() =>
+      mockUploadOptions.onError?.(
+        {
+          response: {
+            status: 422,
+            data: {
+              message: 'sam-smith.txt was refused',
+              code: 'upload_rejected',
+              reason: 'identifiers',
+              identifiers: ['EMAIL', 'UK_NATIONAL_INSURANCE_NUMBER'],
+            },
+          },
+        },
+        body,
+      ),
+    );
+    expect(mockTrackAction).toHaveBeenCalledWith('file.upload_failed', {
+      stage: 'server',
+      reason: 'identifiers',
+      identifiers: 'EMAIL,UK_NATIONAL_INSURANCE_NUMBER',
+      status: 422,
+      toolResource: null,
+      conversationId: undefined,
+    });
+    expect(JSON.stringify(mockTrackAction.mock.calls)).not.toContain('sam-smith');
     consoleLog.mockRestore();
   });
 
@@ -536,6 +583,19 @@ describe('useFileHandling', () => {
           0: '20',
           1: 'huge.txt, massive.txt',
         });
+        const failures = mockTrackAction.mock.calls.filter(
+          ([name]) => name === 'file.upload_failed',
+        );
+        expect(failures).toEqual([
+          [
+            'file.upload_failed',
+            { stage: 'browser', reason: 'fileSize', conversationId: undefined },
+          ],
+          [
+            'file.upload_failed',
+            { stage: 'browser', reason: 'fileSize', conversationId: undefined },
+          ],
+        ]);
       } finally {
         jest.useRealTimers();
       }
@@ -617,6 +677,12 @@ describe('useFileHandling', () => {
           message: 'Total file size limit exceeded: 7 MB',
           status: 'error',
           duration: 5000,
+        });
+        expect(mockTrackAction).toHaveBeenCalledWith('file.upload_failed', {
+          stage: 'browser',
+          reason: 'batchLimit',
+          count: 2,
+          conversationId: undefined,
         });
       } finally {
         jest.useRealTimers();
@@ -1671,6 +1737,13 @@ describe('useFileHandling', () => {
       });
 
       expect(onSuccess).toHaveBeenCalledWith(fileId);
+      expect(mockTrackAction).toHaveBeenCalledWith('file.uploaded', {
+        fileId: 'saved-file-id',
+        type: 'text/plain',
+        toolResource: null,
+        conversationId: undefined,
+      });
+      expect(JSON.stringify(mockTrackAction.mock.calls)).not.toContain('notes');
     });
 
     it('keeps the upload delivery path on the completed attachment', async () => {

@@ -44,10 +44,20 @@ AS SELECT
     SpanAttributes['agentId'] AS agent_id,
     SpanAttributes['rating'] AS rating,
     SpanAttributes['count'] AS file_count,
+    SpanAttributes['fileId'] AS file_id,
+    if(SpanName = 'file.download', SpanAttributes['fileType'], SpanAttributes['type']) AS file_type,
+    SpanAttributes['toolResource'] AS tool_resource,
+    SpanAttributes['questions'] AS questions,
+    SpanAttributes['declined'] AS declined,
+    SpanAttributes['stage'] AS stage,
+    SpanAttributes['reason'] AS reason,
+    SpanAttributes['identifiers'] AS identifiers,
+    SpanAttributes['status'] AS status,
     ServiceName AS service
 FROM hyperdx.otel_traces
 WHERE SpanName LIKE 'message.%'
-   OR SpanName IN ('model.switch', 'agent.switch', 'file.upload', 'conversation.new', 'spa-route-change');
+   OR SpanName LIKE 'file.%'
+   OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
 
 -- Langfuse 4 stores the app's OpenTelemetry traces in events_full, one row per
 -- span (agent, chain, tool, model call), each carrying its trace's user,
@@ -203,7 +213,7 @@ DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
     toDateTime64(time, 3) AS Timestamp,
     'ui' AS ServiceName,
-    'info' AS SeverityText,
+    if(action = 'file.upload_failed', 'warn', 'info') AS SeverityText,
     if(action = 'spa-route-change', 'page.view', toString(action)) AS Event,
     if(action = 'spa-route-change', concat('page.view ', route), toString(action)) AS Body,
     user_id AS UserId,
@@ -224,7 +234,10 @@ AS SELECT
     '' AS TraceId,
     mapFilter((k, v) -> v != '', map(
         'user_role', user_role, 'route', route, 'from_route', from_route,
-        'endpoint', endpoint, 'agent_id', agent_id, 'file_count', file_count
+        'endpoint', endpoint, 'agent_id', agent_id, 'file_count', file_count,
+        'file_id', file_id, 'file_type', file_type, 'tool_resource', tool_resource,
+        'questions', questions, 'declined', declined, 'stage', stage, 'reason', reason,
+        'identifiers', identifiers, 'status', status
     )) AS LogAttributes
 FROM analytics.ui_events
 UNION ALL

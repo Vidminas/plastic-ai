@@ -12,6 +12,7 @@ import {
 } from '~/components/Chat/Messages/Content/Parts/LogLink';
 import useArtifactProps from '~/hooks/Artifacts/useArtifactProps';
 import { useArtifactCode } from '~/Providers/EditorContext';
+import { trackDownload } from '~/lib/rum/actions';
 import useLocalize from '~/hooks/useLocalize';
 
 export interface ArtifactDownload {
@@ -118,6 +119,7 @@ export default function useArtifactDownload(artifact: Artifact): ArtifactDownloa
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        trackDownload(link.download);
         window.URL.revokeObjectURL(url);
         markDownloaded();
         return true;

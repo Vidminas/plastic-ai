@@ -13,6 +13,7 @@ import {
 } from '~/hooks/ScreenshotContext';
 import useBuildMessageTree from '~/hooks/Messages/useBuildMessageTree';
 import { isUnacknowledgedUserMessage } from '~/utils/messages';
+import { trackDownload } from '~/lib/rum/actions';
 import { NotificationSeverity } from '~/common';
 import { formatMessageText } from './format';
 import { cleanupPreset } from '~/utils';
@@ -127,6 +128,7 @@ export default function useExportConversation({
       return;
     }
     download(data, `${filename}.png`, 'image/png');
+    trackDownload(`${filename}.png`, conversation?.conversationId);
   };
 
   const exportCSV = async () => {
@@ -191,6 +193,7 @@ export default function useExportConversation({
         },
       ],
     });
+    trackDownload(`${filename}.csv`, conversation?.conversationId);
   };
 
   const exportMarkdown = async () => {
@@ -246,6 +249,7 @@ export default function useExportConversation({
       extension: 'md',
       exportType: exportFromJSON.types.txt,
     });
+    trackDownload(`${filename}.md`, conversation?.conversationId);
   };
 
   const exportText = async () => {
@@ -302,6 +306,7 @@ export default function useExportConversation({
       extension: 'txt',
       exportType: exportFromJSON.types.txt,
     });
+    trackDownload(`${filename}.txt`, conversation?.conversationId);
   };
 
   const exportJSON = async () => {
@@ -336,6 +341,7 @@ export default function useExportConversation({
     const jsonString = JSON.stringify(data);
     const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
     download(blob, `${filename}.json`, 'application/json');
+    trackDownload(`${filename}.json`, conversation?.conversationId);
   };
 
   const exportConversation = async () => {

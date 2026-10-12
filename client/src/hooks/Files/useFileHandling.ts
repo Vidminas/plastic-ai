@@ -279,6 +279,13 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
         const fileId = (body.get('file_id') as string | null) ?? data.temp_file_id;
         takeUploadRecovery(fileId)?.onSuccess?.(fileId);
         clearUploadTimer(fileId);
+        /** Accepted by the server, screening included; `file.upload` is the user's pick. */
+        trackAction('file.uploaded', {
+          fileId: data.file_id,
+          type: data.type,
+          toolResource: body.get('tool_resource') as string | null,
+          conversationId: conversation?.conversationId,
+        });
         if (agent_id) {
           queryClient.refetchQueries([QueryKeys.agent, agent_id]);
           return;
@@ -338,16 +345,26 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
         deleteFileById(file_id);
 
         let errorMessage = 'com_error_files_upload';
+        const rejection = isUploadRejection(error?.response?.data) ? error.response.data : null;
 
         if (error?.code === 'ERR_CANCELED') {
           errorMessage = 'com_error_files_upload_canceled';
-        } else if (isUploadRejection(error?.response?.data)) {
-          errorMessage = localizeUploadRejection(error.response.data, localize);
+        } else if (rejection) {
+          errorMessage = localizeUploadRejection(rejection, localize);
         } else if (error?.response?.status === 413) {
           errorMessage = 'com_error_files_size_limit';
         } else if (error?.response?.data?.message) {
           errorMessage = error.response.data.message;
         }
+        /** Codes only: the server's message can name the file. */
+        trackAction('file.upload_failed', {
+          stage: 'server',
+          reason: error?.code === 'ERR_CANCELED' ? 'canceled' : (rejection?.reason ?? 'error'),
+          identifiers: rejection?.identifiers?.join(','),
+          status: error?.response?.status,
+          toolResource: tool_resource as string | null,
+          conversationId: conversation?.conversationId,
+        });
         setError(errorMessage);
         uploadLifecycle?.onError?.(file_id);
       },
@@ -725,6 +742,13 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
         endpointFileConfig,
       });
       acceptedUploads = batch.keptIndices.map((index) => processedUploads[index]);
+      for (const { reason } of batch.skipped) {
+        trackAction('file.upload_failed', {
+          stage: 'browser',
+          reason,
+          conversationId: conversation?.conversationId,
+        });
+      }
       const acceptedFiles = acceptedUploads.map(({ extendedFile }) => extendedFile.file as File);
       /** `fileLimit` and `totalSizeLimit` describe the batch rather than any one file, so both are
        * applied to whatever survived the per-file partition above. */
@@ -745,6 +769,14 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
       if (!batchIsValid) {
         /** Nothing is left to upload, so this is the pre-existing all-or-nothing rejection and it
          * keeps reporting itself that way instead of as per-file skip notices. */
+        if (acceptedUploads.length > 0) {
+          trackAction('file.upload_failed', {
+            stage: 'browser',
+            reason: 'batchLimit',
+            count: acceptedUploads.length,
+            conversationId: conversation?.conversationId,
+          });
+        }
         if (acceptedUploads.length === 0) {
           const noDuplicates = validateFileDuplicates({
             files: filesForValidation,
