@@ -39,6 +39,8 @@ const {
   rejectPrivateTextAdmission,
   bindPrivateTextPersistenceAbort,
   persistedReasoningOverrideFields,
+  maskUserText,
+  maskUserQuotes,
 } = require('@librechat/api');
 const {
   Constants,
@@ -595,6 +597,7 @@ class BaseClient {
     } = await this.setMessageOptions(opts);
     this.options.startupTelemetry?.mark('history_loaded');
 
+    message = await maskUserText(this.options.req?.config, message);
     const userMessage = stampPrivateTextMessage(
       this.options.req,
       this.resolveStartUserMessage({
@@ -615,7 +618,11 @@ class BaseClient {
      * keeping the stored `text` clean while the count stays consistent.
      */
     if (!opts.isEdited && !opts.isCompaction) {
-      const referencedQuotes = getReferencedQuotes(this.options.req?.body?.quotes);
+      // const referencedQuotes = getReferencedQuotes(this.options.req?.body?.quotes);
+      const referencedQuotes = await maskUserQuotes(
+        this.options.req?.config,
+        getReferencedQuotes(this.options.req?.body?.quotes),
+      );
       if (referencedQuotes != null) {
         userMessage.quotes = referencedQuotes;
       }
@@ -813,7 +820,8 @@ class BaseClient {
         // Handle editedContent for content parts
         if (editedContent && latestMessage.content && Array.isArray(latestMessage.content)) {
           const { index, type } = editedContent;
-          const text = editedContent[type];
+          // const text = editedContent[type];
+          const text = await maskUserText(appConfig, editedContent[type]);
           if (index >= 0 && index < latestMessage.content.length) {
             const contentPart = latestMessage.content[index];
             let didApplyEdit = false;

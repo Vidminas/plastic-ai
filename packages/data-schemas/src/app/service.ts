@@ -202,6 +202,7 @@ export const AppService = async (params?: {
   const messageLimits = config.messageLimits;
   const openingHours = config.openingHours;
   const uploadScreening = config.uploadScreening;
+  const piiMasking = config.piiMasking;
   const langfuse = loadLangfuseConfig(config);
 
   const defaultConfig = {
@@ -231,6 +232,7 @@ export const AppService = async (params?: {
     messageLimits,
     openingHours,
     uploadScreening,
+    piiMasking,
     summarization,
     availableTools,
     imageOutputType,

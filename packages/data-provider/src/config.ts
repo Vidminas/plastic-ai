@@ -3721,6 +3721,12 @@ export const openingHoursSchema = z
 
 export type TOpeningHours = z.infer<typeof openingHoursSchema>;
 
+/** A Bedrock guardrail, by ID or ARN and version; `${ENV}` references are resolved. */
+export const guardrailReferenceSchema = z.object({
+  guardrailIdentifier: z.string(),
+  guardrailVersion: z.string(),
+});
+
 /**
  * Checks every upload before it is processed: the bytes must match the file type, and the
  * file is held in a quarantine bucket (`AWS_QUARANTINE_BUCKET_NAME`) until a malware scan
@@ -3734,6 +3740,22 @@ export const uploadScreeningSchema = z.object({
 });
 
 export type TUploadScreening = z.infer<typeof uploadScreeningSchema>;
+
+/**
+ * Masks personal identifiers with a Bedrock guardrail's sensitive information filters, so the
+ * app neither stores them nor sends them to a model. Text a user writes is masked before it
+ * is saved: a message they send or edit (and its quoted excerpts), and a conversation title
+ * they set or give a duplicate. Before a model call, the text of every message in an agent
+ * run is masked again, for history stored before masking and for model responses, which are
+ * stored as written; so are a title's input and answers to the model's clarifying questions.
+ * The model and the user see `{EMAIL}`, `{PHONE}` and so on. System prompts, tool
+ * results and files are not masked. Unset, nothing is masked.
+ */
+export const piiMaskingSchema = z.object({
+  guardrail: guardrailReferenceSchema,
+});
+
+export type TPiiMasking = z.infer<typeof piiMaskingSchema>;
 
 /** Why `uploadScreening` refused an upload; the composer shows `com_error_files_<reason>`. */
 export const UPLOAD_REJECTION_REASONS = [
@@ -4178,6 +4200,7 @@ export const configSchema = z.object({
   messageLimits: messageLimitsSchema.optional(),
   openingHours: openingHoursSchema.optional(),
   uploadScreening: uploadScreeningSchema.optional(),
+  piiMasking: piiMaskingSchema.optional(),
   endpoints: z
     .object({
       allowedAddresses: allowedAddressesSchema,

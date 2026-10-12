@@ -110,6 +110,18 @@ uploadScreening:
   malware: guardduty
   scanTimeoutSeconds: 60
 
+# Personal identifiers are masked with the stack's guardrail (terraform/guardrail.tf)
+# so the app neither stores them nor sends them to a model. What a user writes is
+# masked before it is saved: messages they send or edit, and titles they set. Before
+# a model call the whole history is masked again, from a cache, along with a title's
+# input and answers to the model's clarifying questions. The user and the model see
+# {EMAIL}, {PHONE} and so on. Model responses are stored as written. System prompts
+# and tool results are not masked.
+piiMasking:
+  guardrail:
+    guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}'
+    guardrailVersion: '${BEDROCK_GUARDRAIL_VERSION}'
+
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.
 speech:

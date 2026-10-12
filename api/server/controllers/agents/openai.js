@@ -76,6 +76,8 @@ const {
   resolveApiConversationProject,
   resolveAdmittedCodeEnvironmentDecision,
   createTerminalRunErrorObserver,
+  maskModelMessages,
+  getGuardrailTextMasker,
 } = require('@librechat/api');
 const {
   buildSummarizationHandlers,
@@ -938,7 +940,11 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
         true,
       );
       const formatted = formatAgentMessages(stripActivityLabelParts(openaiMessages), {}, toolSet);
-      const formattedMessages = formatted.messages;
+      // const formattedMessages = formatted.messages;
+      const formattedMessages = await maskModelMessages(
+        formatted.messages,
+        getGuardrailTextMasker(appConfig),
+      );
       const initialSummary = formatted.summary;
       let indexTokenCountMap = formatted.indexTokenCountMap;
 

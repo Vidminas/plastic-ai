@@ -78,6 +78,8 @@ export interface AppConfig {
   openingHours?: TCustomConfig['openingHours'];
   /** Upload quarantine, malware scan and PII screening */
   uploadScreening?: TCustomConfig['uploadScreening'];
+  /** Masking of personal identifiers in text sent to models */
+  piiMasking?: TCustomConfig['piiMasking'];
   /** Langfuse tracing configuration */
   langfuse?: TCustomConfig['langfuse'];
   /** Skill sync configuration */

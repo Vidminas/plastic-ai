@@ -7,6 +7,7 @@ jest.mock('@librechat/agents', () => ({
 }));
 
 jest.mock('@librechat/api', () => ({
+  maskUserText: jest.fn(async (_config, text) => text),
   prepareToolCallPreviews: jest.fn(() => (messages) => Promise.resolve(messages)),
   createToolCallPartHandler: jest.fn(() => (_req, res) => res.status(404).end()),
   rejectToolCallPreviewWrites: (_req, _res, next) => next(),
@@ -83,7 +84,7 @@ describe('PUT /:conversationId/:messageId', () => {
   let app;
   const { configMiddleware } = require('~/server/middleware');
   const { getMessages, stampForcedRetention, updateMessage } = require('~/models');
-  const { countTokens, applyForcedRetention } = require('@librechat/api');
+  const { countTokens, applyForcedRetention, maskUserText } = require('@librechat/api');
 
   const userId = 'user-1';
   const conversationId = 'conversation-1';
@@ -137,6 +138,35 @@ describe('PUT /:conversationId/:messageId', () => {
       expect.objectContaining({ messageId, text: 'edited text', tokenCount: 10 }),
     );
     expectRestamp({ userId, interfaceConfig });
+  });
+
+  it('stores an edit with its personal identifiers masked', async () => {
+    getMessages.mockResolvedValue([{ conversationId, quotes: [], isCreatedByUser: true }]);
+    maskUserText.mockImplementationOnce(async (_config, text) =>
+      text.replace('sam@example.com', '{EMAIL}'),
+    );
+
+    const response = await request(app)
+      .put(`/api/messages/${conversationId}/${messageId}`)
+      .send({ text: 'write to sam@example.com', model: 'gpt-5' });
+
+    expect(response.status).toBe(200);
+    expect(updateMessage).toHaveBeenCalledWith(
+      userId,
+      expect.objectContaining({ messageId, text: 'write to {EMAIL}' }),
+    );
+  });
+
+  it('stores nothing when an edit cannot be masked', async () => {
+    getMessages.mockResolvedValue([{ conversationId, quotes: [], isCreatedByUser: true }]);
+    maskUserText.mockRejectedValueOnce(new Error('guardrail unavailable'));
+
+    const response = await request(app)
+      .put(`/api/messages/${conversationId}/${messageId}`)
+      .send({ text: 'write to sam@example.com', model: 'gpt-5' });
+
+    expect(response.status).toBe(500);
+    expect(updateMessage).not.toHaveBeenCalled();
   });
 
   it('applies forced retention when editing a text content part', async () => {

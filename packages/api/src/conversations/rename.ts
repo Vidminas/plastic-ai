@@ -2,6 +2,7 @@ import { CONVERSATION_TITLE_OWNERSHIP_VERSION } from 'librechat-data-provider';
 import type { AppConfig, ConversationMethods } from '@librechat/data-schemas';
 import type { TStartupConfig } from 'librechat-data-provider';
 import type { Response } from 'express';
+import type { MaskText } from '~/guardrails/mask';
 import { extractConversationTitleContent } from '~/protection/adapters/submissions';
 import { contentFilterBlockResponse } from '~/middleware/contentFilter';
 import { inspectContent } from '~/protection/runtime';
@@ -18,7 +19,7 @@ export function getConversationTitleCapabilities(
 type RenameRequest = {
   body?: { arg?: { conversationId?: unknown; title?: unknown } };
   user?: { id: string; tenantId?: string };
-  config?: Pick<AppConfig, 'filters' | 'interfaceConfig'>;
+  config?: Pick<AppConfig, 'filters' | 'interfaceConfig' | 'piiMasking'>;
   resolvedConversation?: {
     title?: string;
     titleSetByUser?: boolean;
@@ -34,6 +35,8 @@ type RenameDependencies = Pick<ConversationMethods, 'saveConvo' | 'getConvo'> & 
     tenantId?: string,
   ) => Promise<string[]>;
   logger: { error: (message: string, metadata: ReturnType<typeof getSafeErrorMetadata>) => void };
+  /** The masker for the app's config (`piiMasking`), applied to the title before it is saved. */
+  getMaskText?: (config: RenameRequest['config']) => MaskText | undefined;
 };
 
 /** Explicit saves claim title ownership, even when the text has not changed. */
@@ -65,7 +68,9 @@ export function createRenameConversationHandler(
           return res.status(409).json({ error: 'conversation_title_ownership_not_ready' });
         }
       }
-      const sanitizedTitle = title.trim().slice(0, 1024);
+      const trimmedTitle = title.trim().slice(0, 1024);
+      const maskText = deps.getMaskText?.(req.config);
+      const sanitizedTitle = maskText == null ? trimmedTitle : await maskText(trimmedTitle);
       if (req.config?.filters != null) {
         const finding = inspectContent(extractConversationTitleContent({ title: sanitizedTitle }), {
           filters: req.config.filters,

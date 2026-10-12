@@ -135,6 +135,7 @@ import { getOpenAIConfig } from '~/endpoints/openai/config';
 import { createStepBudgetHook } from '~/agents/stepBudget';
 import { buildHITLRunWiring } from '~/agents/hitl/runtime';
 import { buildLangfuseConfig } from '~/langfuse/config';
+import { getGuardrailTextMasker } from '~/guardrails';
 import { applyTestRunHook } from '~/agents/testHook';
 import { isUserProvided } from '~/utils/common';
 import { createSafeUser } from '~/utils/env';
@@ -2589,7 +2590,9 @@ export async function createRun({
       }
       if (hitlCapable && !isSubagent && !askToolAdminDisabled) {
         graphTools = [
-          createAskUserQuestionTool(toolInputValidationErrors) as unknown as GenericTool,
+          createAskUserQuestionTool(toolInputValidationErrors, {
+            maskText: getGuardrailTextMasker(appConfig),
+          }) as unknown as GenericTool,
         ];
       }
     }

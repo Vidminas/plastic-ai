@@ -92,6 +92,8 @@ const {
   createTerminalRunErrorObserver,
   announceReply,
   getConversationWriteContext,
+  maskModelMessages,
+  getGuardrailTextMasker,
 } = require('@librechat/api');
 const {
   createResponsesToolEndCallback,
@@ -1158,7 +1160,11 @@ const executeResponse = async (envelope, { req, res }) => {
         {},
         toolSet,
       );
-      const formattedMessages = formatted.messages;
+      // const formattedMessages = formatted.messages;
+      const formattedMessages = await maskModelMessages(
+        formatted.messages,
+        getGuardrailTextMasker(appConfig),
+      );
       const initialSummary = formatted.summary;
       let indexTokenCountMap = formatted.indexTokenCountMap;
 
