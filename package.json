@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "prepare": "node -e \"import('husky').then((h) => h.default()).catch(() => {})\"",
+    "postinstall": "patch-package",
     "update": "node config/update.js",
     "add-balance": "node config/add-balance.js",
     "set-balance": "node config/set-balance.js",
@@ -281,5 +282,8 @@
       "admin/",
       "packages/"
     ]
+  },
+  "dependencies": {
+    "patch-package": "^8.0.1"
   }
 }

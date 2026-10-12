@@ -116,7 +116,8 @@ uploadScreening:
 # a model call the whole history is masked again, from a cache, along with a title's
 # input and answers to the model's clarifying questions. The user and the model see
 # {EMAIL}, {PHONE} and so on. Model responses are stored as written. System prompts
-# and tool results are not masked.
+# and tool results are not masked. Langfuse traces are masked too, every string in
+# them, before they are exported.
 piiMasking:
   guardrail:
     guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}'

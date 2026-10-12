@@ -1170,7 +1170,7 @@ modelSpecs:
 
 # PII masking (optional): masks personal identifiers with a Bedrock guardrail before
 # text reaches a model (message text, history included, titles, clarifying-question
-# answers). Ministack has no Bedrock Guardrails, so it stays off locally.
+# answers) and in Langfuse traces. Ministack has no Bedrock Guardrails, so it stays off locally.
 # piiMasking:
 #   guardrail:
 #     guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}'

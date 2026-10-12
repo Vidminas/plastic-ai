@@ -14,6 +14,8 @@ import { normalizeBoolean, resolveLangfuseHeaders, resolveTenantCredentials } fr
 import { buildLangfuseTraceMetadata, resolveLangfuseTraceUserId } from './identity';
 import { resolveLangfuseTenantDestination } from './tenantDestinations';
 import { scopeHeadersToDestination } from './destinations';
+import { getGuardrailTextMasker } from '~/guardrails';
+import { createGuardrailTraceMask } from './mask';
 import { normalizeString } from '~/utils/text';
 import { traceIdForMessage } from './trace';
 
@@ -273,6 +275,11 @@ export function buildLangfuseConfig({
   const langfuse: LangfuseRunConfigWithTraceAttributes = {
     deterministicTraceId: true,
   };
+  /** With `piiMasking`, traces are masked with its guardrail like everything else. */
+  const maskText = getGuardrailTextMasker(appConfig);
+  if (maskText != null) {
+    langfuse.mask = createGuardrailTraceMask(maskText);
+  }
   const traceUserId = resolveLangfuseTraceUserId(config?.trace, user);
   if (traceUserId != null) {
     langfuse.userId = traceUserId;
