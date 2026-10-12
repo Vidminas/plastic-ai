@@ -433,6 +433,9 @@ services:
       CLICKHOUSE_USER: hyperdx
       CLICKHOUSE_PASSWORD: ${HYPERDX_CLICKHOUSE_PASSWORD}
       HYPERDX_OTEL_EXPORTER_CLICKHOUSE_DATABASE: hyperdx
+      # Browser telemetry is kept 30 days, existing tables included (terraform/hyperdx.tf).
+      HYPERDX_OTEL_EXPORTER_TABLES_TTL: 720h
+      HYPERDX_OTEL_EXPORTER_RECONCILE_TABLE_TTL: 'true'
       OTLP_AUTH_TOKEN: ${RUM_PROXY_AUTHORIZATION}
     depends_on:
       clickhouse:
