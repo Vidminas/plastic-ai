@@ -18,9 +18,25 @@ interface:
     externalUrl: 'https://librechat.ai/tos'
     openNewTab: true
     modalAcceptance: true
-    modalTitle: 'Terms of Service for plastic-ai'
+    modalTitle: 'Before you start'
     modalContent: |
-      Replace with your Terms of Service.
+      Thank you for taking part in the Investigating Children’s Agency when Learning with AI (CHAILD) study.
+
+      **Please do not share personal information.** When you write messages or upload files, do not include:
+
+      - names, email addresses, phone numbers or home addresses, yours or anyone else's
+      - identification numbers, such as National Insurance, NHS, passport or student numbers
+      - financial details, such as bank or card numbers
+      - passwords or other login details
+      - sensitive details, such as health, ethnicity, religion, sexual orientation or political views
+
+      This applies to files too: do not upload documents or images that identify you or anyone else, or that contain sensitive details.
+
+      As a safeguard, the app replaces many identifiers it detects with placeholders such as {EMAIL}, and refuses uploads that contain them. It will not catch everything, so please check before you send.
+
+      Your conversations are recorded for the research, as described in the [participant information sheet](https://…). If you have questions, contact [name] at [email].
+
+      By selecting **I accept**, you confirm that you have read these instructions.
 
   modelSelect: true
   parameters: true
