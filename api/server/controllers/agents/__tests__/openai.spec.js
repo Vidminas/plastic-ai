@@ -175,6 +175,8 @@ jest.mock('@librechat/agents', () => ({
 }));
 
 jest.mock('@librechat/api', () => ({
+  checkApiMessageLength: (...args) =>
+    jest.requireActual('@librechat/api').checkApiMessageLength(...args),
   getAgentErrorMetadata: (...args) =>
     jest.requireActual('@librechat/api').getAgentErrorMetadata(...args),
   /* Provisioning moved into this package; the controllers build the callback from it. */
