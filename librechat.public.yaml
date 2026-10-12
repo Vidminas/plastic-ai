@@ -72,7 +72,7 @@ interface:
 registration:
   socialLogins: ["openid"]
 
-# Uploads: documents, ebooks, text and images only, at most 100 MB a file and
+# Uploads: documents, text and images only, at most 100 MB a file and
 # 2 GB of stored files per user (userStorageLimit counts every file a user
 # holds). Every upload's extension must be listed, and its MIME type must match
 # supportedMimeTypes as well. The limits are set for agents and bedrock too,
@@ -81,28 +81,42 @@ fileConfig:
   serverFileSizeLimit: 100
   userStorageLimit: 2048
   allowedExtensions:
-    [doc, docx, rtf, pdf, xls, xlsx, csv, tsv, ppt, pptx,
-     epub,
+    [docx, pdf, xls, xlsx, csv, tsv, pptx,
      txt, htm, html, json, xml, yaml, yml, md,
-     png, jpg, jpeg, jpe, tif, tiff, gif, bmp, webp, svg, jp2, heic]
+     png, jpg, jpeg, jpe, gif, webp]
   endpoints:
     default: &uploads
       fileSizeLimit: 100
       supportedMimeTypes:
-        - '^application/(msword|rtf|pdf|json|xml|yaml|x-yaml|epub\+zip|vnd\.ms-excel|vnd\.ms-powerpoint)$'
+        - '^application/(pdf|json|xml|yaml|x-yaml|vnd\.ms-excel)$'
         - '^application/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)$'
-        - '^text/(plain|html|csv|tab-separated-values|xml|yaml|x-yaml|markdown|x-markdown|rtf)$'
-        - '^image/(png|jpeg|tiff|gif|bmp|webp|svg\+xml|jp2|heic|heif)$'
+        - '^text/(plain|html|csv|tab-separated-values|xml|yaml|x-yaml|markdown|x-markdown)$'
+        - '^image/(png|jpeg|gif|webp)$'
     agents: *uploads
     bedrock: *uploads
 
 # Every upload is screened before it is processed or stored. Its bytes must match
-# its extension, and it waits in the quarantine bucket (AWS_QUARANTINE_BUCKET_NAME)
-# until GuardDuty Malware Protection tags it clean. A refused upload is deleted and
-# the user is told why.
+# its extension; it waits in the quarantine bucket (AWS_QUARANTINE_BUCKET_NAME)
+# until GuardDuty Malware Protection tags it clean; and the text of a document,
+# a text file or an image (read by Amazon Textract) goes to the stack's Bedrock
+# guardrail (terraform/guardrail.tf), whose report must contain none of the
+# identifiers below. It is used only here: chat keeps the guardrail under
+# endpoints.bedrock. A refused upload is deleted and the user is told why. Images inside documents are
+# not read. Legacy .doc, .ppt, .rtf and .epub are not accepted, because their text
+# cannot be extracted for screening. Images are limited to the formats Bedrock
+# models accept: PNG, JPEG, GIF and WebP.
 uploadScreening:
   malware: guardduty
   scanTimeoutSeconds: 60
+  pii:
+    detector: guardrail
+    guardrail:
+      guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}'
+      guardrailVersion: '${BEDROCK_GUARDRAIL_VERSION}'
+    maxCharacters: 2000000
+    images: textract
+    # `entities` is left at its default: every guardrail type that identifies a
+    # person, account or secret, universal and UK, except NAME, URL and AGE.
 
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.

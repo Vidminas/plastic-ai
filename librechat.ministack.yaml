@@ -1161,12 +1161,22 @@ modelSpecs:
 # # See the Custom Configuration Guide for more information on Assistants Config:
 # # https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/assistants_endpoint
 
-# Upload screening (optional): checks each upload's bytes against its extension
-# and holds it in AWS_QUARANTINE_BUCKET_NAME until a malware scan passes. Ministack
-# has no GuardDuty, so locally turn the scan off; the type check still applies.
+# Upload screening (optional): checks each upload's bytes against its extension,
+# holds it in AWS_QUARANTINE_BUCKET_NAME until a malware scan passes, and refuses
+# text, documents and images whose text a Bedrock guardrail finds identifiers in.
+# Ministack has no GuardDuty, Bedrock Guardrails or Textract, so locally turn them
+# off; the type check still applies.
 # uploadScreening:
 #   malware: none # `guardduty` waits for GuardDuty Malware Protection's tag
 #   scanTimeoutSeconds: 60
+#   pii:
+#     detector: none # `guardrail` calls ApplyGuardrail
+#     # guardrail: # default: piiMasking.guardrail
+#     #   guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}'
+#     #   guardrailVersion: '${BEDROCK_GUARDRAIL_VERSION}'
+#     maxCharacters: 2000000
+#     images: none # `textract` reads the text in images so it is screened too
+#     entities: [EMAIL, PHONE, UK_NATIONAL_INSURANCE_NUMBER] # default: every identifying type but NAME, URL and AGE
 
 # PII masking (optional): masks personal identifiers with a Bedrock guardrail before
 # text reaches a model (message text, history included, titles, clarifying-question
