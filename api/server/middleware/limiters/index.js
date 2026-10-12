@@ -2,6 +2,7 @@ const createTTSLimiters = require('./ttsLimiters');
 const createSTTLimiters = require('./sttLimiters');
 
 const loginLimiter = require('./loginLimiter');
+const loginUserLimiter = require('./loginUserLimiter');
 const passkeyLimiter = require('./passkeyLimiter');
 const importLimiters = require('./importLimiters');
 const uploadLimiters = require('./uploadLimiters');
@@ -31,6 +32,7 @@ module.exports = {
   ...shareLimiters,
   ...promptUsageLimiter,
   loginLimiter,
+  loginUserLimiter,
   passkeyLimiter,
   passkeyStepUpLimiter,
   registerLimiter,

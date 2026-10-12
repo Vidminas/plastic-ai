@@ -48,6 +48,7 @@ jest.mock('@librechat/api', () => ({
 jest.mock('~/server/middleware', () => ({
   checkDomainAllowed: jest.fn((_req, _res, next) => next()),
   loginLimiter: jest.fn((_req, _res, next) => next()),
+  loginUserLimiter: jest.fn((_req, _res, next) => next()),
   logHeaders: jest.fn((_req, _res, next) => next()),
   markOAuthNavigation: jest.fn((_req, _res, next) => next()),
 }));
@@ -97,7 +98,9 @@ describe('OAuth route wiring', () => {
     mockOpenIDCallbackMiddleware.mockClear();
     mockCreateOpenIDCallbackAuthenticator.mockClear();
     mockPassportAuthenticate.mockClear();
-    mockPassportAuthenticate.mockImplementation(() => (_req, res, _next) => res.redirect('/authorize'));
+    mockPassportAuthenticate.mockImplementation(
+      () => (_req, res, _next) => res.redirect('/authorize'),
+    );
     mockOpenIDCallbackMiddleware.mockImplementation((_req, _res, next) => next());
   });
 
