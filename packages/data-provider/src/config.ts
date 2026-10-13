@@ -4031,8 +4031,11 @@ export type TSafeguardingReason = {
 
 /** The `info` of a `safeguarding` error: why content was blocked, or that it could not be screened. */
 export type TSafeguardingErrorInfo = {
-  /** What was blocked: the participant's own message or file, or the model's response. */
-  source: 'prompt' | 'answer' | 'upload' | 'response';
+  /**
+   * What was blocked: the participant's own message or file, the model's response, or what
+   * they wrote as a conversation goal or their long-term intentions (`agency`).
+   */
+  source: 'prompt' | 'answer' | 'upload' | 'response' | 'goal' | 'intentions';
   reasons: TSafeguardingReason[];
   /** The guardrail could not be reached, so the content was refused unscreened. */
   unavailable?: boolean;

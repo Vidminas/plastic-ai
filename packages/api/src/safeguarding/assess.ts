@@ -7,7 +7,13 @@ import type {
 } from 'librechat-data-provider';
 
 /** Where screened content came from. */
-export type SafeguardingSource = 'prompt' | 'answer' | 'upload' | 'response';
+export type SafeguardingSource =
+  | 'prompt'
+  | 'answer'
+  | 'upload'
+  | 'response'
+  | 'goal'
+  | 'intentions';
 
 export type SafeguardingSeverity = 'none' | 'flag' | 'block';
 

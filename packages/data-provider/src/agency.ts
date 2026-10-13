@@ -66,6 +66,8 @@ export type TConversationGoal = {
 /** How a learner answered a goal check. */
 export const GOAL_CHECK_OUTCOMES = ['continue', 'refocus', 'goal_changed'] as const;
 export type GoalCheckOutcome = (typeof GOAL_CHECK_OUTCOMES)[number];
+export const isGoalCheckOutcome = (value: string | undefined): value is GoalCheckOutcome =>
+  (GOAL_CHECK_OUTCOMES as readonly string[]).includes(value ?? '');
 
 /** `ask_user_question` ids the goal-check instructions tell the model to use. */
 export const AGENCY_QUESTION_IDS = {

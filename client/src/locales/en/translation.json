@@ -1040,6 +1040,8 @@
   "com_safeguarding_topic_suicidal_ideation": "thoughts of suicide",
   "com_safeguarding_unavailable": "Your message couldn't be checked just now, so it wasn't sent. Try again in a minute.",
   "com_safeguarding_blocked_answer": "Your answer wasn't sent, because it may be about something the assistant can't help with here.",
+  "com_safeguarding_blocked_goal": "Your goal wasn't saved, because it may be about something the assistant can't help with here.",
+  "com_safeguarding_blocked_intentions": "Your intentions weren't saved, because they may be about something the assistant can't help with here.",
   "com_safeguarding_blocked_prompt": "Your message wasn't sent, because it may be about something the assistant can't help with here.",
   "com_safeguarding_blocked_response": "The rest of this reply was hidden, because it may not be suitable.",
   "com_safeguarding_blocked_upload": "This file wasn't added, because it may contain something that isn't suitable here.",

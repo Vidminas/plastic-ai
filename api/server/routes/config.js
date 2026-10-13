@@ -352,6 +352,7 @@ router.get('/', async function (req, res) {
             },
           }
         : {}),
+      ...(appConfig?.agency ? { agency: appConfig.agency } : {}),
       ...(codeEnvironmentDecisionVersion != null ? { codeEnvironmentDecisionVersion } : {}),
       mcpApps: resolveMCPAppsPolicy(
         appConfig?.mcpSettings?.apps,

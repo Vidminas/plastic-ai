@@ -210,6 +210,9 @@ const {
   maskTitleInput,
   maskModelMessages,
   getGuardrailTextMasker,
+  withAgencyContext,
+  resolveAgencyContext,
+  createAgencyEventRecorder,
 } = require('@librechat/api');
 const {
   Run,
@@ -253,6 +256,13 @@ const { getAccessibleMCPServers } = require('~/server/services/MCP');
 const BaseClient = require('~/app/clients/BaseClient');
 const { getMCPManager } = require('~/config');
 const db = require('~/models');
+
+/** Reads and saves conversation goals for the agency context (`agency` in librechat.yaml). */
+const agencyContextDeps = {
+  getConversationGoal: db.getConversationGoal,
+  setConversationGoal: db.setConversationGoal,
+  record: createAgencyEventRecorder({ recordAgencyEvent: db.recordAgencyEvent }),
+};
 
 const loadAgent = (params) =>
   loadAgentFn(params, {
@@ -2469,6 +2479,11 @@ class AgentClient extends BaseClient {
       resolveConfigServers(this.options.req),
     ]);
     void earlySharedContextPromise.catch(() => {});
+    const agencyContextPromise = resolveAgencyContext(
+      this.options.req,
+      this.conversationId,
+      agencyContextDeps,
+    );
     assertModelBoundContent({
       onTraversalFailure: reportLocatorTraversalFailure,
       filters: this.options.req.config?.filters,
@@ -2955,6 +2970,12 @@ class AgentClient extends BaseClient {
     if (this.augmentedPrompt) {
       modelBoundFileContexts.add(this.augmentedPrompt);
       sharedRunContextParts.push(this.augmentedPrompt);
+    }
+
+    /** The learner's conversation goal and when to offer options (`agency`) */
+    const agencyContext = await agencyContextPromise;
+    if (agencyContext) {
+      sharedRunContextParts.push(agencyContext);
     }
 
     /** Memory context (user preferences/memories). Keyed context (with memory
@@ -5641,7 +5662,7 @@ class AgentClient extends BaseClient {
           ]),
       );
       const resumeMcpManager = getMCPManager();
-      const [resumeScopedContext, resumeConfigServers] = await Promise.all([
+      const [resumeScopedContext, resumeConfigServers, resumeAgencyContext] = await Promise.all([
         buildAgentScopedContext({
           agentIds: agents.map((agent) => agent?.id).filter(Boolean),
           attachmentsByAgentId: this.options.agentContextAttachmentsByAgentId,
@@ -5655,6 +5676,8 @@ class AgentClient extends BaseClient {
           tokenCountFn: (text) => countTokens(text),
         }),
         resolveConfigServers(this.options.req),
+        /** The goal and goal checks (`agency`), read afresh: a goal check can change the goal. */
+        resolveAgencyContext(this.options.req, this.conversationId, agencyContextDeps),
       ]);
       const resumeScopedAttachmentMap = buildAgentScopedAttachmentMap({
         agentIds: agents.map((agent) => agent?.id).filter(Boolean),
@@ -5696,7 +5719,7 @@ class AgentClient extends BaseClient {
               logger,
               mcpManager: resumeMcpManager,
               configServers: resumeConfigServers,
-              sharedRunContext: scopedContext ?? '',
+              sharedRunContext: withAgencyContext(scopedContext, resumeAgencyContext),
               ephemeralAgent:
                 agent === this.options.agent ? this.options.req.body.ephemeralAgent : undefined,
             });
@@ -5798,7 +5821,7 @@ class AgentClient extends BaseClient {
                   logger,
                   mcpManager: resumeMcpManager,
                   configServers: resumeConfigServers,
-                  sharedRunContext: scopedContext ?? '',
+                  sharedRunContext: withAgencyContext(scopedContext, resumeAgencyContext),
                 });
                 assertModelBoundContent({
                   onTraversalFailure: reportLocatorTraversalFailure,

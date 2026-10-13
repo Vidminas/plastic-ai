@@ -16,6 +16,8 @@ jest.mock('@librechat/api', () => ({
   createMessageFilterPii: mockCreateMessageFilterPii,
   createMessageLengthLimit: jest.fn(() => (_req, _res, next) => next()),
   createSafeguardingCheck: jest.fn(() => (_req, _res, next) => next()),
+  createAgencyAnswerRecorder: jest.fn(() => (_req, _res, next) => next()),
+  createAgencyEventRecorder: jest.fn(() => ({ event: jest.fn() })),
   generateCheckAccess: jest.fn(() => (_req, _res, next) => next()),
   skipAgentCheck: jest.fn(),
   applyResumeRequest: jest.fn(),
