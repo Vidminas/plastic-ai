@@ -27,6 +27,7 @@ jest.mock('~/strategies/process', () => ({
 jest.mock('~/server/middleware', () => ({
   logHeaders: (req, res, next) => next(),
   loginLimiter: (req, res, next) => next(),
+  loginUserLimiter: (req, res, next) => next(),
   markOAuthNavigation: (req, res, next) => next(),
   checkDomainAllowed: (req, res, next) => next(),
 }));

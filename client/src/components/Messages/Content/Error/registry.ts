@@ -7,6 +7,7 @@ import ProviderError from './ProviderError';
 import UserKeyError from './UserKeyError';
 import BalanceError from './BalanceError';
 import ContextError from './ContextError';
+import UploadError from './UploadError';
 import ModelError from './ModelError';
 import LimitError from './LimitError';
 import AgentError from './AgentError';
@@ -80,4 +81,5 @@ export const errorRenderers: Record<string, ComponentType<ErrorRendererProps>> =
   [ViolationTypes.TTS_LIMIT]: LimitError,
   [ViolationTypes.STT_LIMIT]: LimitError,
   [ErrorTypes.MESSAGE_TOO_LONG]: LimitError,
+  [ErrorTypes.UPLOAD_REJECTED]: UploadError,
 };

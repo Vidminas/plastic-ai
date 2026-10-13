@@ -1161,6 +1161,13 @@ modelSpecs:
 # # See the Custom Configuration Guide for more information on Assistants Config:
 # # https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/assistants_endpoint
 
+# Upload screening (optional): checks each upload's bytes against its extension
+# and holds it in AWS_QUARANTINE_BUCKET_NAME until a malware scan passes. Ministack
+# has no GuardDuty, so locally turn the scan off; the type check still applies.
+# uploadScreening:
+#   malware: none # `guardduty` waits for GuardDuty Malware Protection's tag
+#   scanTimeoutSeconds: 60
+
 # Web Search Configuration (optional)
 # webSearch:
 #   # Jina Reranking Configuration

@@ -1,7 +1,9 @@
 # v0.8.8
 
 # Base node image
-FROM node:24.16.0-alpine AS node
+# FROM node:24.16.0-alpine AS node
+# Node 24's latest release: each build takes its minor and patch updates.
+FROM node:24-alpine AS node
 
 RUN apk upgrade --no-cache
 RUN apk add --no-cache jemalloc

@@ -7,7 +7,11 @@ const {
   uaParser,
   checkBan,
 } = require('~/server/middleware');
-const { restoreTenantContextFromReq, createStorageQuotaCheck } = require('@librechat/api');
+const {
+  restoreTenantContextFromReq,
+  createStorageQuotaCheck,
+  createUploadScreeningCheck,
+} = require('@librechat/api');
 const { getUserStorageBytes } = require('~/models');
 const { avatar: asstAvatarRouter } = require('~/server/routes/assistants/v1');
 const { avatar: agentAvatarRouter } = require('~/server/routes/agents/v1');
@@ -58,20 +62,31 @@ const initialize = async () => {
   });
 
   const storageQuota = createStorageQuotaCheck({ getUserStorageBytes });
+  /* Quarantine, malware scan and PII screening, when `uploadScreening` is configured */
+  const screening = createUploadScreeningCheck();
   // router.post('/', upload.single('file'), restoreTenantContextFromReq);
-  router.post('/', upload.single('file'), restoreTenantContextFromReq, storageQuota);
+  router.post('/', upload.single('file'), restoreTenantContextFromReq, storageQuota, screening);
   // router.post('/images', upload.single('file'), restoreTenantContextFromReq);
-  router.post('/images', upload.single('file'), restoreTenantContextFromReq, storageQuota);
-  router.post('/images/avatar', upload.single('file'), restoreTenantContextFromReq);
+  router.post(
+    '/images',
+    upload.single('file'),
+    restoreTenantContextFromReq,
+    storageQuota,
+    screening,
+  );
+  // router.post('/images/avatar', upload.single('file'), restoreTenantContextFromReq);
+  router.post('/images/avatar', upload.single('file'), restoreTenantContextFromReq, screening);
   router.post(
     '/images/agents/:agent_id/avatar',
     upload.single('file'),
     restoreTenantContextFromReq,
+    screening,
   );
   router.post(
     '/images/assistants/:assistant_id/avatar',
     upload.single('file'),
     restoreTenantContextFromReq,
+    screening,
   );
 
   router.use('/', files);

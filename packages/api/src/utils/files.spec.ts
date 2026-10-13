@@ -524,6 +524,17 @@ describe('resolveUploadErrorMessage', () => {
     expect(resolveUploadErrorMessage({})).toBe('Error processing file');
   });
 
+  test.each([
+    [
+      'File size limit of 100 MB exceeded for agents endpoint',
+      'File exceeds the upload size limit',
+    ],
+    ['Unsupported file type', 'Unsupported file type'],
+  ])('tells the user why filterFile refused an upload: %s', (message, redacted) => {
+    expect(resolveUploadErrorMessage({ message })).toBe(message);
+    expect(resolveUploadErrorMessage({ message }, undefined, true)).toBe(redacted);
+  });
+
   test('returns default message for unrecognized error', () => {
     expect(resolveUploadErrorMessage({ message: 'ENOENT: no such file or directory' })).toBe(
       'Error processing file',

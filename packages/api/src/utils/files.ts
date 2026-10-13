@@ -14,6 +14,8 @@ const USER_FACING_UPLOAD_ERRORS = [
   ['total decompressed size exceeds the', 'Document exceeds the total decompressed size limit'],
   ['MB decompressed limit', 'Document exceeds the decompressed size limit'],
   ['MB storage limit', 'Extracted text exceeds the storage size limit'],
+  ['MB exceeded for', 'File exceeds the upload size limit'],
+  ['Unsupported file type', 'Unsupported file type'],
 ] as const;
 
 const ASCII_FILENAME_SAFE_PATTERN = /^[a-zA-Z0-9._-]$/;

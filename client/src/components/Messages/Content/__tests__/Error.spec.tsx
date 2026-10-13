@@ -192,6 +192,21 @@ describe('Error — every client-facing error type', () => {
   );
 });
 
+describe('Error — refused uploads', () => {
+  it('says why upload screening refused a file, as the composer does', () => {
+    renderError({ code: ErrorTypes.UPLOAD_REJECTED, reason: 'scan_unavailable' });
+
+    expect(screen.getByText(catalog.com_error_files_scan_unavailable)).toBeInTheDocument();
+    expectReadable();
+  });
+
+  it('reads a payload without a known reason as a failed upload', () => {
+    renderError({ type: ErrorTypes.UPLOAD_REJECTED, reason: 'nonsense' });
+
+    expect(screen.getByText(catalog.com_error_files_upload)).toBeInTheDocument();
+  });
+});
+
 describe('Error — reader-facing provider and fallback copy', () => {
   it.each([
     [ErrorTypes.INVALID_REQUEST, 'com_error_invalid_request_error', 'OpenAI'],

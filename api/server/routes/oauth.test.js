@@ -85,6 +85,7 @@ const mockMarkOAuthNavigation = jest.fn((req, _res, next) => {
 jest.mock('~/server/middleware', () => ({
   checkDomainAllowed: jest.fn((_req, _res, next) => next()),
   loginLimiter: jest.fn((_req, _res, next) => next()),
+  loginUserLimiter: jest.fn((_req, _res, next) => next()),
   logHeaders: jest.fn((_req, _res, next) => next()),
   markOAuthNavigation: (...args) => mockMarkOAuthNavigation(...args),
 }));
@@ -175,6 +176,7 @@ describe('OAuth route failure logging', () => {
       expect.any(Object),
       expect.any(Function),
     );
+    expect(require('~/server/middleware').loginUserLimiter).toHaveBeenCalled();
     expect(mockOAuthHandler).toHaveBeenCalled();
   });
 

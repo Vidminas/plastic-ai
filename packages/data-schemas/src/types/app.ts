@@ -76,6 +76,8 @@ export interface AppConfig {
   messageLimits?: TCustomConfig['messageLimits'];
   /** Daily window in which the app can be used */
   openingHours?: TCustomConfig['openingHours'];
+  /** Upload quarantine, malware scan and PII screening */
+  uploadScreening?: TCustomConfig['uploadScreening'];
   /** Langfuse tracing configuration */
   langfuse?: TCustomConfig['langfuse'];
   /** Skill sync configuration */

@@ -14,6 +14,7 @@ const {
 const {
   checkDomainAllowed,
   loginLimiter,
+  loginUserLimiter,
   logHeaders,
   markOAuthNavigation,
 } = require('~/server/middleware');
@@ -127,6 +128,7 @@ router.get('/openid', (req, res, next) => {
 router.get(
   '/openid/callback',
   authenticateOpenIDCallback,
+  loginUserLimiter,
   setBalanceConfig,
   checkDomainAllowed,
   oauthHandler,
