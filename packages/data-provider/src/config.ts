@@ -2672,6 +2672,9 @@ export const interfaceSchema = z
       .max(AGENT_SELECTOR_LIMIT_MAX)
       .default(DEFAULT_AGENT_SELECTOR_LIMIT),
     parameters: z.boolean().optional(),
+    /** The reasoning control in the composer footer. Enabled by default; when off, reasoning
+     * is set only in the Parameters panel. */
+    composerReasoning: z.boolean().optional(),
     multiConvo: z.boolean().optional(),
     bookmarks: z.boolean().optional(),
     memories: z.boolean().optional(),

@@ -43,6 +43,8 @@ interface:
 
   modelSelect: true
   parameters: true
+  # Reasoning is set in the Parameters panel only, not from the composer.
+  composerReasoning: false
   presets: false
   prompts:
     use: false
@@ -321,6 +323,7 @@ modelSpecs:
       preset:
         endpoint: 'bedrock'
         model: 'moonshotai.kimi-k2.5'
+        reasoning_effort: 'medium'
     - name: 'bedrock-deepseek-v3-2'
       label: 'DeepSeek V3.2 (Bedrock)'
       description: 'DeepSeek V3.2 via AWS Bedrock (eu-west-2, on-demand)'
@@ -339,6 +342,7 @@ modelSpecs:
       preset:
         endpoint: 'bedrock'
         model: 'zai.glm-5'
+        reasoning_effort: 'medium'
     - name: 'bedrock-nemotron-super-3'
       label: 'Nemotron Super 3 (Bedrock)'
       description: 'NVIDIA Nemotron Super 3 120B via AWS Bedrock (eu-west-2, on-demand)'
