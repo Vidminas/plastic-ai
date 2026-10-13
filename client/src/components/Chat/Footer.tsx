@@ -6,6 +6,7 @@ import type { TStartupConfig } from 'librechat-data-provider';
 import { useGetStartupConfig } from '~/data-provider';
 import { policyUrls } from '~/utils/policies';
 import { useLocalize } from '~/hooks';
+import { cn } from '~/utils';
 
 type FooterProps = {
   className?: string;
@@ -20,7 +21,10 @@ type FooterProps = {
 };
 
 type FooterStartupConfig = Pick<Partial<TStartupConfig>, 'analyticsGtmId' | 'customFooter'> & {
-  interface?: Pick<NonNullable<TStartupConfig['interface']>, 'privacyPolicy' | 'termsOfService'>;
+  interface?: Pick<
+    NonNullable<TStartupConfig['interface']>,
+    'privacyPolicy' | 'termsOfService' | 'footerLayout'
+  >;
 };
 
 /**
@@ -76,6 +80,7 @@ function Footer({ className, startupConfig, configuredOnly = false }: FooterProp
     </a>
   );
 
+  const stacked = config?.interface?.footerLayout === 'stack';
   const configuredFooter = typeof config?.customFooter === 'string' ? config.customFooter : null;
   /** The generic disclaimer is the part a conversation drops; the operator's own footer is not. */
   const genericFooter = configuredOnly
@@ -146,7 +151,12 @@ function Footer({ className, startupConfig, configuredOnly = false }: FooterProp
              rather than the brighter `text-secondary`: the underline carries the
              affordance, and a link that outshines its own sentence puts the
              emphasis back where this change takes it from. */
-          'text-text-muted absolute right-0 bottom-0 left-0 hidden items-center justify-center gap-2 px-2 py-2 text-center text-xs sm:flex md:px-15'
+          // 'text-text-muted absolute right-0 bottom-0 left-0 hidden items-center justify-center gap-2 px-2 py-2 text-center text-xs sm:flex md:px-15'
+          cn(
+            'text-text-muted absolute right-0 bottom-0 left-0 hidden items-center justify-center px-2 py-2 text-center text-xs sm:flex md:px-15',
+            /* `interface.footerLayout: stack` puts each part on its own line. */
+            stacked ? 'flex-col gap-0.5' : 'gap-2',
+          )
         }
       >
         {footerElements.map((contentRender, index) => {
@@ -154,7 +164,7 @@ function Footer({ className, startupConfig, configuredOnly = false }: FooterProp
           return (
             <React.Fragment key={`footer-element-${index}`}>
               {contentRender}
-              {!isLastElement && (
+              {!isLastElement && !stacked && (
                 <div
                   key={`separator-${index}`}
                   className="border-border-medium h-2 border-r-[1px]"

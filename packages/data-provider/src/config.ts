@@ -2654,6 +2654,9 @@ export const interfaceSchema = z
       .optional(),
     termsOfService: termsOfServiceSchema.optional(),
     customWelcome: z.string().optional(),
+    /** How the footer's `|`-separated parts sit under the composer: side by side (`row`, the
+     * default) or one per line (`stack`), which reads better in a narrow pane. */
+    footerLayout: z.enum(['row', 'stack']).optional(),
     /** Adds a note to the dialogs that delete conversations and files: deleting removes them
      * from the app, but not from records kept outside it (interaction logs and traces). */
     deletionLogNotice: z.boolean().optional(),
