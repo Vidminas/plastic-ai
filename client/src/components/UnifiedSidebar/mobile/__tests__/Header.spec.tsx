@@ -1,6 +1,6 @@
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import type { NavLink } from '~/common';
 
 jest.mock('~/hooks', () => ({
@@ -51,6 +51,26 @@ import Header from '../Header';
 const links = [] as NavLink[];
 
 describe('mobile drawer header', () => {
+  /** `onClose` takes an optional after-slide callback; a click event passed in its place
+   *  reached `requestAnimationFrame` and threw. */
+  it('closes without passing the click event on', () => {
+    const onClose = jest.fn();
+    render(
+      <Header
+        links={links}
+        expanded={true}
+        onClose={onClose}
+        onNewChat={jest.fn()}
+        switchToHistory={true}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+    fireEvent.click(screen.getByTestId('close-sidebar-button'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith();
+  });
+
   it('claims the close identity while the drawer is open', () => {
     render(
       <Header

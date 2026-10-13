@@ -70,7 +70,10 @@ function Header({
         aria-keyshortcuts={toggleSidebarAriaKey}
         tabIndex={expanded ? 0 : -1}
         className="shrink-0"
-        onClick={onClose}
+        // onClick={onClose}
+        /** Not passed through: `onClose` takes an optional after-slide callback, and the
+         *  click event would arrive in its place. */
+        onClick={() => onClose()}
       >
         <Sidebar className="icon-md" aria-hidden="true" />
       </Button>
