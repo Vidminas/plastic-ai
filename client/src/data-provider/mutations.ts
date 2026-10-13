@@ -93,7 +93,10 @@ export const useTagConversationMutation = (
   options?: t.updateTagsInConvoOptions,
 ): UseMutationResult<t.TTagConversationResponse, unknown, t.TTagConversationRequest, unknown> => {
   const queryClient = useQueryClient();
-  const query = useConversationTagsQuery();
+  // const query = useConversationTagsQuery();
+  /** Only refetched after a save: an observer that fetched on mount would ask for tags
+   *  without the bookmark permission, which the route answers with 403. */
+  const query = useConversationTagsQuery({ enabled: false });
   const { updateTagsInConversation } = useUpdateTagsInConvo();
   return useMutation(
     (payload: t.TTagConversationRequest) =>

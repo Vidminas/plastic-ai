@@ -42,6 +42,7 @@ jest.mock('~/data-provider', () => ({
   useGetStartupConfig: () => ({ data: mockConfig }),
   useGetEndpointsQuery: () => ({ data: mockConfig }),
   useListAgentsQuery: () => ({}),
+  useAgentAccess: () => 'allowed',
   useProjectQuery: () => ({}),
   useGetConvoIdQuery: (id: string, options: { enabled: boolean }) => {
     const { useQuery: query } = jest.requireActual('@tanstack/react-query');

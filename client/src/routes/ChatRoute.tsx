@@ -27,6 +27,7 @@ import {
   useGetConvoIdQuery,
   useGetStartupConfig,
   useGetEndpointsQuery,
+  useAgentAccess,
   useListAgentsQuery,
   useProjectQuery,
 } from '~/data-provider';
@@ -155,6 +156,8 @@ export default function ChatRoute() {
     { requiredPermission: PermissionBits.VIEW },
     { enabled: isAuthenticated },
   );
+  /** A role without `AGENTS:USE` never loads the list, so there is nothing to wait for. */
+  const agentAccess = useAgentAccess();
 
   const isTemporaryChat = isTemporaryConversation(conversation);
   const forceTemporaryChat = isForcedTemporaryRetention(startupConfig?.interface?.retentionMode);
@@ -217,9 +220,14 @@ export default function ChatRoute() {
      * A URL naming its own selection skips the wait only on the new-chat branch,
      * where it takes precedence over the stored pick; the 404 fallback never
      * applies query settings, so it always waits. */
+    // const awaitsAgentList =
+    //   agentsMap == null &&
+    //   !agentsQuery.isError &&
+    //   defaultSpecAwaitsAgents(startupConfig, endpointsQuery.data);
     const awaitsAgentList =
       agentsMap == null &&
       !agentsQuery.isError &&
+      agentAccess !== 'denied' &&
       defaultSpecAwaitsAgents(startupConfig, endpointsQuery.data);
     if (awaitsAgentList && (notFoundConvo || (isNewConvo && !hasModelSelection(querySettings)))) {
       return;
@@ -326,6 +334,7 @@ export default function ChatRoute() {
     roles,
     agentsMap,
     agentsQuery.isError,
+    agentAccess,
     startupConfig,
     initialConvoQuery.data,
     initialConvoQuery.isError,

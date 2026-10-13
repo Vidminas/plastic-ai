@@ -1,11 +1,20 @@
 import { createElement } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { dataService, QueryKeys, EModelEndpoint, PermissionBits } from 'librechat-data-provider';
+import {
+  QueryKeys,
+  dataService,
+  Permissions,
+  EModelEndpoint,
+  PermissionBits,
+  PermissionTypes,
+} from 'librechat-data-provider';
 import type { AgentListResponse, AgentSortOption, TUserFavorite } from 'librechat-data-provider';
 import type { ReactNode } from 'react';
+import type { TAuthContext } from '~/common';
 import { useGetFavoritesQuery, useUpdateFavoritesMutation } from '../../Favorites';
 import { useListAgentsQuery, useMarketplaceAgentsInfiniteQuery } from '../queries';
+import { AuthContext } from '~/hooks/AuthContext';
 
 jest.mock('librechat-data-provider', () => {
   const actual = jest.requireActual('librechat-data-provider');
@@ -54,16 +63,34 @@ const createWrapper = (queryClient: QueryClient) =>
     return createElement(QueryClientProvider, { client: queryClient }, children);
   };
 
-const renderListAgents = (params: Parameters<typeof useListAgentsQuery>[0]) => {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+const renderListAgents = (
+  params: Parameters<typeof useListAgentsQuery>[0],
+  auth?: Partial<TAuthContext>,
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) => {
   /** The hook is gated on the agents endpoint being configured. */
   queryClient.setQueryData([QueryKeys.endpoints], { [EModelEndpoint.agents]: {} });
+  const QueryWrapper = createWrapper(queryClient);
   return renderHook(() => useListAgentsQuery(params), {
-    wrapper: createWrapper(queryClient),
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(
+        QueryWrapper,
+        null,
+        auth == null
+          ? children
+          : createElement(AuthContext.Provider, { value: auth as TAuthContext }, children),
+      ),
   });
 };
+
+/** A signed-in user whose role grants or withholds `AGENTS:USE`. */
+const authWithAgents = (use: boolean): Partial<TAuthContext> => ({
+  isAuthenticated: true,
+  user: { role: 'USER' } as TAuthContext['user'],
+  roles: {
+    USER: { permissions: { [PermissionTypes.AGENTS]: { [Permissions.USE]: use } } },
+  } as unknown as TAuthContext['roles'],
+});
 
 describe('useListAgentsQuery', () => {
   beforeEach(() => {
@@ -80,6 +107,58 @@ describe('useListAgentsQuery', () => {
     expect(listAgents).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 1000, requiredPermission: PermissionBits.VIEW }),
     );
+  });
+
+  /** The agent routes answer 403 without `AGENTS:USE`, and the list refetches on focus. */
+  it('does not request the list once the role is known to lack agent access', () => {
+    const { result } = renderListAgents(
+      { requiredPermission: PermissionBits.VIEW },
+      authWithAgents(false),
+    );
+
+    expect(listAgents).not.toHaveBeenCalled();
+    expect(result.current.fetchStatus).toBe('idle');
+  });
+
+  /** Requesting before the role loads is what produced the one 403 per page load. */
+  it('waits for the role before requesting the list', () => {
+    const { result } = renderListAgents(
+      { requiredPermission: PermissionBits.VIEW },
+      { isAuthenticated: true, user: { role: 'USER' } as TAuthContext['user'], roles: {} },
+    );
+
+    expect(listAgents).not.toHaveBeenCalled();
+    expect(result.current.fetchStatus).toBe('idle');
+  });
+
+  /** A role that cannot load must not leave the list, and the new chat waiting on it, stuck. */
+  it('requests the list when the role fails to load', async () => {
+    listAgents.mockResolvedValue(page(['a'], null));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await queryClient.prefetchQuery([QueryKeys.roles, 'USER'], () =>
+      Promise.reject(new Error('role unavailable')),
+    );
+
+    const { result } = renderListAgents(
+      { requiredPermission: PermissionBits.VIEW },
+      { isAuthenticated: true, user: { role: 'USER' } as TAuthContext['user'], roles: {} },
+      queryClient,
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(listAgents).toHaveBeenCalledTimes(1);
+  });
+
+  it('requests the list when the role grants agent access', async () => {
+    listAgents.mockResolvedValue(page(['a'], null));
+
+    const { result } = renderListAgents(
+      { requiredPermission: PermissionBits.VIEW },
+      authWithAgents(true),
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(listAgents).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the walk page size when a caller supplies a smaller limit', async () => {
