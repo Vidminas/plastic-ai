@@ -297,6 +297,11 @@ modelSpecs:
       preset:
         endpoint: 'bedrock'
         model: 'amazon.nova-lite-v1:0'
+        # Off: @librechat/agents 4.0.4 puts a prompt-cache point after a tool
+        # result, which Nova refuses ("extraneous key [cachePoint]"), so the
+        # turn after any tool call, ask_user_question included, fails. Turn it
+        # back on once https://github.com/LibreChat-AI/agents/issues/591 ships.
+        promptCache: false
     - name: 'bedrock-gpt-oss-120b'
       label: 'gpt-oss-120b (Bedrock)'
       description: 'OpenAI open-weight 120B model via AWS Bedrock (eu-west-2, on-demand)'
