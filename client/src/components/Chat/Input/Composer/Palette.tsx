@@ -214,6 +214,14 @@ function Palette({
   anchorRef,
 }: PaletteProps) {
   const localize = useLocalize();
+  /* The field names tools, skills and servers only where all three are on offer;
+     a deployment without them gets a plain "Search". */
+  const searchLabel = useMemo(() => {
+    const offered = new Set(entries.map((entry) => entry.section));
+    return offered.has('tool') && offered.has('skill') && offered.has('mcp')
+      ? localize('com_ui_composer_palette_search')
+      : localize('com_ui_search');
+  }, [entries, localize]);
   /* Ariakit owns the open state rather than a controlled `open`/`setOpen` pair:
      with the controlled form, hide-on-interact-outside fired on mousedown and
      the disclosure's own click re-opened it, so clicking `+` while the palette
@@ -1337,8 +1345,10 @@ function Palette({
                     : undefined
                 }
                 aria-describedby={helpId}
-                aria-label={localize('com_ui_composer_palette_search')}
-                placeholder={localize('com_ui_composer_palette_search')}
+                // aria-label={localize('com_ui_composer_palette_search')}
+                // placeholder={localize('com_ui_composer_palette_search')}
+                aria-label={searchLabel}
+                placeholder={searchLabel}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={handleKeyDown}

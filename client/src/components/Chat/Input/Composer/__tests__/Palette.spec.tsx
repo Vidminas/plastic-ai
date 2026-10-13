@@ -316,6 +316,19 @@ describe('Palette', () => {
     );
   });
 
+  it('names tools, skills and servers in the search field only when all three are offered', () => {
+    const { unmount } = renderPalette();
+    expect(screen.getByTestId('composer-palette-search')).toHaveAttribute(
+      'placeholder',
+      'com_ui_composer_palette_search',
+    );
+    unmount();
+    renderPalette({ entries: ENTRIES.filter((item) => item.section === 'tool') });
+    const input = screen.getByTestId('composer-palette-search');
+    expect(input).toHaveAttribute('placeholder', 'com_ui_search');
+    expect(input).toHaveAttribute('aria-label', 'com_ui_search');
+  });
+
   describe('show all', () => {
     const many = (section: 'skill' | 'mcp', count: number) =>
       Array.from({ length: count }, (_, i) =>
