@@ -1,3 +1,4 @@
+import './csp';
 import './polyfills/storage';
 import './polyfills/regeneratorRuntime';
 import { createRoot } from 'react-dom/client';

@@ -1,12 +1,20 @@
-import { useRef } from 'react';
+import { useRef, useContext } from 'react';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, dataService, EModelEndpoint, PermissionBits } from 'librechat-data-provider';
+import {
+  QueryKeys,
+  dataService,
+  Permissions,
+  EModelEndpoint,
+  PermissionBits,
+  PermissionTypes,
+} from 'librechat-data-provider';
 import type {
   QueryObserverResult,
   UseQueryOptions,
   UseInfiniteQueryOptions,
 } from '@tanstack/react-query';
 import type t from 'librechat-data-provider';
+import { AuthContext } from '~/hooks/AuthContext';
 import { retryTransientQuery } from '../retry';
 import { isEphemeralAgent } from '~/common';
 
@@ -96,6 +104,33 @@ export const useAvailableAgentToolsQuery = (): QueryObserverResult<t.TPlugin[]> 
  * pagination internally and resolves with every page concatenated.
  * Cache key shape matches `allAgentViewAndEditQueryKeys` in `./mutations.ts`.
  */
+export type AgentAccess = 'pending' | 'allowed' | 'denied';
+
+/**
+ * Whether the user's role grants `AGENTS:USE`, without which the agent routes answer 403.
+ * `pending` until the role loads. A role that cannot load, a user without one, or no auth
+ * context at all counts as `allowed`, the behaviour before this check, so nothing waits
+ * forever and the server stays the judge.
+ */
+export function useAgentAccess(): AgentAccess {
+  const auth = useContext(AuthContext);
+  const role = auth?.user?.role ?? '';
+  /** Observes AuthContext's own role query, to tell a failed load from one still running. */
+  const { isError: roleFailed } = useQuery<t.TRole>(
+    [QueryKeys.roles, role],
+    () => dataService.getRole(role),
+    { enabled: false },
+  );
+  if (auth == null || (auth.user != null && role === '') || roleFailed) {
+    return 'allowed';
+  }
+  const permissions = auth.roles?.[role]?.permissions;
+  if (permissions == null) {
+    return 'pending';
+  }
+  return permissions[PermissionTypes.AGENTS]?.[Permissions.USE] === true ? 'allowed' : 'denied';
+}
+
 export const useListAgentsQuery = <TData = t.AgentListResponse>(
   params: t.AgentListParams = defaultAgentParams,
   config?: UseQueryOptions<t.AgentListResponse, unknown, TData>,
@@ -108,7 +143,9 @@ export const useListAgentsQuery = <TData = t.AgentListResponse>(
     { enabled: false },
   );
 
-  const enabled = !!endpointsConfig?.[EModelEndpoint.agents];
+  const agentAccess = useAgentAccess();
+  // const enabled = !!endpointsConfig?.[EModelEndpoint.agents];
+  const enabled = !!endpointsConfig?.[EModelEndpoint.agents] && agentAccess === 'allowed';
   return useQuery<t.AgentListResponse, unknown, TData>(
     [QueryKeys.agents, params],
     () => fetchAllAgentPages(params),

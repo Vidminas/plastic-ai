@@ -1,13 +1,19 @@
 import { useMemo } from 'react';
-import { normalizeServerName } from 'librechat-data-provider';
+import { Permissions, PermissionTypes, normalizeServerName } from 'librechat-data-provider';
 import { useCatalogReady } from '../useCatalogWarmup';
 import { useMCPServersQuery } from '~/data-provider';
+import useHasAccess from '../Roles/useHasAccess';
 
 /** These observers mount from rendered messages, so they must not pull the
  * server catalog onto the first-render path ahead of the warmup schedule. */
 export function useMCPIconMap(): Map<string, string> {
   const mcpServersReady = useCatalogReady('mcpServers');
-  const { data: servers } = useMCPServersQuery({ enabled: mcpServersReady });
+  // const { data: servers } = useMCPServersQuery({ enabled: mcpServersReady });
+  const canUseMcp = useHasAccess({
+    permissionType: PermissionTypes.MCP_SERVERS,
+    permission: Permissions.USE,
+  });
+  const { data: servers } = useMCPServersQuery({ enabled: canUseMcp && mcpServersReady });
 
   return useMemo(() => {
     const map = new Map<string, string>();
@@ -31,6 +37,11 @@ export function useMCPIconMap(): Map<string, string> {
  */
 export function useMCPServerNames(): string[] {
   const mcpServersReady = useCatalogReady('mcpServers');
-  const { data: servers } = useMCPServersQuery({ enabled: mcpServersReady });
+  // const { data: servers } = useMCPServersQuery({ enabled: mcpServersReady });
+  const canUseMcp = useHasAccess({
+    permissionType: PermissionTypes.MCP_SERVERS,
+    permission: Permissions.USE,
+  });
+  const { data: servers } = useMCPServersQuery({ enabled: canUseMcp && mcpServersReady });
   return useMemo(() => (servers ? Object.keys(servers).map(normalizeServerName) : []), [servers]);
 }

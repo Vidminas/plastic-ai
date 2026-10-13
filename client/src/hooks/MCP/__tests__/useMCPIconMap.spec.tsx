@@ -8,9 +8,16 @@ jest.mock('~/data-provider', () => ({
   useMCPServersQuery: (config: unknown) => mockUseMCPServersQuery(config),
 }));
 
+let mockCanUseMcp = true;
+jest.mock('../../Roles/useHasAccess', () => ({
+  __esModule: true,
+  default: () => mockCanUseMcp,
+}));
+
 describe('useMCPIconMap', () => {
   beforeEach(() => {
     resetCatalogWarmup();
+    mockCanUseMcp = true;
     mockUseMCPServersQuery.mockReturnValue({ data: undefined });
     mockUseMCPServersQuery.mockClear();
   });
@@ -36,5 +43,22 @@ describe('useMCPIconMap', () => {
     });
 
     expect(mockUseMCPServersQuery).toHaveBeenLastCalledWith({ enabled: true });
+  });
+
+  /** The servers route answers 403 without `MCP_SERVERS:USE`; these hooks mount with any
+   *  rendered tool call. */
+  it('keeps the servers query disabled without MCP access', () => {
+    mockCanUseMcp = false;
+    renderHook(() => {
+      useMCPIconMap();
+      useMCPServerNames();
+    });
+
+    act(() => {
+      activateCatalog('mcpServers');
+    });
+
+    expect(mockUseMCPServersQuery).toHaveBeenLastCalledWith({ enabled: false });
+    expect(mockUseMCPServersQuery).not.toHaveBeenCalledWith({ enabled: true });
   });
 });

@@ -146,6 +146,15 @@ describe('ExpandedPanel', () => {
     localStorage.clear();
   });
 
+  /** `onCollapse` takes an optional after-slide callback, so the click event must not
+   *  arrive in its place. */
+  it('collapses from the toggle without passing the click event on', () => {
+    const { onCollapse } = renderPanel();
+    fireEvent.click(screen.getByTestId('close-sidebar-button'));
+    expect(onCollapse).toHaveBeenCalledTimes(1);
+    expect(onCollapse).toHaveBeenCalledWith();
+  });
+
   describe('NavIconButton collapse toggle', () => {
     it('collapses sidebar when clicking the active icon while expanded', () => {
       const { onCollapse } = renderPanel({ expanded: true });

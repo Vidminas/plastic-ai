@@ -165,7 +165,9 @@ function ExpandedPanel({
             aria-expanded={expanded}
             aria-keyshortcuts={toggleSidebarAriaKey}
             className="h-9 w-9 rounded-lg"
-            onClick={toggleClick}
+            // onClick={toggleClick}
+            /** `onCollapse` takes an optional after-slide callback; keep the click event out. */
+            onClick={() => toggleClick?.()}
           >
             <Sidebar aria-hidden="true" className="text-text-primary h-5 w-5" />
           </Button>
