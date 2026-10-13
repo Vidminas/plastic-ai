@@ -242,6 +242,12 @@ export default defineConfig(({ command }) => ({
             {
               name(id: string) {
                 const normalizedId = id.replace(/\\/g, '/');
+                /** Zod reads its `jitless` setting when a schema is built, and the MCP SDK builds
+                 *  schemas as its chunk loads. A chunk's imports run before its own code, so the
+                 *  setting rides in Zod's chunk, where module order puts it ahead of them. */
+                if (normalizedId.endsWith('/client/src/csp.ts')) {
+                  return 'validation';
+                }
                 if (normalizedId.includes('node_modules')) {
                   if (normalizedId.includes('/node_modules/regenerator-runtime/')) {
                     return 'polyfills';
