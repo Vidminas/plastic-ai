@@ -17,6 +17,11 @@ export const UI_ACTIONS = [
   'file.download',
   'question.answer',
   'conversation.new',
+  'agency.goal_set',
+  'agency.goal_skipped',
+  'agency.goal_updated',
+  'agency.intentions_updated',
+  'agency.recap_viewed',
 ] as const;
 
 export type UiAction = (typeof UI_ACTIONS)[number];

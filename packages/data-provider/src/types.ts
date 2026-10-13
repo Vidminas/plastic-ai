@@ -187,6 +187,8 @@ export type TPayload = Partial<TMessage> &
      * server may create only if this observed predecessor is still current or
      * the conversation is still idle after its cleanup. */
     expectedPredecessorCreatedAt?: number;
+    /** A new conversation's goal (`agency.conversationGoal`), sent with its first message. */
+    goal?: string;
   };
 
 export type TEditedContent =
@@ -260,6 +262,8 @@ export type TSubmission = {
   /** Client-only carry-through for a receipt-bound queued recovery. */
   recoverySteerId?: string;
   expectedPredecessorCreatedAt?: number;
+  /** A new conversation's goal, sent with its first message. */
+  goal?: string;
   /** Opaque client-only queue restoration metadata; intentionally omitted by
    * `createPayload`. */
   queuedMessageOrigin?: unknown;

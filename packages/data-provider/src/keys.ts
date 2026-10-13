@@ -74,6 +74,10 @@ export enum QueryKeys {
   banner = 'banner',
   /* Memories */
   memories = 'memories',
+  /* Learner agency */
+  agencyIntentions = 'agencyIntentions',
+  agencyGoal = 'agencyGoal',
+  agencyRecap = 'agencyRecap',
   principalSearch = 'principalSearch',
   accessRoles = 'accessRoles',
   resourcePermissions = 'resourcePermissions',
@@ -168,6 +172,8 @@ export enum MutationKeys {
   deletePasskey = 'deletePasskey',
   passkeyLogin = 'passkeyLogin',
   updateMemoryPreferences = 'updateMemoryPreferences',
+  updateAgencyIntentions = 'updateAgencyIntentions',
+  updateAgencyGoal = 'updateAgencyGoal',
   createProject = 'createProject',
   updateProject = 'updateProject',
   deleteProject = 'deleteProject',

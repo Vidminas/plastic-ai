@@ -6,6 +6,13 @@ import type {
   TTraceRecordParams,
   TTraceRecordDetail,
 } from './types/traces';
+import type {
+  TAgencyRecap,
+  TConversationGoal,
+  TAgencyIntentions,
+  TClientAgencyEvent,
+  TAgencyIntentionsInput,
+} from './agency';
 import type { TInsightsAccessResponse, TInsightsParams, TInsightsResponse } from './types/insights';
 import type { ScheduleMCPConsentView, ConfirmScheduleMCPConsent } from './types/scheduleConsent';
 import type { TFileConfig } from './file-config';
@@ -1794,6 +1801,38 @@ export const createMemory = (data: {
   agentId?: string;
 }): Promise<{ created: boolean; memory: q.TUserMemory }> => {
   return request.post(endpoints.memories(), data);
+};
+
+/* Learner agency */
+export const getAgencyIntentions = (): Promise<{ intentions: TAgencyIntentions | null }> => {
+  return request.get(endpoints.agencyIntentions());
+};
+
+export const updateAgencyIntentions = (
+  intentions: TAgencyIntentionsInput,
+): Promise<{ intentions: TAgencyIntentions }> => {
+  return request.put(endpoints.agencyIntentions(), intentions);
+};
+
+export const getConversationGoal = (
+  conversationId: string,
+): Promise<{ goal: TConversationGoal | null }> => {
+  return request.get(endpoints.agencyGoal(conversationId));
+};
+
+export const updateConversationGoal = (
+  conversationId: string,
+  text: string,
+): Promise<{ goal: TConversationGoal }> => {
+  return request.put(endpoints.agencyGoal(conversationId), { text });
+};
+
+export const recordAgencyEvent = (event: TClientAgencyEvent): Promise<void> => {
+  return request.post(endpoints.agencyEvents(), event);
+};
+
+export const getAgencyRecap = (conversationId?: string): Promise<TAgencyRecap> => {
+  return request.get(endpoints.agencyRecap(conversationId));
 };
 
 export function searchPrincipals(

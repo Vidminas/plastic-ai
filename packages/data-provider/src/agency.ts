@@ -21,7 +21,7 @@ const agencyTextSchema = z.string().trim().max(AGENCY_TEXT_MAX);
  * learning. Every switch defaults to off, so without the block nothing changes.
  */
 export const agencySchema = z.object({
-  /** A settings page for long-term goals, intended use, commitments and AE-AI factor ratings. */
+  /** A sidebar dialog for long-term goals, intended use, commitments and AE-AI factor ratings. */
   intentions: z.boolean().default(false),
   /** A skippable goal card on new conversations; the goal goes into the model's context. */
   conversationGoal: z.boolean().default(false),

@@ -7,6 +7,12 @@ const mockParams = jest.fn();
 const mockConversation = jest.fn();
 const mockChatFormProps = jest.fn();
 
+jest.mock('~/components/Agency/Goal', () => ({
+  GoalCard: () => null,
+  GoalBanner: () => null,
+  useGoalCardAsking: () => false,
+}));
+
 jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
   useParams: () => mockParams(),

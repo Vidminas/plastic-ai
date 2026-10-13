@@ -64,6 +64,7 @@ FROM hyperdx.otel_traces
 WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'file.%'
    OR SpanName LIKE 'safeguarding.%'
+   OR SpanName LIKE 'agency.%'
    OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
 
 -- What the collector's tables still hold (their last 30 days), including any
@@ -74,12 +75,14 @@ FROM hyperdx.otel_traces
 WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'file.%'
    OR SpanName LIKE 'safeguarding.%'
+   OR SpanName LIKE 'agency.%'
    OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
 
--- Named UI actions (client/src/lib/rum/actions.ts), page views and safeguarding
--- detections, from the store above. client_build is the browser build the
--- session ran. A detection names its filters (type:name[:confidence]) and the
--- participant's study ID (Cognito username), never the content.
+-- Named UI actions (client/src/lib/rum/actions.ts), the agency features' among
+-- them, page views and safeguarding detections, from the store above.
+-- client_build is the browser build the session ran. A detection names its
+-- filters (type:name[:confidence]) and the participant's study ID (Cognito
+-- username), never the content.
 CREATE VIEW analytics.ui_events
 DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT

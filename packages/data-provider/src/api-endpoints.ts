@@ -636,6 +636,15 @@ export const memoryById = (id: string, agentId?: string) =>
   `${memories()}/id/${encodeURIComponent(id)}${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ''}`;
 export const memoryPreferences = () => `${memories()}/preferences`;
 
+/* Learner agency */
+export const agency = () => `${BASE_URL}/api/agency`;
+export const agencyIntentions = () => `${agency()}/intentions`;
+export const agencyGoal = (conversationId: string) =>
+  `${agency()}/conversations/${encodeURIComponent(conversationId)}/goal`;
+export const agencyEvents = () => `${agency()}/events`;
+export const agencyRecap = (conversationId?: string) =>
+  `${agency()}/recap${conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : ''}`;
+
 export const searchPrincipals = (params: q.PrincipalSearchParams) => {
   const { q: query, limit, types } = params;
   let url = `${BASE_URL}/api/permissions/search-principals?q=${encodeURIComponent(query)}`;

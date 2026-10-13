@@ -64,6 +64,7 @@ import { revealedQueuedTurnFamily } from '~/store/steer';
 import store, { useGetEphemeralAgent } from '~/store';
 import { startupConfigKey } from '~/data-provider';
 import useUserKey from '~/hooks/Input/useUserKey';
+import { pendingGoalAtom } from '~/store/agency';
 import { trackAction } from '~/lib/rum/actions';
 import { useAuthContext } from '~/hooks';
 
@@ -618,6 +619,11 @@ export default function useChatFunctions({
       currentMessages,
     });
 
+    /** The goal card's goal goes with a new conversation's first message only. */
+    const goal =
+      conversationId == Constants.NEW_CONVO && !regenerateShaped
+        ? (jotaiStore.get(pendingGoalAtom) ?? undefined)
+        : undefined;
     if (conversationId == Constants.NEW_CONVO) {
       parentMessageId = Constants.NO_PARENT;
       currentMessages = [];
@@ -906,7 +912,11 @@ export default function useChatFunctions({
       recoverySteerId: overrideRecoverySteerId,
       expectedPredecessorCreatedAt: overrideExpectedPredecessorCreatedAt,
       queuedMessageOrigin: overrideQueuedMessageOrigin,
+      ...(goal ? { goal } : {}),
     };
+    if (goal) {
+      jotaiStore.set(pendingGoalAtom, null);
+    }
 
     /** Bind before publishing the optimistic tail, not after the first provider
      * event: a waiting request already owns a turn even when no usage exists. */

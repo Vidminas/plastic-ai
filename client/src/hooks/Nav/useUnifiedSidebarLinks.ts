@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
+import { useSetAtom } from 'jotai';
 import { useRecoilValue } from 'recoil';
-import { BarChart3, MessagesSquare } from 'lucide-react';
+import { Compass, BarChart3, MessagesSquare } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useUserKeyQuery } from 'librechat-data-provider/react-query';
 import { getConfigDefaults, getEndpointField } from 'librechat-data-provider';
@@ -9,6 +10,7 @@ import type { NavLink } from '~/common';
 import { useGetEndpointsQuery, useGetStartupConfig, useInsightsAccessQuery } from '~/data-provider';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
 import useSideNavLinks from '~/hooks/Nav/useSideNavLinks';
+import { intentionsDialogAtom } from '~/store/agency';
 import { useAuthContext } from '~/hooks';
 import store from '~/store';
 
@@ -106,5 +108,23 @@ export default function useUnifiedSidebarLinks() {
     sideNavLinks,
   ]);
 
-  return links;
+  /** Long-term intentions (`agency.intentions`) open in a dialog over whatever page is showing. */
+  const intentionsEnabled = startupConfig?.agency?.intentions === true;
+  const openIntentions = useSetAtom(intentionsDialogAtom);
+  const withIntentions = useMemo(() => {
+    if (!intentionsEnabled) {
+      return links;
+    }
+    const intentionsLink: NavLink = {
+      title: 'com_agency_intentions_navigation',
+      label: '',
+      icon: Compass,
+      id: 'agency-intentions',
+      onClick: () => openIntentions(true),
+    };
+    return [...links, intentionsLink];
+  }, [intentionsEnabled, links, openIntentions]);
+
+  // return links;
+  return withIntentions;
 }

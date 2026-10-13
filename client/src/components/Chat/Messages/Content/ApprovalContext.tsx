@@ -19,6 +19,7 @@ import {
 } from '~/data-provider';
 import { ASK_USER_DECLINED_ANSWER, resolveAskUserQuestionPart } from '~/utils/approval';
 import { pendingApprovalActionFamily } from '~/components/Chat/approval/state';
+import { holdForGoalChange } from '~/components/Agency/goalCheck';
 import { askSubmitStatusAtom } from '~/components/Chat/ask/state';
 import { ChatContext } from '~/Providers/ChatContext';
 import { useGetEphemeralAgent } from '~/store/agents';
@@ -515,12 +516,22 @@ export function useResumeSubmit() {
     (
       actionId: string,
       resolution: string | Record<string, string>,
-      opts?: { onSuccess?: () => void },
+      opts?: { onSuccess?: () => void; goalConfirmed?: boolean },
     ) => {
       const fields = buildResumeFields();
       const isBatch = typeof resolution !== 'string';
       const hasAnswer = isBatch ? Object.keys(resolution).length > 0 : resolution.length > 0;
       if (!fields || !hasAnswer) {
+        return;
+      }
+      /** "My goal has changed" waits, with the run paused, until the new goal is saved. */
+      if (
+        isBatch &&
+        opts?.goalConfirmed !== true &&
+        holdForGoalChange(jotaiStore, resolution, () =>
+          submitAskAnswerRef.current(actionId, resolution, { ...opts, goalConfirmed: true }),
+        )
+      ) {
         return;
       }
       if (submittingAskActionIdsRef.current.has(actionId)) {
@@ -586,8 +597,11 @@ export function useResumeSubmit() {
         },
       );
     },
-    [askMutation, buildResumeFields, setAskStatus, chatContext],
+    [askMutation, buildResumeFields, setAskStatus, chatContext, jotaiStore],
   );
+  /** A held goal-check answer is sent later, by the latest submit. */
+  const submitAskAnswerRef = useRef(submitAskAnswer);
+  submitAskAnswerRef.current = submitAskAnswer;
 
   return { submitToolApproval, submitAskAnswer };
 }

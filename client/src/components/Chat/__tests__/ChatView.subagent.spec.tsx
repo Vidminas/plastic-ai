@@ -4,6 +4,12 @@ import ChatView from '../ChatView';
 
 let mockConversation: Record<string, unknown> | null;
 
+jest.mock('~/components/Agency/Goal', () => ({
+  GoalCard: () => null,
+  GoalBanner: () => null,
+  useGoalCardAsking: () => false,
+}));
+
 jest.mock('react-router-dom', () => ({
   useParams: () => ({ conversationId: 'child-thread' }),
 }));

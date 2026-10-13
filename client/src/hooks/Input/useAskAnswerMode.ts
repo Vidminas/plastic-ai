@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import {
   collapsedAskActionsAtom,
   askAnswerSelectionAtom,
@@ -20,6 +20,7 @@ import {
 import { getAskAnswerDraftId, morphTransition, setDraft } from '~/utils';
 import { useGetMessagesByConvoId } from '~/data-provider';
 import { useOptionalChatFormContext } from '~/Providers';
+import { heldGoalCheckAtom } from '~/store/agency';
 
 /**
  * First-class "answer mode" for a live `ask_user_question` pause. Clicking an
@@ -56,6 +57,8 @@ export default function useAskAnswerMode(conversationId?: string | null) {
   const [checked, setChecked] = useAtom(askAnswerCheckedAtom);
   const [answerDrafts, setAnswerDrafts] = useAtom(askAnswerTextAtom);
   const [releasedComposerText, setReleasedComposerText] = useAtom(releasedComposerTextAtom);
+  /** A goal check answered "my goal has changed" waits on the goal editor above the composer. */
+  const heldForGoal = useAtomValue(heldGoalCheckAtom) != null;
   const saveDrafts = useAskAnswerHost();
   const { submitAskAnswer } = useResumeSubmit();
   /** Jotai-backed so the lock/status works from the composer, which renders
@@ -115,9 +118,11 @@ export default function useAskAnswerMode(conversationId?: string | null) {
   /**
    * Answer mode: the popover is up AND the composer is the free-form answer
    * box. The two are deliberately the same condition because the composer's answer
-   * role is only discoverable while the popover explains it.
+   * role is only discoverable while the popover explains it. It steps aside while a goal-check
+   * answer is held, so the goal editor it would cover can be used; cancelling the edit brings
+   * the question back.
    */
-  const active = answerable && !collapsed;
+  const active = answerable && !collapsed && !heldForGoal;
   const popoverVisible = active;
   const batchMode = (liveAsk?.questions?.length ?? 0) > 0;
   const composerAnswers = active && !batchMode;
