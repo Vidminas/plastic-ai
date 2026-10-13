@@ -42,6 +42,7 @@ const {
   withToolCallPreviews,
   maskUserText,
   getGuardrailTextMasker,
+  requireForkingEnabled,
 } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys, EModelEndpoint } = require('librechat-data-provider');
@@ -795,37 +796,45 @@ router.post(
  * @param {express.Response<TForkConvoResponse>} res - Express response object.
  * @returns {Promise<void>} - The response after forking the conversation.
  */
-router.post('/fork', forkIpLimiter, forkUserLimiter, configMiddleware, async (req, res) => {
-  try {
-    /** @type {TForkConvoRequest} */
-    const { conversationId, messageId, option, splitAtTarget, latestMessageId } = req.body;
-    const result = await forkConversation({
-      requestUserId: req.user.id,
-      originalConvoId: conversationId,
-      targetMessageId: messageId,
-      latestMessageId,
-      records: true,
-      splitAtTarget,
-      option,
-      interfaceConfig: req.config?.interfaceConfig,
-      filters: req.config?.filters,
-      ...(req.config?.messageFilter?.pii == null
-        ? {}
-        : { legacyPii: req.config.messageFilter.pii }),
-    });
+// router.post('/fork', forkIpLimiter, forkUserLimiter, configMiddleware, async (req, res) => {
+router.post(
+  '/fork',
+  forkIpLimiter,
+  forkUserLimiter,
+  configMiddleware,
+  requireForkingEnabled,
+  async (req, res) => {
+    try {
+      /** @type {TForkConvoRequest} */
+      const { conversationId, messageId, option, splitAtTarget, latestMessageId } = req.body;
+      const result = await forkConversation({
+        requestUserId: req.user.id,
+        originalConvoId: conversationId,
+        targetMessageId: messageId,
+        latestMessageId,
+        records: true,
+        splitAtTarget,
+        option,
+        interfaceConfig: req.config?.interfaceConfig,
+        filters: req.config?.filters,
+        ...(req.config?.messageFilter?.pii == null
+          ? {}
+          : { legacyPii: req.config.messageFilter.pii }),
+      });
 
-    res.json(withToolCallPreviews(req, result));
-  } catch (error) {
-    if (isContentFilterError(error)) {
-      return res.status(error.statusCode).json(error.body);
+      res.json(withToolCallPreviews(req, result));
+    } catch (error) {
+      if (isContentFilterError(error)) {
+        return res.status(error.statusCode).json(error.body);
+      }
+      if (isConversationImportError(error)) {
+        return res.status(error.statusCode).json(error.body);
+      }
+      logger.error('Error forking conversation:', error);
+      res.status(500).send('Error forking conversation');
     }
-    if (isConversationImportError(error)) {
-      return res.status(error.statusCode).json(error.body);
-    }
-    logger.error('Error forking conversation:', error);
-    res.status(500).send('Error forking conversation');
-  }
-});
+  },
+);
 
 router.post(
   '/duplicate',

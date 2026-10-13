@@ -28,6 +28,7 @@ const ctx: SettingsContextValue = {
   replyTabBadgeAllowed: true,
   replyNotificationsAllowed: true,
   replyNotificationSoundAllowed: true,
+  forkingEnabled: true,
 };
 
 function setup(extra: Partial<SettingsContextValue> = {}, query = '') {

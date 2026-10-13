@@ -83,6 +83,8 @@ module.exports = {
     /** No `piiMasking` in these configs, so text passes through unchanged. */
     maskUserText: jest.fn(async (_config, text) => text),
     getGuardrailTextMasker: jest.fn(() => undefined),
+    requireForkingEnabled: jest.requireActual('../../../../packages/api/src/middleware/forking.ts')
+      .requireForkingEnabled,
     createGeneratedTitleHandler: jest.fn(() => jest.fn()),
     createRenameConversationHandler: jest.fn((deps) => {
       renameHandlerInputs.push(deps);

@@ -61,6 +61,8 @@ export interface SettingsContextValue {
   replyTabBadgeAllowed: boolean;
   replyNotificationsAllowed: boolean;
   replyNotificationSoundAllowed: boolean;
+  /** Whether the deployment offers conversation forking (`interface.forking`). */
+  forkingEnabled: boolean;
 }
 
 export interface SettingEntry {

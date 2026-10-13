@@ -2713,6 +2713,8 @@ export const interfaceSchema = z
      *  the docked pane. */
     artifactUndocking: z.boolean().optional(),
     feedback: z.boolean().optional(),
+    /** Forking a conversation from a message into a new one. Enabled by default. */
+    forking: z.boolean().optional(),
     currency: z
       .object({
         code: z.string(),
@@ -2936,6 +2938,7 @@ export const interfaceSchema = z
     contextCost: false,
     artifactUndocking: true,
     feedback: true,
+    forking: true,
     peoplePicker: {
       users: true,
       groups: true,

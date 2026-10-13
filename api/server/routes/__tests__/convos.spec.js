@@ -107,6 +107,9 @@ describe('Convos Routes', () => {
           },
         },
       };
+      if (req.get('x-test-forking') === 'off') {
+        req.config.interfaceConfig = { forking: false };
+      }
       next();
     });
 
@@ -337,6 +340,17 @@ describe('Convos Routes', () => {
 
   describe('POST /fork', () => {
     const { forkConversation } = require('~/server/utils/import/fork');
+
+    it('refuses the fork when the interface disables forking', async () => {
+      const response = await request(app)
+        .post('/api/convos/fork')
+        .set('x-test-forking', 'off')
+        .send({ conversationId: 'source-convo', messageId: 'source-message' });
+
+      expect(response.status).toBe(403);
+      expect(response.body).toEqual({ error: 'Forking is disabled' });
+      expect(forkConversation).not.toHaveBeenCalled();
+    });
 
     it('passes source-aware filters into the fork preflight', async () => {
       forkConversation.mockResolvedValue({ conversation: { conversationId: 'forked-convo' } });

@@ -51,6 +51,7 @@ interface:
     public: false
   bookmarks: false
   multiConvo: false
+  forking: false
   # Skill imports take .zip/.skill archives and files of any type, which the
   # upload policy does not allow, so users cannot create skills.
   skills:

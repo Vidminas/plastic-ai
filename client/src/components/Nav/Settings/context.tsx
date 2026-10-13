@@ -43,6 +43,7 @@ export function useSettingsContext(): SettingsContextValue {
   const twoFactorEnabled = user?.twoFactorEnabled === true;
   const allowAccountDeletion = startupConfig?.allowAccountDeletion !== false;
   const aboutEnabled = startupConfig?.interface?.buildInfo !== false;
+  const forkingEnabled = startupConfig?.interface?.forking !== false;
   /* Offered only once the deployment has answered, matching the capability hook the alerts
      read: before then a toggle could store a preference, or raise the browser's permission
      prompt, for a capability the operator turns off. */
@@ -85,6 +86,7 @@ export function useSettingsContext(): SettingsContextValue {
       replyTabBadgeAllowed,
       replyNotificationsAllowed,
       replyNotificationSoundAllowed,
+      forkingEnabled,
     }),
     [
       balanceEnabled,
@@ -109,6 +111,7 @@ export function useSettingsContext(): SettingsContextValue {
       replyTabBadgeAllowed,
       replyNotificationsAllowed,
       replyNotificationSoundAllowed,
+      forkingEnabled,
     ],
   );
 }

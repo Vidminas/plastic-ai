@@ -512,6 +512,7 @@ export const registry: SettingEntry[] = [
     section: 'conversations',
     labelKey: 'com_ui_fork_default',
     keywords: ['fork', 'branch', 'split'],
+    show: (ctx) => ctx.forkingEnabled,
     Component: ForkSettings,
   },
   // Chat · Prompts

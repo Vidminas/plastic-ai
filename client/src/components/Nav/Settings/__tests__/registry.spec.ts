@@ -30,6 +30,7 @@ const settingsContext: SettingsContextValue = {
   replyTabBadgeAllowed: true,
   replyNotificationsAllowed: true,
   replyNotificationSoundAllowed: true,
+  forkingEnabled: true,
 };
 
 const policyProviders = ['local', 'ldap', null, undefined];
