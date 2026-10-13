@@ -36,6 +36,8 @@ import { createKeyMethods, type KeyMethods } from './key';
 import { createFileMethods } from './file';
 /* Memories */
 import { createMemoryMethods, type MemoryMethods } from './memory';
+/* Learner agency */
+import { createAgencyMethods, type AgencyMethods } from './agency';
 /* Tool Favorites */
 import {
   createToolFavoriteMethods,
@@ -261,6 +263,7 @@ export type AllMethods = ToolApprovalGrantStorage &
   FileMethods &
   StorageMethods &
   MemoryMethods &
+  AgencyMethods &
   ToolFavoriteMethods &
   AgentCategoryMethods &
   AgentApiKeyMethods &
@@ -500,6 +503,7 @@ export function createMethods(
     ...createFileMethods(mongoose),
     ...createStorageMethods(mongoose),
     ...createMemoryMethods(mongoose),
+    ...createAgencyMethods(mongoose),
     ...createToolFavoriteMethods(mongoose),
     ...createAgentCategoryMethods(mongoose),
     ...createAgentApiKeyMethods(mongoose),
@@ -564,6 +568,7 @@ export type {
   RoleMethods,
   KeyMethods,
   MemoryMethods,
+  AgencyMethods,
   FileMethods,
   StorageMethods,
   FileOwnerScope,

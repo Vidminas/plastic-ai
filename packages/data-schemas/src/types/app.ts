@@ -20,6 +20,7 @@ import type {
   FiltersConfig,
   TPiiMasking,
   TSafeguarding,
+  TAgencyConfig,
   TUploadScreening,
 } from 'librechat-data-provider';
 
@@ -85,6 +86,8 @@ export interface AppConfig {
   piiMasking?: TPiiMasking;
   /** Content filters, denied topics and word filters on prompts, uploads and responses */
   safeguarding?: TSafeguarding;
+  /** Learner-agency features: intentions, conversation goals, goal checks and the recap */
+  agency?: TAgencyConfig;
   /** Langfuse tracing configuration */
   langfuse?: TCustomConfig['langfuse'];
   /** Skill sync configuration */

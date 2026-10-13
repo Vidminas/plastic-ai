@@ -53,6 +53,7 @@ import { isCompactionSemanticIndexProjection } from '~/types/compaction';
 import { withoutMeiliIndexing } from '~/models/plugins/mongoMeili';
 import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
 import { isValidObjectIdString } from '~/utils/objectId';
+import { deleteAgencyConversationData } from './agency';
 import { decrementTagCounts } from './conversationTag';
 import logger from '~/config/winston';
 
@@ -4058,6 +4059,7 @@ export function createConversationMethods(
         acknowledged &&= result.acknowledged;
         deletedCount += result.deletedCount;
         await reconcileDeletedWave(wave, result.deletedCount);
+        await deleteAgencyConversationData(mongoose, user, waveIds);
         for (const conversation of wave) {
           seen.add(conversation.conversationId);
           deletedConversations.push(conversation);

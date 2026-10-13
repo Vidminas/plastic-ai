@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ZodError } from 'zod';
 import type { TEndpointsConfig, TModelsConfig, TConfig } from './types';
+import type { TAgencyConfig } from './agency';
 import {
   MAX_SUBAGENTS,
   MAX_SUBAGENTS_CEILING,
@@ -39,6 +40,7 @@ import {
   scheduledMCPResourceBindingSchema,
   scheduledMCPReadOnlyPolicySchema,
 } from './types/scheduleConsent';
+import { agencySchema } from './agency';
 
 export const AGENT_BACKGROUND_COMPLETION_RESULT_MAX_CHARS_DEFAULT = 24 * 1024;
 export const AGENT_BACKGROUND_COMPLETION_RESULT_MAX_CHARS_HARD_MAX = 64 * 1024;
@@ -3220,6 +3222,8 @@ export type TStartupConfig = {
   /** `safeguarding.signposting` (or `openingHours.support`): the services shown with blocked
    *  content when no crisis notice is configured. */
   safeguardingSupport?: TSupportService[];
+  /** `agency`: which learner-agency features are on. */
+  agency?: TAgencyConfig;
   /** Conversation-owned code-environment decision protocol supported by the API.
    * Clients must not emit selection-less decisions unless this is advertised. */
   codeEnvironmentDecisionVersion?: typeof CODE_ENVIRONMENT_DECISION_VERSION;
@@ -4487,6 +4491,7 @@ export const configSchema = z.object({
   uploadScreening: uploadScreeningSchema.optional(),
   piiMasking: piiMaskingSchema.optional(),
   safeguarding: safeguardingSchema.optional(),
+  agency: agencySchema.optional(),
   endpoints: z
     .object({
       allowedAddresses: allowedAddressesSchema,
