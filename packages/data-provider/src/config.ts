@@ -1531,6 +1531,11 @@ export const agentsEndpointSchema = baseEndpointSchema
         .min(0)
         .max(1_000_000)
         .default(DEFAULT_MAX_PROVIDER_ERROR_CHARS),
+      /**
+       * Log the model provider's error message (up to `maxProviderErrorChars`) with an upstream
+       * model error. It can echo submitted content, so with `piiMasking` it is masked first.
+       */
+      logProviderErrors: z.boolean().optional(),
       /** Maximum inactivity between provider response body chunks; 0 disables the idle timeout. */
       modelResponseBodyTimeoutMs: z
         .number()
@@ -2649,6 +2654,9 @@ export const interfaceSchema = z
       .optional(),
     termsOfService: termsOfServiceSchema.optional(),
     customWelcome: z.string().optional(),
+    /** Adds a note to the dialogs that delete conversations and files: deleting removes them
+     * from the app, but not from records kept outside it (interaction logs and traces). */
+    deletionLogNotice: z.boolean().optional(),
     mcpServers: mcpServersSchema.optional(),
     modelSelect: z.boolean().optional(),
     /** Set to false during a rolling upgrade, until every API replica supports title ownership and old title jobs drain. */
@@ -3722,18 +3730,106 @@ export const openingHoursSchema = z
 export type TOpeningHours = z.infer<typeof openingHoursSchema>;
 
 /**
- * Checks every upload before it is processed: the bytes must match the file type, and the
- * file is held in a quarantine bucket (`AWS_QUARANTINE_BUCKET_NAME`) until a malware scan
- * passes. Unset, uploads are processed as before.
+ * Bedrock Guardrails PII entity types an upload may be refused for: its universal types and
+ * the UK-specific ones. Its other country-specific types (US bank accounts, passports and
+ * SSNs; Canadian numbers) are left out, and so is ADDRESS, which it gives any place name ("a trip
+ * to Edinburgh, Scotland").
+ */
+export const UPLOAD_SCREENING_PII_ENTITIES = [
+  'AGE',
+  'AWS_ACCESS_KEY',
+  'AWS_SECRET_KEY',
+  'CREDIT_DEBIT_CARD_CVV',
+  'CREDIT_DEBIT_CARD_EXPIRY',
+  'CREDIT_DEBIT_CARD_NUMBER',
+  'DRIVER_ID',
+  'EMAIL',
+  'INTERNATIONAL_BANK_ACCOUNT_NUMBER',
+  'IP_ADDRESS',
+  'LICENSE_PLATE',
+  'MAC_ADDRESS',
+  'NAME',
+  'PASSWORD',
+  'PHONE',
+  'PIN',
+  'SWIFT_CODE',
+  'URL',
+  'USERNAME',
+  'VEHICLE_IDENTIFICATION_NUMBER',
+  'UK_NATIONAL_HEALTH_SERVICE_NUMBER',
+  'UK_NATIONAL_INSURANCE_NUMBER',
+  'UK_UNIQUE_TAXPAYER_REFERENCE_NUMBER',
+] as const;
+export type UploadScreeningPiiEntity = (typeof UPLOAD_SCREENING_PII_ENTITIES)[number];
+
+/**
+ * The default: every type above that identifies a person, account or secret. NAME, URL and
+ * AGE are left out because nearly every document contains them.
+ */
+export const DEFAULT_UPLOAD_SCREENING_PII_ENTITIES: UploadScreeningPiiEntity[] =
+  UPLOAD_SCREENING_PII_ENTITIES.filter((entity) => !['NAME', 'URL', 'AGE'].includes(entity));
+
+/** A Bedrock guardrail, by ID or ARN and version; `${ENV}` references are resolved. */
+export const guardrailReferenceSchema = z.object({
+  guardrailIdentifier: z.string(),
+  guardrailVersion: z.string(),
+});
+
+/**
+ * Checks every upload before it is processed: the bytes must match the file type, the file
+ * is held in a quarantine bucket (`AWS_QUARANTINE_BUCKET_NAME`) until a malware scan passes,
+ * and text, documents and images are refused when their text contains one of `pii.entities`.
+ * Unset, uploads are processed as before.
  */
 export const uploadScreeningSchema = z.object({
   /** `guardduty` waits for GuardDuty Malware Protection's tag on the quarantined object. */
   malware: z.enum(['guardduty', 'none']).default('guardduty'),
   /** How long to wait for the malware verdict before refusing the upload. */
   scanTimeoutSeconds: z.number().int().positive().max(600).default(60),
+  pii: z
+    .object({
+      /** `guardrail` screens extracted text with a Bedrock guardrail's ApplyGuardrail API. */
+      detector: z.enum(['guardrail', 'none']).default('guardrail'),
+      /**
+       * The guardrail to screen with. Unset, the one `piiMasking.guardrail` names. Only the
+       * PII types its sensitive information policy detects can refuse an upload.
+       */
+      guardrail: guardrailReferenceSchema.optional(),
+      /** Text longer than this is refused rather than screened. */
+      maxCharacters: z.number().int().positive().default(2_000_000),
+      /**
+       * `textract` reads the text in uploaded images with Amazon Textract so it can be
+       * screened too; `none` checks images for type and malware only.
+       */
+      images: z.enum(['textract', 'none']).default('textract'),
+      entities: z
+        .array(z.enum(UPLOAD_SCREENING_PII_ENTITIES))
+        .min(1)
+        .default(DEFAULT_UPLOAD_SCREENING_PII_ENTITIES),
+    })
+    .default({}),
 });
 
 export type TUploadScreening = z.infer<typeof uploadScreeningSchema>;
+
+/**
+ * Masks personal identifiers with a Bedrock guardrail's sensitive information filters, so the
+ * app neither stores them nor sends them to a model. Text a user writes is masked before it
+ * is saved: a message they send or edit (and its quoted excerpts), and a conversation title
+ * they set or give a duplicate. Before a model call, the text of every message in an agent
+ * run is masked again, for history stored before masking and for model responses, which are
+ * stored as written; so are a title's input and answers to the model's clarifying questions.
+ * The model and the user see `{EMAIL}`, `{PHONE}` and so on. Model responses are checked by
+ * the guardrail on the model calls (`endpoints.bedrock.guardrailConfig`), not this one. It
+ * masks every Langfuse trace too, and upload screening uses it unless
+ * `uploadScreening.pii.guardrail` names another. System prompts, tool results and files are
+ * not masked; screen files at upload. Unset, nothing is masked.
+ */
+export const piiMaskingSchema = z.object({
+  guardrail: guardrailReferenceSchema,
+});
+
+export type TPiiMasking = z.infer<typeof piiMaskingSchema>;
 
 /** Why `uploadScreening` refused an upload; the composer shows `com_error_files_<reason>`. */
 export const UPLOAD_REJECTION_REASONS = [
@@ -3741,6 +3837,9 @@ export const UPLOAD_REJECTION_REASONS = [
   'type_mismatch',
   'malware',
   'scan_unavailable',
+  'unreadable',
+  'too_long',
+  'identifiers',
 ] as const;
 export type UploadRejectionReason = (typeof UPLOAD_REJECTION_REASONS)[number];
 
@@ -3749,6 +3848,8 @@ export type TUploadRejection = {
   message: string;
   code: ErrorTypes.UPLOAD_REJECTED;
   reason: UploadRejectionReason;
+  /** Guardrail PII entity types, never the matched text. */
+  identifiers?: string[];
 };
 
 export function isUploadRejection(data: unknown): data is TUploadRejection {
@@ -4178,6 +4279,7 @@ export const configSchema = z.object({
   messageLimits: messageLimitsSchema.optional(),
   openingHours: openingHoursSchema.optional(),
   uploadScreening: uploadScreeningSchema.optional(),
+  piiMasking: piiMaskingSchema.optional(),
   endpoints: z
     .object({
       allowedAddresses: allowedAddressesSchema,

@@ -46,6 +46,64 @@ describe('terminal agent-run error logging', () => {
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain('InternalServerException');
   });
 
+  describe('logProviderErrors', () => {
+    const providerError = () =>
+      Object.assign(
+        new Error('400 ValidationException: Input text size (151 text units) for sam@example.com'),
+        { status: 400 },
+      );
+    const run = (options: Partial<Parameters<typeof createTerminalRunErrorObserver>[0]>) => {
+      const logger = { error: jest.fn() };
+      const observer = createTerminalRunErrorObserver({
+        logger,
+        source: '[Agent API]',
+        protectionEnabled: true,
+        ...options,
+      });
+      const error = providerError();
+      observer.modelCallback.handleLLMError(error);
+      observer.log(new Error('graph failed', { cause: error }));
+      return logger;
+    };
+    const settled = () => new Promise((resolve) => setImmediate(resolve));
+
+    it('keeps the provider message out of the log by default', () => {
+      const logger = run({});
+      expect(logger.error.mock.calls[0][1]).not.toHaveProperty('providerMessage');
+    });
+
+    it('logs the provider message as written without a masker', () => {
+      const logger = run({ logProviderErrors: true });
+      expect(logger.error.mock.calls[0][1]).toMatchObject({
+        errorCode: 'UPSTREAM_MODEL_ERROR',
+        status: 400,
+        providerMessage:
+          '400 ValidationException: Input text size (151 text units) for sam@example.com',
+      });
+    });
+
+    it('masks the provider message before logging it', async () => {
+      const maskText = jest.fn(async (text: string) => text.replace('sam@example.com', '{EMAIL}'));
+      const logger = run({ logProviderErrors: true, maskText });
+      expect(logger.error).not.toHaveBeenCalled();
+      await settled();
+      expect(logger.error.mock.calls[0][1]).toMatchObject({
+        providerMessage: '400 ValidationException: Input text size (151 text units) for {EMAIL}',
+      });
+      expect(JSON.stringify(logger.error.mock.calls)).not.toContain('sam@example.com');
+    });
+
+    it('withholds a provider message it could not mask, and still logs the error', async () => {
+      const maskText = jest.fn().mockRejectedValue(new Error('guardrail unavailable'));
+      const logger = run({ logProviderErrors: true, maskText });
+      await settled();
+      expect(logger.error.mock.calls[0][1]).toMatchObject({
+        errorCode: 'UPSTREAM_MODEL_ERROR',
+        providerMessage: '[withheld: could not be masked]',
+      });
+    });
+  });
+
   /** The rejection a gateway or privacy proxy answers with is only stated in its own message. */
   it('carries the provider explanation for an unclassified upstream failure', () => {
     const observer = createTerminalRunErrorObserver({

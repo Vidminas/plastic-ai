@@ -9,6 +9,11 @@ import store from '~/store';
 
 const mockApprovalMutate = jest.fn();
 const mockAskMutate = jest.fn();
+const mockTrackAction = jest.fn();
+
+jest.mock('~/lib/rum/actions', () => ({
+  trackAction: (...args: unknown[]) => mockTrackAction(...args),
+}));
 
 jest.mock('~/data-provider', () => ({
   useSubmitToolApprovalMutation: () => ({ mutate: mockApprovalMutate }),
@@ -267,5 +272,29 @@ describe('useResumeSubmit', () => {
       result.current.submitAskAnswer('ask-1', 'answer');
     });
     expect(mockAskMutate).toHaveBeenCalledTimes(2);
+  });
+
+  test('records an answered question by counts only, once the answer is accepted', () => {
+    const { result } = renderHook(() => useResumeSubmit(), { wrapper });
+
+    act(() => {
+      result.current.submitAskAnswer('ask-2', {
+        q1: 'My number is 07700 900123',
+        q2: 'The user chose not to answer this question.',
+      });
+    });
+    expect(mockTrackAction).not.toHaveBeenCalled();
+
+    const options = mockAskMutate.mock.calls[0][1] as { onSuccess: () => void };
+    act(() => options.onSuccess());
+
+    expect(mockTrackAction).toHaveBeenCalledWith('question.answer', {
+      conversationId: 'conversation-1',
+      endpoint: 'agents',
+      agentId: 'agent-1',
+      questions: 2,
+      declined: 1,
+    });
+    expect(JSON.stringify(mockTrackAction.mock.calls)).not.toContain('07700');
   });
 });

@@ -659,6 +659,37 @@ describe('BaseClient', () => {
   });
 
   describe('sendMessage', () => {
+    test('stores and sends the user message with its personal identifiers masked', async () => {
+      const { BedrockRuntimeClient } = require('@aws-sdk/client-bedrock-runtime');
+      const send = jest
+        .spyOn(BedrockRuntimeClient.prototype, 'send')
+        .mockImplementation(async (command) => {
+          const text = command.input.content[0].text.text;
+          return text.includes('@')
+            ? {
+                action: 'GUARDRAIL_INTERVENED',
+                outputs: [{ text: text.replace(/\S+@\S+\.\w+/g, '{EMAIL}') }],
+                assessments: [],
+              }
+            : { action: 'NONE', outputs: [], assessments: [] };
+        });
+      const piiMasking = { guardrail: { guardrailIdentifier: 'gr-base', guardrailVersion: '1' } };
+      const client = initializeFakeClient(
+        apiKey,
+        { ...options, req: { config: { piiMasking }, body: { quotes: ['from jo@example.com'] } } },
+        fakeMessages,
+      );
+      const save = jest.spyOn(client, 'saveMessageToDatabase').mockResolvedValue({});
+
+      await client.sendMessage('Write to sam@example.com');
+
+      const savedUser = save.mock.calls.map(([message]) => message).find((m) => m.isCreatedByUser);
+      expect(savedUser).toMatchObject({ text: 'Write to {EMAIL}', quotes: ['from {EMAIL}'] });
+      const [built] = client.buildMessages.mock.calls[0];
+      expect(JSON.stringify(built)).not.toContain('sam@example.com');
+      send.mockRestore();
+    });
+
     test('sendMessage should return a response message', async () => {
       const expectedResult = expect.objectContaining({
         sender: TestClient.sender,

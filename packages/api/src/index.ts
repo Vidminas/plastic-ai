@@ -113,6 +113,8 @@ export * from './tools';
 export * from './web';
 /* Langfuse */
 export * from './langfuse';
+/* Guardrails */
+export * from './guardrails';
 /* Traces */
 export * from './traces';
 /* Insights */

@@ -200,6 +200,9 @@ jest.mock('@librechat/agents', () => ({
 jest.mock('@librechat/api', () => ({
   checkApiMessageLength: (...args) =>
     jest.requireActual('@librechat/api').checkApiMessageLength(...args),
+  maskModelMessages: (...args) => jest.requireActual('@librechat/api').maskModelMessages(...args),
+  getGuardrailTextMasker: (...args) =>
+    jest.requireActual('@librechat/api').getGuardrailTextMasker(...args),
   getAgentErrorMetadata: (...args) =>
     jest.requireActual('@librechat/api').getAgentErrorMetadata(...args),
   getConversationWriteContext: (...args) =>

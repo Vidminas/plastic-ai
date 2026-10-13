@@ -34,6 +34,7 @@ import type {
   RegexLike,
   TUploadRejection,
   UploadRejectionReason,
+  UploadScreeningPiiEntity,
 } from 'librechat-data-provider';
 import type { QueryClient } from '@tanstack/react-query';
 import type { TranslationKeys } from '~/hooks';
@@ -1186,12 +1187,56 @@ const UPLOAD_REJECTION_KEYS: Record<UploadRejectionReason, TranslationKeys> = {
   type_mismatch: 'com_error_files_type_mismatch',
   malware: 'com_error_files_malware',
   scan_unavailable: 'com_error_files_scan_unavailable',
+  unreadable: 'com_error_files_unreadable',
+  too_long: 'com_error_files_too_long',
+  identifiers: 'com_error_files_identifiers',
 };
 
-/** The composer's message for an upload `uploadScreening` refused. */
+/** Labels for every guardrail PII type screening may report. */
+const IDENTIFIER_KEYS: Record<UploadScreeningPiiEntity, TranslationKeys> = {
+  AGE: 'com_error_files_identifier_age',
+  AWS_ACCESS_KEY: 'com_error_files_identifier_access_key',
+  AWS_SECRET_KEY: 'com_error_files_identifier_access_key',
+  CREDIT_DEBIT_CARD_CVV: 'com_error_files_identifier_card_cvv',
+  CREDIT_DEBIT_CARD_EXPIRY: 'com_error_files_identifier_card_expiry',
+  CREDIT_DEBIT_CARD_NUMBER: 'com_error_files_identifier_card',
+  DRIVER_ID: 'com_error_files_identifier_driver_id',
+  EMAIL: 'com_error_files_identifier_email',
+  INTERNATIONAL_BANK_ACCOUNT_NUMBER: 'com_error_files_identifier_bank',
+  IP_ADDRESS: 'com_error_files_identifier_ip',
+  LICENSE_PLATE: 'com_error_files_identifier_plate',
+  MAC_ADDRESS: 'com_error_files_identifier_mac',
+  NAME: 'com_error_files_identifier_name',
+  PASSWORD: 'com_error_files_identifier_password',
+  PHONE: 'com_error_files_identifier_phone',
+  PIN: 'com_error_files_identifier_pin',
+  SWIFT_CODE: 'com_error_files_identifier_swift',
+  URL: 'com_error_files_identifier_url',
+  USERNAME: 'com_error_files_identifier_username',
+  VEHICLE_IDENTIFICATION_NUMBER: 'com_error_files_identifier_vin',
+  UK_NATIONAL_HEALTH_SERVICE_NUMBER: 'com_error_files_identifier_nhs',
+  UK_NATIONAL_INSURANCE_NUMBER: 'com_error_files_identifier_nino',
+  UK_UNIQUE_TAXPAYER_REFERENCE_NUMBER: 'com_error_files_identifier_utr',
+};
+
+/** The composer's message for an upload `uploadScreening` refused, naming what was found. */
 export function localizeUploadRejection(
   rejection: TUploadRejection,
-  localize: (key: TranslationKeys) => string,
+  localize: (key: TranslationKeys, options?: Record<string, string>) => string,
 ): string {
-  return localize(UPLOAD_REJECTION_KEYS[rejection.reason]);
+  if (rejection.reason !== 'identifiers') {
+    return localize(UPLOAD_REJECTION_KEYS[rejection.reason]);
+  }
+  const labels = new Set(
+    (rejection.identifiers ?? []).map((id) =>
+      localize(
+        IDENTIFIER_KEYS[id as keyof typeof IDENTIFIER_KEYS] ?? 'com_error_files_identifier_other',
+      ),
+    ),
+  );
+  if (labels.size === 0) {
+    labels.add(localize('com_error_files_identifier_other'));
+  }
+  const list = new Intl.ListFormat(undefined, { type: 'conjunction' }).format([...labels]);
+  return localize('com_error_files_identifiers', { 0: list });
 }

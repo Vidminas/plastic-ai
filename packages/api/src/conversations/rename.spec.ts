@@ -12,6 +12,7 @@ function setup(
     current?: RenameRequest['resolvedConversation'];
     authenticated?: boolean;
     accessCacheHit?: boolean;
+    maskText?: (text: string) => Promise<string>;
   } = {},
 ) {
   const config: AppConfig = {
@@ -32,6 +33,7 @@ function setup(
       } as Awaited<ReturnType<ConversationMethods['saveConvo']>>),
     getActiveRunIds: jest.fn().mockResolvedValue([]),
     logger: { error: jest.fn() },
+    getMaskText: jest.fn(() => options.maskText),
   };
   const handler = createRenameConversationHandler(deps);
   const app = express();
@@ -159,6 +161,28 @@ describe('rename conversation', () => {
       expect.anything(),
     );
   });
+  it('masks personal identifiers in the title before saving it', async () => {
+    const maskText = jest.fn(async (text: string) => text.replace(/\S+@\S+\.\w+/g, '{EMAIL}'));
+    const { app, deps, config } = setup({ maskText });
+    await request(app)
+      .post('/rename')
+      .send({ arg: { ...arg, title: 'Notes for sam@example.com' } });
+    expect(deps.getMaskText).toHaveBeenCalledWith(config);
+    expect(deps.saveConvo).toHaveBeenCalledWith(
+      expect.anything(),
+      { ...arg, title: 'Notes for {EMAIL}' },
+      expect.anything(),
+    );
+  });
+
+  it('does not save the title when masking fails', async () => {
+    const maskText = jest.fn().mockRejectedValue(new Error('guardrail unavailable'));
+    const { app, deps } = setup({ maskText });
+    const response = await request(app).post('/rename').send({ arg });
+    expect(response.status).toBe(500);
+    expect(deps.saveConvo).not.toHaveBeenCalled();
+  });
+
   it('blocks protected title content without publishing or saving it', async () => {
     const { app, config, deps } = setup();
     config.filters = {

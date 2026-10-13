@@ -13,6 +13,7 @@ import {
   Table,
   Button,
   Spinner,
+  OGDialog,
   TableRow,
   TableBody,
   TableCell,
@@ -20,7 +21,10 @@ import {
   TrashIcon,
   FilterInput,
   TableHeader,
+  OGDialogTitle,
   useMediaQuery,
+  OGDialogHeader,
+  OGDialogContent,
 } from '@librechat/client';
 import type {
   ColumnDef,
@@ -30,6 +34,7 @@ import type {
 } from '@tanstack/react-table';
 import type { TFile } from 'librechat-data-provider';
 import { ColumnVisibilityDropdown } from './ColumnVisibilityDropdown';
+import DeletionNotice from '~/components/ui/DeletionNotice';
 import { useDeleteFilesFromTable } from '~/hooks/Files';
 import { useLocalize, TranslationKeys } from '~/hooks';
 import { cn } from '~/utils';
@@ -60,6 +65,8 @@ type Style = {
 export default function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData, TValue>) {
   const localize = useLocalize();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const setFiles = useSetRecoilState(store.filesByIndex(0));
   const { deleteFiles } = useDeleteFilesFromTable(() => setIsDeleting(false));
 
@@ -122,15 +129,9 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2 py-2 sm:gap-4 sm:py-4">
         <Button
+          ref={deleteButtonRef}
           variant="outline"
-          onClick={() => {
-            setIsDeleting(true);
-            const filesToDelete = table
-              .getFilteredSelectedRowModel()
-              .rows.map((row) => row.original);
-            deleteFiles({ files: filesToDelete as TFile[], setFiles });
-            setRowSelection({});
-          }}
+          onClick={() => setConfirmOpen(true)}
           disabled={!table.getFilteredSelectedRowModel().rows.length || isDeleting}
           className={cn('min-w-[2.5rem] transition-all duration-200', isSmallScreen && 'px-2 py-1')}
         >
@@ -141,6 +142,38 @@ export default function DataTable<TData, TValue>({ columns, data }: DataTablePro
           )}
           {!isSmallScreen && <span className="ml-2">{localize('com_ui_delete')}</span>}
         </Button>
+        <OGDialog open={confirmOpen} onOpenChange={setConfirmOpen} triggerRef={deleteButtonRef}>
+          <OGDialogContent
+            showCloseButton={false}
+            className="w-11/12 max-w-md"
+            aria-describedby="delete-files-description"
+          >
+            <OGDialogHeader>
+              <OGDialogTitle>{localize('com_ui_delete_files_confirm_title')}</OGDialogTitle>
+            </OGDialogHeader>
+            <p id="delete-files-description">{localize('com_ui_delete_files_confirm')}</p>
+            <DeletionNotice />
+            <div className="flex justify-end gap-4 pt-4">
+              <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+                {localize('com_ui_cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  setIsDeleting(true);
+                  const filesToDelete = table
+                    .getFilteredSelectedRowModel()
+                    .rows.map((row) => row.original);
+                  deleteFiles({ files: filesToDelete as TFile[], setFiles });
+                  setRowSelection({});
+                }}
+              >
+                {localize('com_ui_delete')}
+              </Button>
+            </div>
+          </OGDialogContent>
+        </OGDialog>
         <FilterInput
           inputId="files-filter"
           label={localize('com_files_filter')}

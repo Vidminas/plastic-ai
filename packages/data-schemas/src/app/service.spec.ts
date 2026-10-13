@@ -2,6 +2,7 @@ import {
   EModelEndpoint,
   AgentCapabilities,
   defaultAssistantsVersion,
+  DEFAULT_UPLOAD_SCREENING_PII_ENTITIES,
 } from 'librechat-data-provider';
 import type { DeepPartial, TCustomConfig } from 'librechat-data-provider';
 import { AppService, loadFiltersConfig, loadSummarizationConfig } from './service';
@@ -217,6 +218,37 @@ describe('loadFiltersConfig', () => {
         } as DeepPartial<TCustomConfig>,
       }),
     ).rejects.toThrow('Invalid filters config');
+  });
+});
+
+describe('AppService PII protection config', () => {
+  it('applies upload screening defaults the YAML leaves out', async () => {
+    const config = {
+      uploadScreening: { malware: 'none', pii: { detector: 'guardrail' } },
+      piiMasking: { guardrail: { guardrailIdentifier: 'gr1', guardrailVersion: '2' } },
+    } as DeepPartial<TCustomConfig>;
+
+    const result = await AppService({ config });
+
+    expect(result.uploadScreening?.pii).toEqual(
+      expect.objectContaining({
+        detector: 'guardrail',
+        images: 'textract',
+        maxCharacters: 2_000_000,
+        entities: DEFAULT_UPLOAD_SCREENING_PII_ENTITIES,
+      }),
+    );
+    expect(result.uploadScreening?.pii.entities).toContain('UK_NATIONAL_INSURANCE_NUMBER');
+    expect(result.piiMasking?.guardrail).toEqual({
+      guardrailIdentifier: 'gr1',
+      guardrailVersion: '2',
+    });
+  });
+
+  it('leaves both unset when the YAML has neither', async () => {
+    const result = await AppService({ config: {} });
+    expect(result.uploadScreening).toBeUndefined();
+    expect(result.piiMasking).toBeUndefined();
   });
 });
 

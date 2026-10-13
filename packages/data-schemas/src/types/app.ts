@@ -18,6 +18,8 @@ import type {
   TToolCallPreviewsConfig,
   SkillSyncConfig,
   FiltersConfig,
+  TPiiMasking,
+  TUploadScreening,
 } from 'librechat-data-provider';
 
 export type JsonSchemaType = {
@@ -77,7 +79,9 @@ export interface AppConfig {
   /** Daily window in which the app can be used */
   openingHours?: TCustomConfig['openingHours'];
   /** Upload quarantine, malware scan and PII screening */
-  uploadScreening?: TCustomConfig['uploadScreening'];
+  uploadScreening?: TUploadScreening;
+  /** Masking of personal identifiers in text sent to models */
+  piiMasking?: TPiiMasking;
   /** Langfuse tracing configuration */
   langfuse?: TCustomConfig['langfuse'];
   /** Skill sync configuration */

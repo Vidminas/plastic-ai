@@ -7,8 +7,10 @@ import {
   toolCallPreviewsConfigSchema,
   hasActiveFiltersConfig,
   getConfigDefaults,
+  piiMaskingSchema,
   langfuseConfigSchema,
   skillSyncConfigSchema,
+  uploadScreeningSchema,
   summarizationConfigSchema,
 } from 'librechat-data-provider';
 import type {
@@ -201,7 +203,13 @@ export const AppService = async (params?: {
   const messageFilter = config.messageFilter;
   const messageLimits = config.messageLimits;
   const openingHours = config.openingHours;
-  const uploadScreening = config.uploadScreening;
+  /** Parsed, unlike most sections, so their defaults (such as `pii.entities`) apply. */
+  const uploadScreening =
+    config.uploadScreening == null
+      ? undefined
+      : uploadScreeningSchema.parse(config.uploadScreening);
+  const piiMasking =
+    config.piiMasking == null ? undefined : piiMaskingSchema.parse(config.piiMasking);
   const langfuse = loadLangfuseConfig(config);
 
   const defaultConfig = {
@@ -231,6 +239,7 @@ export const AppService = async (params?: {
     messageLimits,
     openingHours,
     uploadScreening,
+    piiMasking,
     summarization,
     availableTools,
     imageOutputType,

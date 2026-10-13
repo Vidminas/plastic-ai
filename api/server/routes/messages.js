@@ -34,6 +34,7 @@ const {
   createToolCallPartHandler,
   rejectToolCallPreviewWrites,
   withMessageToolCallPreviews,
+  maskUserText,
 } = require('@librechat/api');
 const subagentThreadTaskStore = require('~/server/services/Endpoints/agents/subagentThreadStore');
 const { getAppConfig } = require('~/server/services/Config');
@@ -644,7 +645,9 @@ router.put('/:conversationId/:messageId', messageMutationMiddleware, async (req,
     if (await rejectSubagentThreadWrite(req, res, message.conversationId)) {
       return;
     }
-    const { text, index, model } = req.body;
+    // const { text, index, model } = req.body;
+    const { index, model } = req.body;
+    const text = await maskUserText(req.config, req.body.text);
 
     if (index !== undefined && (typeof index !== 'number' || index < 0)) {
       return res.status(400).json({ error: 'Invalid index' });

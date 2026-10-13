@@ -207,6 +207,9 @@ const {
   markCompactionOutcome,
   resolvePersistableCodeEnvironmentDecision,
   getChatProjectContextKey,
+  maskTitleInput,
+  maskModelMessages,
+  getGuardrailTextMasker,
 } = require('@librechat/api');
 const {
   Run,
@@ -4547,6 +4550,8 @@ class AgentClient extends BaseClient {
     const appConfig = this.options.req.config;
     const terminalRunError = createTerminalRunErrorObserver({
       maxProviderErrorChars: appConfig?.endpoints?.agents?.maxProviderErrorChars,
+      logProviderErrors: appConfig?.endpoints?.agents?.logProviderErrors === true,
+      maskText: getGuardrailTextMasker(appConfig),
       logger,
       responseMessageId: this.responseMessageId,
       source: '[api/server/controllers/agents/client.js #sendCompletion]',
@@ -4824,6 +4829,8 @@ class AgentClient extends BaseClient {
         skillPrimeResult?.skills,
         formatOptions,
       );
+      const maskText = getGuardrailTextMasker(appConfig);
+      initialMessages = await maskModelMessages(initialMessages, maskText);
       if (this.eventActorContinuation !== 'warm') {
         this.eventActorSummary = initialSummary;
       }
@@ -4917,13 +4924,16 @@ class AgentClient extends BaseClient {
 
       const memoryMessages =
         this.processMemory && this.memoryPayload && !isCompactionTurn
-          ? formatAgentMessages(
-              stripUnusableSummaryParts(stripActivityLabelParts(this.memoryPayload)),
-              undefined,
-              toolSet,
-              skillPrimeResult?.skills,
-              hasMessageFormatOptions ? messageFormatOptions : undefined,
-            ).messages
+          ? await maskModelMessages(
+              formatAgentMessages(
+                stripUnusableSummaryParts(stripActivityLabelParts(this.memoryPayload)),
+                undefined,
+                toolSet,
+                skillPrimeResult?.skills,
+                hasMessageFormatOptions ? messageFormatOptions : undefined,
+              ).messages,
+              maskText,
+            )
           : memorySourceMessages;
 
       /**
@@ -5462,6 +5472,8 @@ class AgentClient extends BaseClient {
     const appConfig = this.options.req.config;
     const terminalRunError = createTerminalRunErrorObserver({
       maxProviderErrorChars: appConfig?.endpoints?.agents?.maxProviderErrorChars,
+      logProviderErrors: appConfig?.endpoints?.agents?.logProviderErrors === true,
+      maskText: getGuardrailTextMasker(appConfig),
       logger,
       responseMessageId: this.responseMessageId,
       source: '[api/server/controllers/agents/client.js #resumeCompletion]',
@@ -6297,11 +6309,17 @@ class AgentClient extends BaseClient {
 
     try {
       await requirePrivateTextAdmission(req, abortController.signal);
+      const titleInput = await maskTitleInput(
+        { inputText: text, contentParts: immediate ? [] : this.contentParts },
+        getGuardrailTextMasker(this.options.req.config),
+      );
       const titleResult = await this.run.generateTitle({
         provider,
         clientOptions,
-        inputText: text,
-        contentParts: immediate ? [] : this.contentParts,
+        // inputText: text,
+        inputText: titleInput.inputText,
+        // contentParts: immediate ? [] : this.contentParts,
+        contentParts: titleInput.contentParts,
         titleMethod: endpointConfig?.titleMethod,
         titlePrompt: endpointConfig?.titlePrompt,
         titlePromptTemplate: endpointConfig?.titlePromptTemplate,

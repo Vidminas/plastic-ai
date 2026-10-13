@@ -17,11 +17,12 @@ import {
   useSubmitAskAnswerMutation,
   type ResumeAgentFields,
 } from '~/data-provider';
+import { ASK_USER_DECLINED_ANSWER, resolveAskUserQuestionPart } from '~/utils/approval';
 import { pendingApprovalActionFamily } from '~/components/Chat/approval/state';
 import { askSubmitStatusAtom } from '~/components/Chat/ask/state';
-import { resolveAskUserQuestionPart } from '~/utils/approval';
 import { ChatContext } from '~/Providers/ChatContext';
 import { useGetEphemeralAgent } from '~/store/agents';
+import { trackAction } from '~/lib/rum/actions';
 import store from '~/store';
 
 /** Shared read/write for the ask-answer submit status. */
@@ -536,6 +537,15 @@ export function useResumeSubmit() {
         {
           onSuccess: () => {
             setAskStatus(actionId, 'submitted');
+            /** Counts only, never the answers. */
+            const answers = isBatch ? Object.values(resolution) : [resolution];
+            trackAction('question.answer', {
+              conversationId: fields.conversationId,
+              endpoint: fields.endpointType ?? fields.endpoint,
+              agentId: fields.agent_id,
+              questions: answers.length,
+              declined: answers.filter((answer) => answer === ASK_USER_DECLINED_ANSWER).length,
+            });
             /**
              * Drop the synthetic question part now that the run is resuming: the
              * server streams the resumed segment at ABSOLUTE content indices

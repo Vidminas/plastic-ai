@@ -1018,6 +1018,18 @@ function renderPptxSlidesHtml(slides: PptxSlide[]): string {
  * Pre-flights through `assertSafeZipSize` so a zip-bomb PPTX can't blow
  * up the slide-XML extraction pass.
  */
+/** Plain text of every slide in order, title first, for the document parser. */
+export async function pptxToText(buffer: Buffer): Promise<string> {
+  await assertSafeZipSize(buffer, { name: 'pptx' });
+  const rawSlides = await extractPptxSlideXml(buffer);
+  return rawSlides
+    .map(({ xml }) => {
+      const { title, body } = extractSlideText(xml);
+      return [title, ...body].join('\n');
+    })
+    .join('\n\n');
+}
+
 export async function pptxToSlideListHtml(buffer: Buffer): Promise<string> {
   await assertSafeZipSize(buffer, { name: 'pptx' });
   const rawSlides = await extractPptxSlideXml(buffer);

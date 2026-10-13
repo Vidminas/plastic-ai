@@ -1,9 +1,11 @@
 jest.mock('@librechat/data-schemas', () => ({
-  logger: { error: jest.fn(), debug: jest.fn(), info: jest.fn() },
+  logger: { error: jest.fn(), debug: jest.fn(), info: jest.fn(), warn: jest.fn() },
 }));
 jest.mock('@librechat/api', () => {
-  const { getModelRefusalInfo } = jest.requireActual('@librechat/api');
+  const { getModelRefusalInfo, reportGuardrailOutputDetections } =
+    jest.requireActual('@librechat/api');
   return {
+    reportGuardrailOutputDetections,
     sendEvent: jest.fn(),
     emitEvent: jest.fn(),
     createToolExecuteHandler: jest.fn(),
@@ -70,6 +72,44 @@ describe('ModelEndHandler — Vertex thoughtSignature capture (issue #13006 foll
         { clientOptions: { model: 'configured-model' } },
       ).model,
     ).toBe('reported-model');
+  });
+
+  it('logs identifier types the output guardrail detected, and drops its trace', async () => {
+    const { logger } = require('@librechat/data-schemas');
+    const collectedUsage = [];
+    const handler = new ModelEndHandler(collectedUsage);
+    const trace = {
+      guardrail: {
+        outputAssessments: {
+          gr1: [
+            {
+              sensitiveInformationPolicy: {
+                piiEntities: [{ type: 'EMAIL', match: 'sam@example.com', detected: true }],
+              },
+            },
+          ],
+        },
+      },
+    };
+    const output = {
+      content: 'Mail sam@example.com',
+      usage_metadata: { input_tokens: 10, output_tokens: 5 },
+      response_metadata: { metadata: { usage: {}, trace } },
+    };
+
+    await handler.handle(
+      'on_chat_model_end',
+      { output },
+      { run_id: 'msg-1', thread_id: 'convo-1' },
+      buildGraph(),
+    );
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[piiMasking] A model response contains personal identifiers',
+      { messageId: 'msg-1', conversationId: 'convo-1', identifiers: ['EMAIL'] },
+    );
+    expect(output.response_metadata.metadata).toEqual({ usage: {} });
+    expect(collectedUsage).toHaveLength(1);
   });
 
   it('maps non-empty signatures onto tool_call_ids in order', async () => {

@@ -23,6 +23,7 @@ import {
   useDeleteConversationMutation,
   useArchiveConvoMutation,
 } from '~/data-provider';
+import DeletionNotice from '~/components/ui/DeletionNotice';
 import { MinimalIcon } from '~/components/Endpoints';
 import { NotificationSeverity } from '~/common';
 import { formatDate, logger } from '~/utils';
@@ -299,6 +300,7 @@ export default function ArchivedChatsTable() {
               />
             </OGDialogTitle>
           </OGDialogHeader>
+          <DeletionNotice />
           <div className="flex justify-end gap-4 pt-4">
             <Button
               aria-label={localize('com_ui_cancel')}

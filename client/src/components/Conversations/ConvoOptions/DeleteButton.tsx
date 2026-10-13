@@ -15,6 +15,7 @@ import {
 } from '@librechat/client';
 import type { TMessage } from 'librechat-data-provider';
 import { useDeleteConversationMutation } from '~/data-provider';
+import DeletionNotice from '~/components/ui/DeletionNotice';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { NotificationSeverity } from '~/common';
 
@@ -94,7 +95,7 @@ export function DeleteConversationDialog({
       id="delete-conversation-dialog"
       className="w-11/12 max-w-md"
       showCloseButton={false}
-      aria-describedby="delete-conversation-description"
+      aria-describedby="delete-conversation-description delete-conversation-notice"
     >
       <OGDialogHeader>
         <OGDialogTitle>{localize('com_ui_delete_conversation')}</OGDialogTitle>
@@ -106,6 +107,7 @@ export function DeleteConversationDialog({
           components={{ strong: <strong /> }}
         />
       </div>
+      <DeletionNotice id="delete-conversation-notice" />
       <div className="flex justify-end gap-4 pt-4">
         <OGDialogClose asChild>
           <Button aria-label="cancel" variant="outline">

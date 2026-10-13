@@ -1,0 +1,382 @@
+diff --git a/node_modules/@librechat/agents/dist/cjs/instrumentation.cjs b/node_modules/@librechat/agents/dist/cjs/instrumentation.cjs
+index f5aef25..46447fa 100644
+--- a/node_modules/@librechat/agents/dist/cjs/instrumentation.cjs
++++ b/node_modules/@librechat/agents/dist/cjs/instrumentation.cjs
+@@ -35,7 +35,8 @@ function getLangfuseProcessorCacheKey(destinationKey, langfuse) {
+ 	return JSON.stringify({
+ 		destinationKey,
+ 		mediaUploadEnabled: langfuse?.mediaUploadEnabled,
+-		toolOutputTracing: langfuse?.toolOutputTracing
++		toolOutputTracing: langfuse?.toolOutputTracing,
++		masked: langfuse?.mask != null
+ 	});
+ }
+ var RoutingLangfuseSpanProcessor = class {
+diff --git a/node_modules/@librechat/agents/dist/cjs/langfuseConfig.cjs b/node_modules/@librechat/agents/dist/cjs/langfuseConfig.cjs
+index 5942d84..51f0229 100644
+--- a/node_modules/@librechat/agents/dist/cjs/langfuseConfig.cjs
++++ b/node_modules/@librechat/agents/dist/cjs/langfuseConfig.cjs
+@@ -89,8 +89,18 @@ function mergeAdditionalHeaders(base, override) {
+ 	}
+ 	return merged;
+ }
++function resolveLangfuseMask(runLangfuse, agentLangfuse) {
++	if (agentLangfuse?.mask != null && runLangfuse?.mask == null) return {
++		enabled: false,
++		mask: void 0
++	};
++	return { mask: runLangfuse?.mask };
++}
+ function resolveLangfuseConfig(runLangfuse, agentLangfuse) {
+-	if (runLangfuse == null) return agentLangfuse;
++	if (runLangfuse == null) return agentLangfuse?.mask == null ? agentLangfuse : {
++		...agentLangfuse,
++		...resolveLangfuseMask(void 0, agentLangfuse)
++	};
+ 	if (agentLangfuse == null) return runLangfuse;
+ 	const toolNodeTracing = runLangfuse.toolNodeTracing != null || agentLangfuse.toolNodeTracing != null ? {
+ 		...runLangfuse.toolNodeTracing,
+@@ -118,7 +128,8 @@ function resolveLangfuseConfig(runLangfuse, agentLangfuse) {
+ 		...librechatTraceAttributes != null ? { librechatTraceAttributes } : {},
+ 		...tags != null ? { tags } : {},
+ 		...toolNodeTracing != null ? { toolNodeTracing } : {},
+-		...toolOutputTracing != null ? { toolOutputTracing } : {}
++		...toolOutputTracing != null ? { toolOutputTracing } : {},
++		...resolveLangfuseMask(runLangfuse, agentLangfuse)
+ 	};
+ }
+ //#endregion
+diff --git a/node_modules/@librechat/agents/dist/cjs/langfuseMask.cjs b/node_modules/@librechat/agents/dist/cjs/langfuseMask.cjs
+new file mode 100644
+index 0000000..dcc6868
+--- /dev/null
++++ b/node_modules/@librechat/agents/dist/cjs/langfuseMask.cjs
+@@ -0,0 +1,53 @@
++let _langfuse_tracing = require("@langfuse/tracing");
++//#region src/langfuseMask.ts
++const LANGFUSE_MASK_FAILURE_TEXT = "<fully masked due to failed mask function>";
++const MASKED_ATTRIBUTES = new Set([
++	_langfuse_tracing.LangfuseOtelSpanAttributes.TRACE_INPUT,
++	_langfuse_tracing.LangfuseOtelSpanAttributes.TRACE_OUTPUT,
++	_langfuse_tracing.LangfuseOtelSpanAttributes.TRACE_METADATA,
++	_langfuse_tracing.LangfuseOtelSpanAttributes.OBSERVATION_INPUT,
++	_langfuse_tracing.LangfuseOtelSpanAttributes.OBSERVATION_OUTPUT,
++	_langfuse_tracing.LangfuseOtelSpanAttributes.OBSERVATION_METADATA,
++	_langfuse_tracing.LangfuseOtelSpanAttributes.OBSERVATION_MODEL_PARAMETERS,
++	_langfuse_tracing.LangfuseOtelSpanAttributes.OBSERVATION_STATUS_MESSAGE
++]);
++const MASKED_ATTRIBUTE_PREFIXES = [`${_langfuse_tracing.LangfuseOtelSpanAttributes.TRACE_METADATA}.`, `${_langfuse_tracing.LangfuseOtelSpanAttributes.OBSERVATION_METADATA}.`];
++const MASKED_EXCEPTION_ATTRIBUTES = ["exception.message", "exception.stacktrace"];
++function isMaskedAttribute(key) {
++	return MASKED_ATTRIBUTES.has(key) || MASKED_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix));
++}
++async function applyMask(mask, data) {
++	try {
++		return await mask({ data });
++	} catch {
++		return LANGFUSE_MASK_FAILURE_TEXT;
++	}
++}
++function maskRecord(mask, record, keys) {
++	if (record == null) return [];
++	const pending = [];
++	for (const key of keys) {
++		const value = record[key];
++		if (value != null) pending.push(applyMask(mask, value).then((masked) => {
++			record[key] = masked;
++		}));
++	}
++	return pending;
++}
++async function maskLangfuseSpan(span, mask) {
++	const target = span;
++	const pending = maskRecord(mask, target.attributes, Object.keys(target.attributes).filter(isMaskedAttribute));
++	for (const event of target.events) if (event.name === "exception") pending.push(...maskRecord(mask, event.attributes, MASKED_EXCEPTION_ATTRIBUTES));
++	const statusMessage = target.status.message;
++	if (statusMessage != null && statusMessage !== "") pending.push(applyMask(mask, statusMessage).then((masked) => {
++		target.status = {
++			...target.status,
++			message: String(masked)
++		};
++	}));
++	await Promise.all(pending);
++}
++//#endregion
++exports.maskLangfuseSpan = maskLangfuseSpan;
++
++//# sourceMappingURL=langfuseMask.cjs.map
+\ No newline at end of file
+diff --git a/node_modules/@librechat/agents/dist/cjs/langfuseToolOutputTracing.cjs b/node_modules/@librechat/agents/dist/cjs/langfuseToolOutputTracing.cjs
+index c308a93..d22e2b6 100644
+--- a/node_modules/@librechat/agents/dist/cjs/langfuseToolOutputTracing.cjs
++++ b/node_modules/@librechat/agents/dist/cjs/langfuseToolOutputTracing.cjs
+@@ -2,6 +2,7 @@ const require_langfuseConfig = require("./langfuseConfig.cjs");
+ const require_langfuseRuntimeScope = require("./langfuseRuntimeScope.cjs");
+ const require_langfuseTraceShaping = require("./langfuseTraceShaping.cjs");
+ require("./decisions/traceMarker.cjs");
++const require_langfuseMask = require("./langfuseMask.cjs");
+ let _langfuse_tracing = require("@langfuse/tracing");
+ let _langfuse_otel = require("@langfuse/otel");
+ //#region src/langfuseToolOutputTracing.ts
+@@ -456,9 +457,12 @@ var ToolOutputRedactingLangfuseSpanProcessor = class {
+ 	processor;
+ 	fallbackConfig;
+ 	spanConfigs = /* @__PURE__ */ new WeakMap();
+-	constructor(params, fallbackConfig) {
++	mask;
++	pendingMasks = /* @__PURE__ */ new Set();
++	constructor(params, fallbackConfig, mask) {
+ 		this.processor = new _langfuse_otel.LangfuseSpanProcessor(params);
+ 		this.fallbackConfig = fallbackConfig;
++		this.mask = mask;
+ 	}
+ 	onStart(span, parentContext) {
+ 		if (require_langfuseTraceShaping.shouldDropLangfuseSpan(span.name)) return;
+@@ -469,17 +473,25 @@ var ToolOutputRedactingLangfuseSpanProcessor = class {
+ 	onEnd(span) {
+ 		if (require_langfuseTraceShaping.shouldDropLangfuseSpan(span.name)) return;
+ 		prepareLangfuseSpanForExport(span, this.spanConfigs.get(span) ?? this.fallbackConfig);
+-		this.processor.onEnd(span);
++		if (this.mask == null) {
++			this.processor.onEnd(span);
++			return;
++		}
++		const pending = require_langfuseMask.maskLangfuseSpan(span, this.mask).then(() => this.processor.onEnd(span)).catch(() => void 0);
++		this.pendingMasks.add(pending);
++		pending.finally(() => this.pendingMasks.delete(pending));
+ 	}
+-	forceFlush() {
++	async forceFlush() {
++		await Promise.all(this.pendingMasks);
+ 		return this.processor.forceFlush();
+ 	}
+-	shutdown() {
++	async shutdown() {
++		await Promise.all(this.pendingMasks);
+ 		return this.processor.shutdown();
+ 	}
+ };
+ function createLangfuseSpanProcessor(params, runLangfuse, agentLangfuse) {
+-	return new ToolOutputRedactingLangfuseSpanProcessor(params, require_langfuseConfig.hasToolOutputTracingConfig(runLangfuse, agentLangfuse) ? require_langfuseConfig.resolveToolOutputTracingConfig(runLangfuse, agentLangfuse) : void 0);
++	return new ToolOutputRedactingLangfuseSpanProcessor(params, require_langfuseConfig.hasToolOutputTracingConfig(runLangfuse, agentLangfuse) ? require_langfuseConfig.resolveToolOutputTracingConfig(runLangfuse, agentLangfuse) : void 0, runLangfuse?.mask);
+ }
+ function hasLangfuseEnvKeys() {
+ 	return isPresent(process.env.LANGFUSE_SECRET_KEY) && isPresent(process.env.LANGFUSE_PUBLIC_KEY);
+diff --git a/node_modules/@librechat/agents/dist/esm/instrumentation.mjs b/node_modules/@librechat/agents/dist/esm/instrumentation.mjs
+index 1652bbf..54429a2 100644
+--- a/node_modules/@librechat/agents/dist/esm/instrumentation.mjs
++++ b/node_modules/@librechat/agents/dist/esm/instrumentation.mjs
+@@ -35,7 +35,8 @@ function getLangfuseProcessorCacheKey(destinationKey, langfuse) {
+ 	return JSON.stringify({
+ 		destinationKey,
+ 		mediaUploadEnabled: langfuse?.mediaUploadEnabled,
+-		toolOutputTracing: langfuse?.toolOutputTracing
++		toolOutputTracing: langfuse?.toolOutputTracing,
++		masked: langfuse?.mask != null
+ 	});
+ }
+ var RoutingLangfuseSpanProcessor = class {
+diff --git a/node_modules/@librechat/agents/dist/esm/langfuseConfig.mjs b/node_modules/@librechat/agents/dist/esm/langfuseConfig.mjs
+index d3ce5c3..216edd0 100644
+--- a/node_modules/@librechat/agents/dist/esm/langfuseConfig.mjs
++++ b/node_modules/@librechat/agents/dist/esm/langfuseConfig.mjs
+@@ -89,8 +89,18 @@ function mergeAdditionalHeaders(base, override) {
+ 	}
+ 	return merged;
+ }
++function resolveLangfuseMask(runLangfuse, agentLangfuse) {
++	if (agentLangfuse?.mask != null && runLangfuse?.mask == null) return {
++		enabled: false,
++		mask: void 0
++	};
++	return { mask: runLangfuse?.mask };
++}
+ function resolveLangfuseConfig(runLangfuse, agentLangfuse) {
+-	if (runLangfuse == null) return agentLangfuse;
++	if (runLangfuse == null) return agentLangfuse?.mask == null ? agentLangfuse : {
++		...agentLangfuse,
++		...resolveLangfuseMask(void 0, agentLangfuse)
++	};
+ 	if (agentLangfuse == null) return runLangfuse;
+ 	const toolNodeTracing = runLangfuse.toolNodeTracing != null || agentLangfuse.toolNodeTracing != null ? {
+ 		...runLangfuse.toolNodeTracing,
+@@ -118,7 +128,8 @@ function resolveLangfuseConfig(runLangfuse, agentLangfuse) {
+ 		...librechatTraceAttributes != null ? { librechatTraceAttributes } : {},
+ 		...tags != null ? { tags } : {},
+ 		...toolNodeTracing != null ? { toolNodeTracing } : {},
+-		...toolOutputTracing != null ? { toolOutputTracing } : {}
++		...toolOutputTracing != null ? { toolOutputTracing } : {},
++		...resolveLangfuseMask(runLangfuse, agentLangfuse)
+ 	};
+ }
+ //#endregion
+diff --git a/node_modules/@librechat/agents/dist/esm/langfuseMask.mjs b/node_modules/@librechat/agents/dist/esm/langfuseMask.mjs
+new file mode 100644
+index 0000000..a5c2bfc
+--- /dev/null
++++ b/node_modules/@librechat/agents/dist/esm/langfuseMask.mjs
+@@ -0,0 +1,53 @@
++import { LangfuseOtelSpanAttributes } from "@langfuse/tracing";
++//#region src/langfuseMask.ts
++const LANGFUSE_MASK_FAILURE_TEXT = "<fully masked due to failed mask function>";
++const MASKED_ATTRIBUTES = new Set([
++	LangfuseOtelSpanAttributes.TRACE_INPUT,
++	LangfuseOtelSpanAttributes.TRACE_OUTPUT,
++	LangfuseOtelSpanAttributes.TRACE_METADATA,
++	LangfuseOtelSpanAttributes.OBSERVATION_INPUT,
++	LangfuseOtelSpanAttributes.OBSERVATION_OUTPUT,
++	LangfuseOtelSpanAttributes.OBSERVATION_METADATA,
++	LangfuseOtelSpanAttributes.OBSERVATION_MODEL_PARAMETERS,
++	LangfuseOtelSpanAttributes.OBSERVATION_STATUS_MESSAGE
++]);
++const MASKED_ATTRIBUTE_PREFIXES = [`${LangfuseOtelSpanAttributes.TRACE_METADATA}.`, `${LangfuseOtelSpanAttributes.OBSERVATION_METADATA}.`];
++const MASKED_EXCEPTION_ATTRIBUTES = ["exception.message", "exception.stacktrace"];
++function isMaskedAttribute(key) {
++	return MASKED_ATTRIBUTES.has(key) || MASKED_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix));
++}
++async function applyMask(mask, data) {
++	try {
++		return await mask({ data });
++	} catch {
++		return LANGFUSE_MASK_FAILURE_TEXT;
++	}
++}
++function maskRecord(mask, record, keys) {
++	if (record == null) return [];
++	const pending = [];
++	for (const key of keys) {
++		const value = record[key];
++		if (value != null) pending.push(applyMask(mask, value).then((masked) => {
++			record[key] = masked;
++		}));
++	}
++	return pending;
++}
++async function maskLangfuseSpan(span, mask) {
++	const target = span;
++	const pending = maskRecord(mask, target.attributes, Object.keys(target.attributes).filter(isMaskedAttribute));
++	for (const event of target.events) if (event.name === "exception") pending.push(...maskRecord(mask, event.attributes, MASKED_EXCEPTION_ATTRIBUTES));
++	const statusMessage = target.status.message;
++	if (statusMessage != null && statusMessage !== "") pending.push(applyMask(mask, statusMessage).then((masked) => {
++		target.status = {
++			...target.status,
++			message: String(masked)
++		};
++	}));
++	await Promise.all(pending);
++}
++//#endregion
++export { maskLangfuseSpan };
++
++//# sourceMappingURL=langfuseMask.mjs.map
+\ No newline at end of file
+diff --git a/node_modules/@librechat/agents/dist/esm/langfuseToolOutputTracing.mjs b/node_modules/@librechat/agents/dist/esm/langfuseToolOutputTracing.mjs
+index f0afab7..7a0ab30 100644
+--- a/node_modules/@librechat/agents/dist/esm/langfuseToolOutputTracing.mjs
++++ b/node_modules/@librechat/agents/dist/esm/langfuseToolOutputTracing.mjs
+@@ -2,6 +2,7 @@ import { hasToolOutputTracingConfig, normalizeToolName, resolveLangfuseConfig, r
+ import { resolveToolOutputTracingConfigForSpan } from "./langfuseRuntimeScope.mjs";
+ import { shapeLangfuseSpan, shouldDropLangfuseSpan } from "./langfuseTraceShaping.mjs";
+ import "./decisions/traceMarker.mjs";
++import { maskLangfuseSpan } from "./langfuseMask.mjs";
+ import { LangfuseOtelSpanAttributes } from "@langfuse/tracing";
+ import { LangfuseSpanProcessor } from "@langfuse/otel";
+ //#region src/langfuseToolOutputTracing.ts
+@@ -456,9 +457,12 @@ var ToolOutputRedactingLangfuseSpanProcessor = class {
+ 	processor;
+ 	fallbackConfig;
+ 	spanConfigs = /* @__PURE__ */ new WeakMap();
+-	constructor(params, fallbackConfig) {
++	mask;
++	pendingMasks = /* @__PURE__ */ new Set();
++	constructor(params, fallbackConfig, mask) {
+ 		this.processor = new LangfuseSpanProcessor(params);
+ 		this.fallbackConfig = fallbackConfig;
++		this.mask = mask;
+ 	}
+ 	onStart(span, parentContext) {
+ 		if (shouldDropLangfuseSpan(span.name)) return;
+@@ -469,17 +473,25 @@ var ToolOutputRedactingLangfuseSpanProcessor = class {
+ 	onEnd(span) {
+ 		if (shouldDropLangfuseSpan(span.name)) return;
+ 		prepareLangfuseSpanForExport(span, this.spanConfigs.get(span) ?? this.fallbackConfig);
+-		this.processor.onEnd(span);
++		if (this.mask == null) {
++			this.processor.onEnd(span);
++			return;
++		}
++		const pending = maskLangfuseSpan(span, this.mask).then(() => this.processor.onEnd(span)).catch(() => void 0);
++		this.pendingMasks.add(pending);
++		pending.finally(() => this.pendingMasks.delete(pending));
+ 	}
+-	forceFlush() {
++	async forceFlush() {
++		await Promise.all(this.pendingMasks);
+ 		return this.processor.forceFlush();
+ 	}
+-	shutdown() {
++	async shutdown() {
++		await Promise.all(this.pendingMasks);
+ 		return this.processor.shutdown();
+ 	}
+ };
+ function createLangfuseSpanProcessor(params, runLangfuse, agentLangfuse) {
+-	return new ToolOutputRedactingLangfuseSpanProcessor(params, hasToolOutputTracingConfig(runLangfuse, agentLangfuse) ? resolveToolOutputTracingConfig(runLangfuse, agentLangfuse) : void 0);
++	return new ToolOutputRedactingLangfuseSpanProcessor(params, hasToolOutputTracingConfig(runLangfuse, agentLangfuse) ? resolveToolOutputTracingConfig(runLangfuse, agentLangfuse) : void 0, runLangfuse?.mask);
+ }
+ function hasLangfuseEnvKeys() {
+ 	return isPresent(process.env.LANGFUSE_SECRET_KEY) && isPresent(process.env.LANGFUSE_PUBLIC_KEY);
+diff --git a/node_modules/@librechat/agents/dist/types/langfuseMask.d.ts b/node_modules/@librechat/agents/dist/types/langfuseMask.d.ts
+new file mode 100644
+index 0000000..13dab4f
+--- /dev/null
++++ b/node_modules/@librechat/agents/dist/types/langfuseMask.d.ts
+@@ -0,0 +1,13 @@
++import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
++import type { MaskFunction } from '@langfuse/otel';
++/** Matches `@langfuse/otel`'s placeholder for a value its mask failed on. */
++export declare const LANGFUSE_MASK_FAILURE_TEXT = "<fully masked due to failed mask function>";
++/**
++ * Rewrites, in place, every span field that can carry trace content with the
++ * host's mask: the input, output and metadata `@langfuse/otel`'s own `mask`
++ * covers, plus the per-key metadata attributes, model parameters, status
++ * messages and exception events it does not. A value the mask throws on is
++ * replaced with {@link LANGFUSE_MASK_FAILURE_TEXT}, so content is never
++ * exported as it was.
++ */
++export declare function maskLangfuseSpan(span: ReadableSpan, mask: MaskFunction): Promise<void>;
+diff --git a/node_modules/@librechat/agents/dist/types/types/graph.d.ts b/node_modules/@librechat/agents/dist/types/types/graph.d.ts
+index d62332d..b1ee798 100644
+--- a/node_modules/@librechat/agents/dist/types/types/graph.d.ts
++++ b/node_modules/@librechat/agents/dist/types/types/graph.d.ts
+@@ -5,6 +5,7 @@ import type { START, StateGraph, StateGraphArgs } from '@langchain/langgraph';
+ import type { RunnableConfig, Runnable } from '@langchain/core/runnables';
+ import type { ChatGenerationChunk } from '@langchain/core/outputs';
+ import type { GoogleAIToolType } from '@langchain/google-common';
++import type { MaskFunction } from '@langfuse/otel';
+ import type { RunStep, ModelResponseEvent, ModelToolsClaimedEvent, RunStepDeltaEvent, RunStepResumeState, RunStepClosedEvent, ToolCallsDispatchedEvent, MessageDeltaEvent, ReasoningDeltaEvent } from '@/types/stream';
+ import type { SummarizationNodeInput, SummarizeCompleteEvent, CompactionSemanticIndex, SummarizationConfig, SummarizeStartEvent, SummarizeDeltaEvent } from '@/types/summarize';
+ import type { ToolMap, ToolSessionMap, ToolEndEvent, GenericTool, LCTool, ToolExecutionConfig, ToolExecuteBatchRequest } from '@/types/tools';
+@@ -772,6 +773,22 @@ export interface LangfuseConfig {
+      * `getLangfuseDestinationKey`.
+      */
+     additionalHeaders?: Record<string, string>;
++    /**
++     * Masks trace content before it leaves the process, for example to keep
++     * personal data out of traces. Applied by the library's span processor to
++     * every field that can carry content: trace and observation input, output
++     * and metadata (including per-key metadata), model parameters, status
++     * messages and exception events. Receives one value at a time, as
++     * `@langfuse/otel`'s `mask` does, and may be async; a value it throws on is
++     * exported as a fixed placeholder instead.
++     *
++     * Run-level only: an agent overlay's mask is ignored, and one set without a
++     * run-level mask disables export instead. A destination's processor is
++     * cached by whether a mask is set, not by the function, so hosts may build
++     * a new function per run but should mask the same way for every run sent
++     * to one destination.
++     */
++    mask?: MaskFunction;
+     metadata?: Record<string, string | number | boolean | null | undefined>;
+     /**
+      * User identity stamped on every trace this run emits — the agent stream,

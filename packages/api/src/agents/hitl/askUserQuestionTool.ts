@@ -8,6 +8,7 @@ import {
 } from '@librechat/agents';
 import type { DynamicStructuredTool } from '@librechat/agents/langchain/tools';
 import type { ToolInputValidationError } from '../toolValidation';
+import type { MaskText } from '~/guardrails';
 import { recordToolInputValidationError } from '../toolValidation';
 
 /**
@@ -275,6 +276,26 @@ export const AskUserQuestionToolDefinition: AskUserQuestionToolDefinitionShape =
 };
 
 /**
+ * Masks every string in a human's answers, leaving keys and structure alone, so an answer
+ * reaches the model through its tool result with the same masking a typed message gets.
+ */
+async function maskAnswers<T>(value: T, maskText: MaskText): Promise<T> {
+  if (typeof value === 'string') {
+    return (await maskText(value)) as T;
+  }
+  if (Array.isArray(value)) {
+    return (await Promise.all(value.map((item) => maskAnswers(item, maskText)))) as T;
+  }
+  if (value != null && typeof value === 'object') {
+    const entries = await Promise.all(
+      Object.entries(value).map(async ([key, item]) => [key, await maskAnswers(item, maskText)]),
+    );
+    return Object.fromEntries(entries) as T;
+  }
+  return value;
+}
+
+/**
  * Create the `ask_user_question` tool instance. The func calls the SDK's
  * `askUserQuestions()` helper, which raises a LangGraph `interrupt()` — on the first
  * pass execution unwinds (the run pauses; `run.getInterrupt().payload.type ===
@@ -291,17 +312,25 @@ export const AskUserQuestionToolDefinition: AskUserQuestionToolDefinitionShape =
  * LangGraph resume contract (documented on the SDK helper): the tool body re-runs
  * from the top on the resume pass, and sibling tools in the same batch re-execute —
  * which is why the description forbids parallel calls.
+ *
+ * With `maskText`, each answer is masked before it becomes the ToolMessage: tool results
+ * are never evaluated by a guardrail attached to the model call, and the answer is text the
+ * human typed, like a message.
  */
 export function createAskUserQuestionTool(
   validationErrorsByToolCallId?: Map<string, ToolInputValidationError>,
+  { maskText }: { maskText?: MaskText } = {},
 ): DynamicStructuredTool<typeof askUserQuestionToolSchema> {
+  const toToolResult = async (resolution: unknown): Promise<string> =>
+    JSON.stringify(maskText ? await maskAnswers(resolution, maskText) : resolution);
+
   /** Kept out of the provider-facing definition. A graph rebuilt during a
    * rolling deploy can still rerun checkpointed legacy `{ question, ... }`
    * arguments through this schema and consume its retained `{ answer }` resume. */
   const legacyAskTool = tool(
     async (input, config?: { toolCall?: { id?: string } }) => {
       const resolution = askUserQuestion(input, { toolCallId: config?.toolCall?.id });
-      return JSON.stringify(resolution);
+      return toToolResult(resolution);
     },
     {
       name: ASK_USER_QUESTION_TOOL_NAME,
@@ -312,7 +341,7 @@ export function createAskUserQuestionTool(
   const askTool = tool(
     async (input: AskUserQuestionToolInput, config?: { toolCall?: { id?: string } }) => {
       const resolution = askUserQuestions(input, { toolCallId: config?.toolCall?.id });
-      return JSON.stringify(resolution);
+      return toToolResult(resolution);
     },
     {
       name: ASK_USER_QUESTION_TOOL_NAME,

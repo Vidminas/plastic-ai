@@ -1,4 +1,5 @@
 import { FileSources } from 'librechat-data-provider';
+import { trackDownload } from '~/lib/rum/actions';
 
 const blobDownloadFilenames = new Map<string, string>();
 
@@ -89,10 +90,12 @@ export function triggerDownload(target: string, filename: string): void {
   const isBlob = target.startsWith('blob:');
   const link = document.createElement('a');
   link.href = target;
-  link.setAttribute('download', blobDownloadFilenames.get(target) ?? filename);
+  const downloadFilename = blobDownloadFilenames.get(target) ?? filename;
+  link.setAttribute('download', downloadFilename);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  trackDownload(downloadFilename);
   if (isBlob) {
     setTimeout(() => {
       unregisterDownloadFilename(target);

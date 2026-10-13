@@ -1,6 +1,7 @@
 import { ErrorTypes } from 'librechat-data-provider';
 import type { SafeErrorMetadata } from '../../utils/errors';
 import type { ModelErrorTrackerCallback } from './tracker';
+import type { MaskText } from '../../guardrails/mask';
 import {
   resolveLangChainError,
   getModelStreamFailure,
@@ -15,6 +16,8 @@ const UPSTREAM_MODEL_ERROR_CODE = 'UPSTREAM_MODEL_ERROR';
 const UPSTREAM_MODEL_ERROR_ORIGIN = 'model_provider';
 const UNKNOWN_UPSTREAM_MODEL_ERROR_TYPE = '_OTHER';
 const UPSTREAM_MODEL_ERROR_FALLBACK = 'The model provider could not complete this request.';
+/** Logged in place of a provider message that could not be masked. */
+const PROVIDER_MESSAGE_UNMASKED = '[withheld: could not be masked]';
 
 function safelyResolveLangChainError(error: unknown): string | undefined {
   try {
@@ -29,6 +32,8 @@ export interface UpstreamModelErrorMetadata extends SafeErrorMetadata {
   readonly errorOrigin: typeof UPSTREAM_MODEL_ERROR_ORIGIN;
   readonly errorType: string;
   readonly traceId?: string;
+  /** The provider's own message, when `logProviderErrors` is on; masked with `piiMasking`. */
+  readonly providerMessage?: string;
 }
 
 export interface TerminalRunErrorLogger {
@@ -82,6 +87,8 @@ export function createTerminalRunErrorObserver({
   protectionEnabled,
   maxProviderErrorChars,
   genericMessage = `${source} Error:`,
+  logProviderErrors = false,
+  maskText,
 }: {
   logger: TerminalRunErrorLogger;
   responseMessageId?: string;
@@ -95,6 +102,10 @@ export function createTerminalRunErrorObserver({
   protectionEnabled?: boolean;
   maxProviderErrorChars?: number;
   genericMessage?: string;
+  /** Add the provider's message to the upstream model error log (`logProviderErrors`). */
+  logProviderErrors?: boolean;
+  /** Masks the provider's message before it is logged (`piiMasking`). */
+  maskText?: MaskText;
 }): TerminalRunErrorObserver {
   const modelErrorTracker = createModelErrorTracker();
   return Object.freeze({
@@ -141,9 +152,23 @@ export function createTerminalRunErrorObserver({
         return;
       }
 
-      logger.error(
-        `${source} Upstream model error`,
-        getUpstreamModelErrorMetadata(upstreamModelError, responseMessageId),
+      const message = `${source} Upstream model error`;
+      const metadata = getUpstreamModelErrorMetadata(upstreamModelError, responseMessageId);
+      const providerMessage = logProviderErrors
+        ? (getProviderErrorMessage(upstreamModelError, maxProviderErrorChars) ??
+          getProviderErrorMessage(error, maxProviderErrorChars))
+        : undefined;
+      if (providerMessage == null) {
+        logger.error(message, metadata);
+        return;
+      }
+      if (maskText == null) {
+        logger.error(message, { ...metadata, providerMessage });
+        return;
+      }
+      maskText(providerMessage).then(
+        (masked) => logger.error(message, { ...metadata, providerMessage: masked }),
+        () => logger.error(message, { ...metadata, providerMessage: PROVIDER_MESSAGE_UNMASKED }),
       );
     },
   });

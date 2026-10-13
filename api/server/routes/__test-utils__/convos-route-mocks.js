@@ -80,6 +80,9 @@ module.exports = {
 
   api: (overrides = {}) => ({
     withToolCallPreviews: (_req, result) => result,
+    /** No `piiMasking` in these configs, so text passes through unchanged. */
+    maskUserText: jest.fn(async (_config, text) => text),
+    getGuardrailTextMasker: jest.fn(() => undefined),
     createGeneratedTitleHandler: jest.fn(() => jest.fn()),
     createRenameConversationHandler: jest.fn((deps) => {
       renameHandlerInputs.push(deps);

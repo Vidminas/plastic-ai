@@ -4,6 +4,7 @@ import { megabyte, excelMimeTypes, FileSources } from 'librechat-data-provider';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import type { MistralOCRUploadResult } from '~/types';
 import { assertSafeZipSize } from './zipSafety';
+import { pptxToText } from './html';
 
 type FileParseFn = (file: Express.Multer.File) => Promise<string>;
 
@@ -67,6 +68,9 @@ function getParserForMimeType(mimetype: string): FileParseFn | undefined {
   if (mimetype === 'application/vnd.oasis.opendocument.text') {
     return odtToText;
   }
+  if (mimetype === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+    return presentationToText;
+  }
   return undefined;
 }
 
@@ -127,6 +131,11 @@ async function excelSheetToText(file: Express.Multer.File): Promise<string> {
   }
 
   return text;
+}
+
+/** Parses PowerPoint (.pptx), returns the text of each slide. */
+async function presentationToText(file: Express.Multer.File): Promise<string> {
+  return pptxToText(await fs.promises.readFile(file.path));
 }
 
 /**

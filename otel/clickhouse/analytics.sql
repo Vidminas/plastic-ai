@@ -16,8 +16,34 @@
 -- REPLACE: replacing swaps the definitions with renameat2(), which the EFS
 -- (NFS) volume ClickHouse runs on in AWS does not support. Dropping goes in
 -- reverse order of use, timeline first, as it reads the other views.
+--
+-- One table is never dropped: analytics.ui_events_store, the study's record of
+-- named UI actions and page views. HyperDX's own tables expire after 30 days
+-- (the collector's HYPERDX_OTEL_EXPORTER_TABLES_TTL), since they also hold the
+-- browser's operational telemetry; the store has no TTL, so these events stay
+-- until they are deleted at the end of the study.
 
 CREATE DATABASE IF NOT EXISTS analytics;
+
+-- The events, as the collector wrote them. ReplacingMergeTree, so copying the
+-- same span again (the backfill below, on every run) leaves one row.
+CREATE TABLE IF NOT EXISTS analytics.ui_events_store
+(
+    Timestamp DateTime64(9),
+    TraceId String,
+    SpanId String,
+    SpanName LowCardinality(String),
+    ServiceName LowCardinality(String),
+    SpanAttributes Map(LowCardinality(String), String)
+)
+ENGINE = ReplacingMergeTree
+PARTITION BY toYYYYMM(Timestamp)
+ORDER BY (Timestamp, SpanId);
+
+-- Copies each named action and page view into the store as the collector
+-- inserts it. Recreated on every run, so a change to the filter applies; the
+-- backfill after it covers anything inserted in between.
+DROP VIEW IF EXISTS analytics.ui_events_capture;
 
 DROP VIEW IF EXISTS analytics.timeline;
 DROP VIEW IF EXISTS analytics.chat_turns;
@@ -27,8 +53,26 @@ DROP VIEW IF EXISTS analytics.spans;
 DROP VIEW IF EXISTS analytics.llm_traces;
 DROP VIEW IF EXISTS analytics.ui_events;
 
+CREATE MATERIALIZED VIEW analytics.ui_events_capture
+TO analytics.ui_events_store
+DEFINER = CURRENT_USER SQL SECURITY DEFINER
+AS SELECT Timestamp, TraceId, SpanId, SpanName, ServiceName, SpanAttributes
+FROM hyperdx.otel_traces
+WHERE SpanName LIKE 'message.%'
+   OR SpanName LIKE 'file.%'
+   OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
+
+-- What the collector's tables still hold (their last 30 days), including any
+-- event inserted while the capture view was being recreated.
+INSERT INTO analytics.ui_events_store
+SELECT Timestamp, TraceId, SpanId, SpanName, ServiceName, SpanAttributes
+FROM hyperdx.otel_traces
+WHERE SpanName LIKE 'message.%'
+   OR SpanName LIKE 'file.%'
+   OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
+
 -- Named UI actions (client/src/lib/rum/actions.ts) and page views, from the
--- browser telemetry the HyperDX collector stores.
+-- store above. client_build is the browser build the session ran.
 CREATE VIEW analytics.ui_events
 DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
@@ -44,10 +88,18 @@ AS SELECT
     SpanAttributes['agentId'] AS agent_id,
     SpanAttributes['rating'] AS rating,
     SpanAttributes['count'] AS file_count,
+    SpanAttributes['fileId'] AS file_id,
+    if(SpanName = 'file.download', SpanAttributes['fileType'], SpanAttributes['type']) AS file_type,
+    SpanAttributes['toolResource'] AS tool_resource,
+    SpanAttributes['questions'] AS questions,
+    SpanAttributes['declined'] AS declined,
+    SpanAttributes['stage'] AS stage,
+    SpanAttributes['reason'] AS reason,
+    SpanAttributes['identifiers'] AS identifiers,
+    SpanAttributes['status'] AS status,
+    SpanAttributes['clientBuildId'] AS client_build,
     ServiceName AS service
-FROM hyperdx.otel_traces
-WHERE SpanName LIKE 'message.%'
-   OR SpanName IN ('model.switch', 'agent.switch', 'file.upload', 'conversation.new', 'spa-route-change');
+FROM analytics.ui_events_store FINAL;
 
 -- Langfuse 4 stores the app's OpenTelemetry traces in events_full, one row per
 -- span (agent, chain, tool, model call), each carrying its trace's user,
@@ -203,7 +255,7 @@ DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
     toDateTime64(time, 3) AS Timestamp,
     'ui' AS ServiceName,
-    'info' AS SeverityText,
+    if(action = 'file.upload_failed', 'warn', 'info') AS SeverityText,
     if(action = 'spa-route-change', 'page.view', toString(action)) AS Event,
     if(action = 'spa-route-change', concat('page.view ', route), toString(action)) AS Body,
     user_id AS UserId,
@@ -224,7 +276,10 @@ AS SELECT
     '' AS TraceId,
     mapFilter((k, v) -> v != '', map(
         'user_role', user_role, 'route', route, 'from_route', from_route,
-        'endpoint', endpoint, 'agent_id', agent_id, 'file_count', file_count
+        'endpoint', endpoint, 'agent_id', agent_id, 'file_count', file_count,
+        'file_id', file_id, 'file_type', file_type, 'tool_resource', tool_resource,
+        'questions', questions, 'declined', declined, 'stage', stage, 'reason', reason,
+        'identifiers', identifiers, 'status', status, 'client_build', client_build
     )) AS LogAttributes
 FROM analytics.ui_events
 UNION ALL

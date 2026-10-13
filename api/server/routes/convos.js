@@ -40,6 +40,8 @@ const {
   GenerationJobManager,
   isStopConfirmed,
   withToolCallPreviews,
+  maskUserText,
+  getGuardrailTextMasker,
 } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys, EModelEndpoint } = require('librechat-data-provider');
@@ -715,6 +717,7 @@ router.post(
   createRenameConversationHandler({
     saveConvo: db.saveConvo,
     getConvo: db.getConvo,
+    getMaskText: getGuardrailTextMasker,
     getActiveRunIds:
       GenerationJobManager.getCleanupBlockingJobIdsForConversations.bind(GenerationJobManager),
     logger,
@@ -831,9 +834,11 @@ router.post(
   configMiddleware,
   filterConversationTitle,
   async (req, res) => {
-    const { conversationId, title } = req.body;
+    // const { conversationId, title } = req.body;
+    const { conversationId } = req.body;
 
     try {
+      const title = await maskUserText(req.config, req.body.title);
       const result = await duplicateConversation({
         userId: req.user.id,
         conversationId,

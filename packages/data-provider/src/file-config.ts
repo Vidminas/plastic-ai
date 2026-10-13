@@ -344,11 +344,12 @@ export const defaultOCRMimeTypes = [
   /^application\/vnd\.oasis\.opendocument\.(text|spreadsheet|presentation|graphics)$/,
 ];
 
-/** MIME types handled by the built-in document parser (pdf, docx, excel variants, ods/odt) */
+/** MIME types handled by the built-in document parser (pdf, docx, pptx, excel variants, ods/odt) */
 export const documentParserMimeTypes = [
   excelMimeTypes,
   /^application\/pdf$/,
   /^application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document$/,
+  /^application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation$/,
   /^application\/vnd\.oasis\.opendocument\.spreadsheet$/,
   /^application\/vnd\.oasis\.opendocument\.text$/,
 ];
