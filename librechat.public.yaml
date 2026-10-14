@@ -154,6 +154,49 @@ piiMasking:
     guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}'
     guardrailVersion: '${BEDROCK_GUARDRAIL_VERSION}'
 
+# Safeguarding (terraform/safeguarding.tf): content filters, denied topics and
+# word lists on what participants write (messages, quotes, answers to the
+# assistant's questions), the text of their uploads, and the assistant's replies.
+# A detection at a `flag` level is logged for the safeguarding team (HyperDX,
+# and a `safeguarding` score on the Langfuse trace) and the content goes on. At a
+# `block` level the content is blocked: the participant is told why and
+# shown the support services (openingHours.support, unless `signposting` lists
+# others), and the Designated Safeguarding Leads are emailed through
+# alerts.topicArn. Levels are the lowest guardrail confidence (LOW, MEDIUM,
+# HIGH) that counts; OFF never does. Terraform reads `block` and `topics`
+# from this file to set the chat guardrail's blocking strengths, so tune them
+# here, from pilot testing, and apply. Topic names must match the guardrail's.
+safeguarding:
+  guardrail:
+    guardrailIdentifier: '${BEDROCK_SAFEGUARDING_GUARDRAIL_ID}'
+    guardrailVersion: '${BEDROCK_SAFEGUARDING_GUARDRAIL_VERSION}'
+  flag:
+    HATE: MEDIUM
+    INSULTS: MEDIUM
+    SEXUAL: MEDIUM
+    VIOLENCE: MEDIUM
+    MISCONDUCT: MEDIUM
+    PROMPT_ATTACK: MEDIUM
+  block:
+    HATE: HIGH
+    INSULTS: HIGH
+    SEXUAL: HIGH
+    VIOLENCE: HIGH
+    MISCONDUCT: HIGH
+    PROMPT_ATTACK: HIGH
+  topics:
+    self-harm: block
+    suicidal-ideation: block
+    acute-distress: block
+    bullying: block
+  # Word list matches (the Imagination Tool list and AWS's profanity list) are
+  # only ever flagged.
+  words: flag
+  # A message or upload is refused when the guardrail cannot be reached.
+  onError: refuse
+  alerts:
+    topicArn: '${SAFEGUARDING_ALERT_TOPIC_ARN}'
+
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.
 speech:
@@ -222,18 +265,21 @@ endpoints:
       - 'eu.anthropic.claude-sonnet-5'
     inferenceProfiles:
       'eu.anthropic.claude-sonnet-5': 'arn:aws:bedrock:eu-west-2:575062583775:inference-profile/eu.anthropic.claude-sonnet-5'
-    # The stack's output guardrail (terraform/guardrail.tf) only detects personal
-    # identifiers in what the model writes; its prompt checks are off, since the
-    # app masks prompts itself (piiMasking below) and Bedrock would refuse a
-    # conversation over about 106,000 characters. The app reads its trace and logs
-    # the identifier types found, never the text, then drops the trace, which
-    # holds the matches. `async` streams the response without waiting for the
-    # check; nothing is changed either way.
+    # The stack's chat guardrail (terraform/guardrail.tf) checks only what the
+    # model writes; its prompt checks are off, since the app screens and masks
+    # prompts itself (safeguarding and piiMasking below) and Bedrock would refuse a
+    # conversation over about 106,000 characters. It detects personal identifiers,
+    # and blocks content filters and denied topics at safeguarding's `block`
+    # levels. `sync` holds each part of the response until it has been checked,
+    # so a blocked part never reaches the participant (earlier parts already
+    # have). `enabled_full` reports every filter's confidence, blocking or not,
+    # so the app can flag those at the `flag` levels. The app logs what was
+    # found, never the text, then drops the trace, which holds the matches.
     guardrailConfig:
       guardrailIdentifier: '${BEDROCK_OUTPUT_GUARDRAIL_ID}'
       guardrailVersion: '${BEDROCK_OUTPUT_GUARDRAIL_VERSION}'
-      trace: 'enabled'
-      streamProcessingMode: 'async'
+      trace: 'enabled_full'
+      streamProcessingMode: 'sync'
 
 modelSpecs:
   list:
