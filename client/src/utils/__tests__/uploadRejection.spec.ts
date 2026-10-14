@@ -32,6 +32,12 @@ describe('localizeUploadRejection', () => {
     expect(message).not.toMatch(/^com_/);
   });
 
+  it('says a file safeguarding blocked was not added', () => {
+    expect(localizeUploadRejection(rejection('safeguarding'), localize)).toBe(
+      strings.com_safeguarding_blocked_upload,
+    );
+  });
+
   it('names each kind of identifier found once', () => {
     const message = localizeUploadRejection(
       rejection('identifiers', [

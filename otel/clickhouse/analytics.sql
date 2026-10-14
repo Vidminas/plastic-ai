@@ -18,10 +18,13 @@
 -- reverse order of use, timeline first, as it reads the other views.
 --
 -- One table is never dropped: analytics.ui_events_store, the study's record of
--- named UI actions and page views. HyperDX's own tables expire after 30 days
--- (the collector's HYPERDX_OTEL_EXPORTER_TABLES_TTL), since they also hold the
--- browser's operational telemetry; the store has no TTL, so these events stay
--- until they are deleted at the end of the study.
+-- named UI actions and page views, and of the server's safeguarding detections
+-- (safeguarding.flag and safeguarding.block, packages/api/src/safeguarding;
+-- safeguarding.withhold before the level was renamed).
+-- HyperDX's own tables expire after 30 days (the collector's
+-- HYPERDX_OTEL_EXPORTER_TABLES_TTL), since they also hold the browser's
+-- operational telemetry; the store has no TTL, so these events stay until they
+-- are deleted at the end of the study.
 
 CREATE DATABASE IF NOT EXISTS analytics;
 
@@ -60,6 +63,7 @@ AS SELECT Timestamp, TraceId, SpanId, SpanName, ServiceName, SpanAttributes
 FROM hyperdx.otel_traces
 WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'file.%'
+   OR SpanName LIKE 'safeguarding.%'
    OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
 
 -- What the collector's tables still hold (their last 30 days), including any
@@ -69,10 +73,13 @@ SELECT Timestamp, TraceId, SpanId, SpanName, ServiceName, SpanAttributes
 FROM hyperdx.otel_traces
 WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'file.%'
+   OR SpanName LIKE 'safeguarding.%'
    OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
 
--- Named UI actions (client/src/lib/rum/actions.ts) and page views, from the
--- store above. client_build is the browser build the session ran.
+-- Named UI actions (client/src/lib/rum/actions.ts), page views and safeguarding
+-- detections, from the store above. client_build is the browser build the
+-- session ran. A detection names its filters (type:name[:confidence]) and the
+-- participant's study ID (Cognito username), never the content.
 CREATE VIEW analytics.ui_events
 DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
@@ -98,6 +105,11 @@ AS SELECT
     SpanAttributes['identifiers'] AS identifiers,
     SpanAttributes['status'] AS status,
     SpanAttributes['clientBuildId'] AS client_build,
+    SpanAttributes['severity'] AS severity,
+    SpanAttributes['source'] AS source,
+    SpanAttributes['filters'] AS filters,
+    SpanAttributes['studyId'] AS study_id,
+    SpanAttributes['messageId'] AS message_id,
     ServiceName AS service
 FROM analytics.ui_events_store FINAL;
 
@@ -255,7 +267,8 @@ DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
     toDateTime64(time, 3) AS Timestamp,
     'ui' AS ServiceName,
-    if(action = 'file.upload_failed', 'warn', 'info') AS SeverityText,
+    multiIf(action = 'file.upload_failed' OR action = 'safeguarding.flag', 'warn',
+            action IN ('safeguarding.block', 'safeguarding.withhold'), 'error', 'info') AS SeverityText,
     if(action = 'spa-route-change', 'page.view', toString(action)) AS Event,
     if(action = 'spa-route-change', concat('page.view ', route), toString(action)) AS Body,
     user_id AS UserId,
@@ -279,7 +292,9 @@ AS SELECT
         'endpoint', endpoint, 'agent_id', agent_id, 'file_count', file_count,
         'file_id', file_id, 'file_type', file_type, 'tool_resource', tool_resource,
         'questions', questions, 'declined', declined, 'stage', stage, 'reason', reason,
-        'identifiers', identifiers, 'status', status, 'client_build', client_build
+        'identifiers', identifiers, 'status', status, 'client_build', client_build,
+        'severity', severity, 'source', source, 'filters', filters, 'study_id', study_id,
+        'message_id', message_id
     )) AS LogAttributes
 FROM analytics.ui_events
 UNION ALL

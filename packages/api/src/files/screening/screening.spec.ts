@@ -431,6 +431,48 @@ describe('screenUpload', () => {
     });
   });
 
+  it('refuses text safeguarding blocks, naming the filters, after the PII check', async () => {
+    const { services } = fakeServices();
+    const file = await upload('story.txt', 'A story');
+    const safeguard = jest.fn().mockResolvedValue({
+      ok: false,
+      info: { source: 'upload', reasons: [{ type: 'topic', name: 'self-harm' }] },
+    });
+    expect(await screenUpload({ file, key: 'user-1/file-1', config, services, safeguard })).toEqual(
+      {
+        ok: false,
+        error: {
+          code: ErrorTypes.UPLOAD_REJECTED,
+          reason: 'safeguarding',
+          reasons: [{ type: 'topic', name: 'self-harm' }],
+        },
+      },
+    );
+    expect(safeguard).toHaveBeenCalledWith('A story');
+    expect(services.detector.detect).toHaveBeenCalled();
+  });
+
+  it('refuses text safeguarding could not screen as unavailable, and passes flagged text', async () => {
+    const { services } = fakeServices();
+    const screenWith = async (check: object) =>
+      screenUpload({
+        file: await upload('story.txt', 'A story'),
+        key: 'user-1/file-1',
+        config,
+        services,
+        safeguard: jest.fn().mockResolvedValue(check),
+      });
+    expect(
+      await screenWith({ ok: false, info: { source: 'upload', reasons: [], unavailable: true } }),
+    ).toEqual({
+      ok: false,
+      error: { code: ErrorTypes.UPLOAD_REJECTED, reason: 'scan_unavailable' },
+    });
+    expect(
+      await screenWith({ ok: true, assessment: { severity: 'flag', detections: [] } }),
+    ).toEqual({ ok: true });
+  });
+
   it('screens the text of every slide in a presentation', async () => {
     const { services } = fakeServices({ identifiers: ['EMAIL'] });
     const file = await upload(

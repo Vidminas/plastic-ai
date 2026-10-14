@@ -10,6 +10,7 @@ const {
   GenerationJobManager,
   getSafeErrorMetadata,
   createMessageLengthLimit,
+  createSafeguardingCheck,
 } = require('@librechat/api');
 const { PermissionTypes, Permissions, PermissionBits } = require('librechat-data-provider');
 const {
@@ -75,6 +76,7 @@ router.use(
   }),
 );
 router.use(moderateText);
+router.use(createSafeguardingCheck({ deny: denyRequest }));
 router.use(checkAgentAccess);
 router.use(checkAgentResourceAccess);
 router.use(validateConvoAccess);

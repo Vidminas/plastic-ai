@@ -340,6 +340,12 @@ router.get('/', async function (req, res) {
       ...(appConfig?.openingHours
         ? { openingHours: { ...appConfig.openingHours, serverTime: Date.now() } }
         : {}),
+      ...(appConfig?.safeguarding
+        ? {
+            safeguardingSupport:
+              appConfig.safeguarding.signposting ?? appConfig.openingHours?.support ?? [],
+          }
+        : {}),
       ...(codeEnvironmentDecisionVersion != null ? { codeEnvironmentDecisionVersion } : {}),
       mcpApps: resolveMCPAppsPolicy(
         appConfig?.mcpSettings?.apps,

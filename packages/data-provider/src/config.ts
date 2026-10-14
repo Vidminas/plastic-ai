@@ -3154,6 +3154,8 @@ export type TStartupConfig = {
   maxUserMessageChars?: number;
   /** `openingHours`, with the server's clock (ms) when sent, so the browser shows the resting page on time. */
   openingHours?: TOpeningHours & { serverTime: number };
+  /** `safeguarding.signposting` (or `openingHours.support`): where blocked content points to. */
+  safeguardingSupport?: TSupportService[];
   /** Conversation-owned code-environment decision protocol supported by the API.
    * Clients must not emit selection-less decisions unless this is advertised. */
   codeEnvironmentDecisionVersion?: typeof CODE_ENVIRONMENT_DECISION_VERSION;
@@ -3831,6 +3833,84 @@ export const piiMaskingSchema = z.object({
 
 export type TPiiMasking = z.infer<typeof piiMaskingSchema>;
 
+/** The content filter categories a Bedrock guardrail scores, each LOW, MEDIUM or HIGH. */
+export const SAFEGUARDING_CONTENT_FILTERS = [
+  'HATE',
+  'INSULTS',
+  'SEXUAL',
+  'VIOLENCE',
+  'MISCONDUCT',
+  'PROMPT_ATTACK',
+] as const;
+export type SafeguardingContentFilter = (typeof SAFEGUARDING_CONTENT_FILTERS)[number];
+
+/** The lowest guardrail confidence that reaches a level; `OFF` never does. */
+export const safeguardingConfidenceSchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'OFF']);
+export type SafeguardingConfidence = z.infer<typeof safeguardingConfidenceSchema>;
+
+const safeguardingLevelsSchema = (fallback: SafeguardingConfidence) =>
+  z
+    .object(
+      Object.fromEntries(
+        SAFEGUARDING_CONTENT_FILTERS.map((filter) => [
+          filter,
+          safeguardingConfidenceSchema.default(fallback),
+        ]),
+      ) as Record<SafeguardingContentFilter, z.ZodDefault<typeof safeguardingConfidenceSchema>>,
+    )
+    .default({});
+
+/**
+ * Screens what participants write and upload, and what models reply, with Bedrock guardrail
+ * content filters, denied topics and word filters. A detection at `flag` or above is logged
+ * for the safeguarding team and the content goes through; at `block` or above the content
+ * is blocked, the participant sees why and where to find support (`signposting`), and
+ * `alerts.topicArn` is notified.
+ *
+ * Prompts, answers to the model's questions and upload text go through `guardrail` with
+ * ApplyGuardrail, which only detects; the app compares each confidence with these levels.
+ * Model responses are screened by the guardrail on the model call
+ * (`endpoints.bedrock.guardrailConfig`, with `streamProcessingMode: sync` and
+ * `trace: enabled_full`), which blocks at the `block` levels itself. Unset, nothing is
+ * screened.
+ */
+export const safeguardingSchema = z.object({
+  guardrail: guardrailReferenceSchema,
+  /** The confidence, per content filter, at which a detection is flagged. */
+  flag: safeguardingLevelsSchema('MEDIUM'),
+  /** The confidence, per content filter, at which content is blocked. */
+  block: safeguardingLevelsSchema('HIGH'),
+  /** What a denied topic's detection does, by the topic's name in the guardrail. Unlisted: `flag`. */
+  topics: z.record(z.string(), z.enum(['flag', 'block'])).default({}),
+  /** Word filter and managed word list matches are flagged, or ignored with `off`. */
+  words: z.enum(['flag', 'off']).default('flag'),
+  /** `refuse` turns content away when the guardrail cannot be reached; `allow` lets it through. */
+  onError: z.enum(['refuse', 'allow']).default('refuse'),
+  /** The SNS topic blocked content is reported to; unset, no alerts are sent. */
+  alerts: z.object({ topicArn: z.string().min(1) }).optional(),
+  /** Services shown with blocked content, as on the resting page. Unset, `openingHours.support`. */
+  signposting: z.array(supportServiceSchema).optional(),
+});
+
+export type TSafeguarding = z.infer<typeof safeguardingSchema>;
+
+/** Why content was blocked: the filters that reached `block`, never the text. */
+export type TSafeguardingReason = {
+  /** `model`: the model's own safety filter stopped its response (`MODEL_FILTER`). */
+  type: 'content' | 'topic' | 'model';
+  /** A content filter category, a denied topic's name, or `MODEL_FILTER`. */
+  name: string;
+};
+
+/** The `info` of a `safeguarding` error: why content was blocked, or that it could not be screened. */
+export type TSafeguardingErrorInfo = {
+  /** What was blocked: the participant's own message or file, or the model's response. */
+  source: 'prompt' | 'answer' | 'upload' | 'response';
+  reasons: TSafeguardingReason[];
+  /** The guardrail could not be reached, so the content was refused unscreened. */
+  unavailable?: boolean;
+};
+
 /** Why `uploadScreening` refused an upload; the composer shows `com_error_files_<reason>`. */
 export const UPLOAD_REJECTION_REASONS = [
   'unsupported_type',
@@ -3840,6 +3920,7 @@ export const UPLOAD_REJECTION_REASONS = [
   'unreadable',
   'too_long',
   'identifiers',
+  'safeguarding',
 ] as const;
 export type UploadRejectionReason = (typeof UPLOAD_REJECTION_REASONS)[number];
 
@@ -3850,6 +3931,8 @@ export type TUploadRejection = {
   reason: UploadRejectionReason;
   /** Guardrail PII entity types, never the matched text. */
   identifiers?: string[];
+  /** For `safeguarding`: the filters that blocked the file. */
+  reasons?: TSafeguardingReason[];
 };
 
 export function isUploadRejection(data: unknown): data is TUploadRejection {
@@ -4280,6 +4363,7 @@ export const configSchema = z.object({
   openingHours: openingHoursSchema.optional(),
   uploadScreening: uploadScreeningSchema.optional(),
   piiMasking: piiMaskingSchema.optional(),
+  safeguarding: safeguardingSchema.optional(),
   endpoints: z
     .object({
       allowedAddresses: allowedAddressesSchema,
@@ -4989,6 +5073,10 @@ export enum ErrorTypes {
    * `uploadScreening` refused an upload; the response's `reason` says why
    */
   UPLOAD_REJECTED = 'upload_rejected',
+  /**
+   * `safeguarding` blocked a prompt or a model response; `info.reasons` says which filters
+   */
+  SAFEGUARDING = 'safeguarding',
   /**
    * Invalid request error, API rejected request
    */

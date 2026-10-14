@@ -46,7 +46,7 @@ function useIsOpen(
   return isWithinOpeningHours(hours, new Date(Date.now() + offset));
 }
 
-function SupportService({ service }: { service: TSupportService }) {
+export function SupportService({ service }: { service: TSupportService }) {
   const localize = useLocalize();
   return (
     <li className="border-border-light bg-surface-secondary rounded-lg border p-4">

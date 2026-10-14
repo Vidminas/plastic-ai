@@ -87,6 +87,12 @@ interface:
   temporaryChat: false
   memories: false
   runCode: false
+  # The model calls and tool spans behind each response, read from Langfuse and
+  # shown to the conversation's owner only. Off: traces stay readable in
+  # Langfuse itself.
+  traceViewer:
+    enabled: false
+    showInputOutput: false
 
 registration:
   socialLogins: ["openid"]
@@ -118,9 +124,9 @@ fileConfig:
 # its extension; it waits in the quarantine bucket (AWS_QUARANTINE_BUCKET_NAME)
 # until GuardDuty Malware Protection tags it clean; and the text of a document,
 # a text file or an image (read by Amazon Textract) goes to the stack's Bedrock
-# guardrail (terraform/guardrail.tf), whose report must contain none of the
-# identifiers below. It is used only here: chat keeps the guardrail under
-# endpoints.bedrock. A refused upload is deleted and the user is told why. Images inside documents are
+# guardrail (piiMasking.guardrail, the one that masks prompts), whose
+# report must contain none of the identifiers below. A refused upload is deleted
+# and the user is told why. Images inside documents are
 # not read. Legacy .doc, .ppt, .rtf and .epub are not accepted, because their text
 # cannot be extracted for screening. Images are limited to the formats Bedrock
 # models accept: PNG, JPEG, GIF and WebP.
@@ -129,13 +135,67 @@ uploadScreening:
   scanTimeoutSeconds: 60
   pii:
     detector: guardrail
-    guardrail:
-      guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}'
-      guardrailVersion: '${BEDROCK_GUARDRAIL_VERSION}'
     maxCharacters: 2000000
     images: textract
     # `entities` is left at its default: every guardrail type that identifies a
     # person, account or secret, universal and UK, except NAME, URL and AGE.
+
+# Personal identifiers are masked with the stack's guardrail (terraform/guardrail.tf)
+# so the app neither stores them nor sends them to a model. What a user writes is
+# masked before it is saved: messages they send or edit, and titles they set. Before
+# a model call the whole history is masked again, from a cache, along with a title's
+# input and answers to the model's clarifying questions. The user and the model see
+# {EMAIL}, {PHONE} and so on. Model responses are stored as written; the output
+# guardrail on the model calls (endpoints.bedrock below) detects identifiers in them.
+# System prompts and tool results are not masked. Langfuse traces are masked too,
+# every string in them, before they are exported.
+piiMasking:
+  guardrail:
+    guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}'
+    guardrailVersion: '${BEDROCK_GUARDRAIL_VERSION}'
+
+# Safeguarding (terraform/safeguarding.tf): content filters, denied topics and
+# word lists on what participants write (messages, quotes, answers to the
+# assistant's questions), the text of their uploads, and the assistant's replies.
+# A detection at a `flag` level is logged for the safeguarding team (HyperDX,
+# and a `safeguarding` score on the Langfuse trace) and the content goes on. At a
+# `block` level the content is blocked: the participant is told why and
+# shown the support services (openingHours.support, unless `signposting` lists
+# others), and the Designated Safeguarding Leads are emailed through
+# alerts.topicArn. Levels are the lowest guardrail confidence (LOW, MEDIUM,
+# HIGH) that counts; OFF never does. Terraform reads `block` and `topics`
+# from this file to set the chat guardrail's blocking strengths, so tune them
+# here, from pilot testing, and apply. Topic names must match the guardrail's.
+safeguarding:
+  guardrail:
+    guardrailIdentifier: '${BEDROCK_SAFEGUARDING_GUARDRAIL_ID}'
+    guardrailVersion: '${BEDROCK_SAFEGUARDING_GUARDRAIL_VERSION}'
+  flag:
+    HATE: MEDIUM
+    INSULTS: MEDIUM
+    SEXUAL: MEDIUM
+    VIOLENCE: MEDIUM
+    MISCONDUCT: MEDIUM
+    PROMPT_ATTACK: MEDIUM
+  block:
+    HATE: HIGH
+    INSULTS: HIGH
+    SEXUAL: HIGH
+    VIOLENCE: HIGH
+    MISCONDUCT: HIGH
+    PROMPT_ATTACK: HIGH
+  topics:
+    self-harm: block
+    suicidal-ideation: block
+    acute-distress: block
+    bullying: block
+  # Word list matches (the Imagination Tool list and AWS's profanity list) are
+  # only ever flagged.
+  words: flag
+  # A message or upload is refused when the guardrail cannot be reached.
+  onError: refuse
+  alerts:
+    topicArn: '${SAFEGUARDING_ALERT_TOPIC_ARN}'
 
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.
@@ -196,32 +256,30 @@ actions:
 endpoints:
   agents:
     capabilities: ["context", "ask_user_question", "tools"]
+    # A failed model call logs the provider's own message, masked with the
+    # piiMasking guardrail first, since it can echo what was sent.
+    logProviderErrors: true
 
   bedrock:
     models:
       - 'eu.anthropic.claude-sonnet-5'
     inferenceProfiles:
       'eu.anthropic.claude-sonnet-5': 'arn:aws:bedrock:eu-west-2:575062583775:inference-profile/eu.anthropic.claude-sonnet-5'
-    # chaild-test-guardrail-dev-v2; the task role may apply it (bedrock_guardrail_arns).
+    # The stack's chat guardrail (terraform/guardrail.tf) checks only what the
+    # model writes; its prompt checks are off, since the app screens and masks
+    # prompts itself (safeguarding and piiMasking below) and Bedrock would refuse a
+    # conversation over about 106,000 characters. It detects personal identifiers,
+    # and blocks content filters and denied topics at safeguarding's `block`
+    # levels. `sync` holds each part of the response until it has been checked,
+    # so a blocked part never reaches the participant (earlier parts already
+    # have). `enabled_full` reports every filter's confidence, blocking or not,
+    # so the app can flag those at the `flag` levels. The app logs what was
+    # found, never the text, then drops the trace, which holds the matches.
     guardrailConfig:
-      guardrailIdentifier: 'arn:aws:bedrock:eu-west-2:575062583775:guardrail/qpq72rkzv8qy'
-      guardrailVersion: '1'
-      trace: 'enabled'
-
-  custom:
-    # The PII proxy service in the same VPC (Cloud Map: pii-proxy.plastic-ai.local).
-    # It takes no credential; the key is a placeholder the client requires.
-    - name: 'PII Proxy'
-      apiKey: 'dummy'
-      baseURL: 'http://pii-proxy.plastic-ai.local:8000/v1'
-      models:
-        default:
-          - 'eu.anthropic.claude-sonnet-5'
-        fetch: false
-      headers:
-        X-Conversation-ID: '{{LIBRECHAT_BODY_CONVERSATIONID}}'
-      titleConvo: false
-      modelDisplayLabel: 'Claude Sonnet 5'
+      guardrailIdentifier: '${BEDROCK_OUTPUT_GUARDRAIL_ID}'
+      guardrailVersion: '${BEDROCK_OUTPUT_GUARDRAIL_VERSION}'
+      trace: 'enabled_full'
+      streamProcessingMode: 'sync'
 
 modelSpecs:
   list:
@@ -230,10 +288,4 @@ modelSpecs:
       description: 'Anthropic Claude Sonnet 5 via AWS Bedrock (eu-west-2, EU geo profile)'
       preset:
         endpoint: 'bedrock'
-        model: 'eu.anthropic.claude-sonnet-5'
-    - name: 'bedrock-claude-sonnet-5-pii-proxy'
-      label: 'Claude Sonnet 5 (PII Proxy)'
-      description: 'Claude Sonnet 5 routed through the PII proxy'
-      preset:
-        endpoint: 'PII Proxy'
         model: 'eu.anthropic.claude-sonnet-5'

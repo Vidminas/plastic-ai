@@ -8,6 +8,7 @@ import {
   hasActiveFiltersConfig,
   getConfigDefaults,
   piiMaskingSchema,
+  safeguardingSchema,
   langfuseConfigSchema,
   skillSyncConfigSchema,
   uploadScreeningSchema,
@@ -210,6 +211,8 @@ export const AppService = async (params?: {
       : uploadScreeningSchema.parse(config.uploadScreening);
   const piiMasking =
     config.piiMasking == null ? undefined : piiMaskingSchema.parse(config.piiMasking);
+  const safeguarding =
+    config.safeguarding == null ? undefined : safeguardingSchema.parse(config.safeguarding);
   const langfuse = loadLangfuseConfig(config);
 
   const defaultConfig = {
@@ -240,6 +243,7 @@ export const AppService = async (params?: {
     openingHours,
     uploadScreening,
     piiMasking,
+    safeguarding,
     summarization,
     availableTools,
     imageOutputType,

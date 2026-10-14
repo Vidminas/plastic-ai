@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import { v4 } from 'uuid';
+import { useSetAtom } from 'jotai';
 import debounce from 'lodash/debounce';
 import { useSetRecoilState } from 'recoil';
 import { useToastContext } from '@librechat/client';
@@ -41,6 +42,7 @@ import useAgentUploadTarget from '~/hooks/Agents/useAgentUploadTarget';
 import useLocalize, { TranslationKeys } from '~/hooks/useLocalize';
 import { useChatSettings } from '~/Providers/ChatSettingsContext';
 import { useDelayedUploadToast } from './useDelayedUploadToast';
+import { safeguardingNoticeAtom } from '~/store/safeguarding';
 import { useChatContext } from '~/Providers/ChatContext';
 import { importWithRecovery } from '~/lib/assets/lazy';
 import { ephemeralAgentByConvoId } from '~/store';
@@ -148,6 +150,7 @@ const mergeRecentUploads = (
 
 const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: FileHandlingState) => {
   const localize = useLocalize();
+  const showSafeguardingNotice = useSetAtom(safeguardingNoticeAtom);
   const queryClient = useQueryClient();
   const { showToast } = useToastContext();
   const [errors, setErrors] = useState<string[]>([]);
@@ -351,6 +354,9 @@ const useFileHandlingCore = (params: UseFileHandling | undefined, fileState: Fil
           errorMessage = 'com_error_files_upload_canceled';
         } else if (rejection) {
           errorMessage = localizeUploadRejection(rejection, localize);
+          if (rejection.reason === 'safeguarding') {
+            showSafeguardingNotice({ source: 'upload', reasons: rejection.reasons ?? [] });
+          }
         } else if (error?.response?.status === 413) {
           errorMessage = 'com_error_files_size_limit';
         } else if (error?.response?.data?.message) {

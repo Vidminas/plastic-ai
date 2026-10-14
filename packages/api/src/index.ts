@@ -115,6 +115,7 @@ export * from './web';
 export * from './langfuse';
 /* Guardrails */
 export * from './guardrails';
+export * from './safeguarding';
 /* Traces */
 export * from './traces';
 /* Insights */
