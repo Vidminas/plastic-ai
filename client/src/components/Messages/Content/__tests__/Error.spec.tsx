@@ -22,7 +22,15 @@ let mockEndpointsData: Record<string, Record<string, unknown>> | undefined = {
 };
 let mockStartupData: {
   compactionEnabled: boolean;
-  safeguardingSupport?: Array<{ name: string; url?: string; phone?: string; text?: string }>;
+  safeguardingNotices?: Record<
+    string,
+    {
+      reasons: string[];
+      message: string;
+      signposting: Array<{ name: string; url?: string; phone?: string }>;
+    }
+  >;
+  safeguardingSupport?: Array<{ name: string; url?: string; phone?: string }>;
   interface?: { contextUsage?: boolean; currency?: { code: string; rate: number } };
   balance?: { enabled: boolean; display: string };
 } = {
@@ -402,9 +410,15 @@ describe('Error — provider and model identity', () => {
     it('says why a response was blocked and where to find support', () => {
       mockStartupData = {
         compactionEnabled: false,
-        safeguardingSupport: [
-          { name: 'Childline', url: 'https://www.childline.org.uk/', phone: '0800 1111' },
-        ],
+        safeguardingNotices: {
+          crisis: {
+            reasons: ['self-harm'],
+            message: 'Talk to someone:',
+            signposting: [
+              { name: 'Childline', url: 'https://www.childline.org.uk/', phone: '0800 1111' },
+            ],
+          },
+        },
       };
       renderError(
         {
@@ -424,6 +438,7 @@ describe('Error — provider and model identity', () => {
       expect(
         screen.getByText(localized('com_safeguarding_reason', 'violence and self-harm')),
       ).toBeInTheDocument();
+      expect(screen.getByText('Talk to someone:')).toBeInTheDocument();
       expect(screen.getByText('Childline')).toBeInTheDocument();
       expect(
         screen.getByRole('link', {
@@ -431,6 +446,114 @@ describe('Error — provider and model identity', () => {
         }),
       ).toHaveAttribute('href', 'tel:08001111');
       expectReadable();
+    });
+
+    describe('when a block is no emergency', () => {
+      const support = {
+        compactionEnabled: false,
+        safeguardingNotices: {
+          crisis: {
+            reasons: ['self-harm'],
+            message: 'Crisis message',
+            signposting: [{ name: 'In an emergency', phone: '999' }],
+          },
+          nonUrgent: {
+            reasons: ['bullying', 'INSULTS'],
+            message: 'Non-urgent message',
+            signposting: [{ name: 'Childline', phone: '0800 1111' }],
+          },
+          unsuitable: {
+            reasons: ['SEXUAL', 'VIOLENCE'],
+            message: 'Unsuitable message',
+            signposting: [{ name: 'Talk to someone', phone: '0800 0000' }],
+          },
+          conduct: {
+            reasons: ['PROMPT_ATTACK', 'MISCONDUCT'],
+            message: 'Conduct message',
+            signposting: [],
+          },
+        },
+      };
+      const blocked = (reasons: Array<{ type: string; name: string }>) => ({
+        type: ErrorTypes.SAFEGUARDING,
+        info: { source: 'prompt', reasons },
+      });
+
+      it('points to everyday support, not the crisis services', () => {
+        mockStartupData = support;
+        renderError(
+          blocked([
+            { type: 'topic', name: 'bullying' },
+            { type: 'content', name: 'INSULTS' },
+          ]),
+          providerMessage,
+        );
+
+        expect(screen.getByText('Non-urgent message')).toBeInTheDocument();
+        expect(screen.getByText('Childline')).toBeInTheDocument();
+        expect(screen.queryByText('In an emergency')).not.toBeInTheDocument();
+        expect(screen.queryByText('Crisis message')).not.toBeInTheDocument();
+      });
+
+      it('steers back to learning, with no services, for conduct alone', () => {
+        mockStartupData = support;
+        renderError(
+          blocked([
+            { type: 'content', name: 'PROMPT_ATTACK' },
+            { type: 'content', name: 'MISCONDUCT' },
+          ]),
+          providerMessage,
+        );
+
+        expect(screen.getByText('Conduct message')).toBeInTheDocument();
+        expect(screen.queryByText('Childline')).not.toBeInTheDocument();
+        expect(screen.queryByText('In an emergency')).not.toBeInTheDocument();
+      });
+
+      it('says sexual content and violence are not suitable, with its own services', () => {
+        mockStartupData = support;
+        renderError(
+          blocked([
+            { type: 'content', name: 'VIOLENCE' },
+            { type: 'content', name: 'PROMPT_ATTACK' },
+          ]),
+          providerMessage,
+        );
+
+        expect(screen.getByText('Unsuitable message')).toBeInTheDocument();
+        expect(screen.getByText('Talk to someone')).toBeInTheDocument();
+        expect(screen.queryByText('Childline')).not.toBeInTheDocument();
+        expect(screen.queryByText('In an emergency')).not.toBeInTheDocument();
+      });
+
+      it('gives conduct mixed with bullying the gentler notice', () => {
+        mockStartupData = support;
+        renderError(
+          blocked([
+            { type: 'content', name: 'MISCONDUCT' },
+            { type: 'topic', name: 'bullying' },
+          ]),
+          providerMessage,
+        );
+
+        expect(screen.getByText('Non-urgent message')).toBeInTheDocument();
+        expect(screen.getByText('Childline')).toBeInTheDocument();
+      });
+
+      it('shows the crisis services when any reason is not listed', () => {
+        mockStartupData = support;
+        renderError(
+          blocked([
+            { type: 'topic', name: 'bullying' },
+            { type: 'topic', name: 'self-harm' },
+          ]),
+          providerMessage,
+        );
+
+        expect(screen.getByText('Crisis message')).toBeInTheDocument();
+        expect(screen.getByText('In an emergency')).toBeInTheDocument();
+        expect(screen.queryByText('Childline')).not.toBeInTheDocument();
+      });
     });
 
     it('names an unknown topic generically and shows no support list without one', () => {
@@ -449,6 +572,22 @@ describe('Error — provider and model identity', () => {
         ),
       ).toBeInTheDocument();
       expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    });
+
+    it('lists the services of a config without a crisis notice under the app introduction', () => {
+      mockStartupData = {
+        compactionEnabled: false,
+        safeguardingSupport: [{ name: 'Childline', phone: '0800 1111' }],
+      };
+      renderError(
+        {
+          type: ErrorTypes.SAFEGUARDING,
+          info: { source: 'prompt', reasons: [{ type: 'topic', name: 'self-harm' }] },
+        },
+        providerMessage,
+      );
+      expect(screen.getByText(catalog.com_safeguarding_support_intro)).toBeInTheDocument();
+      expect(screen.getByText('Childline')).toBeInTheDocument();
     });
 
     it("names the model's own safety filter as the reason a reply was hidden", () => {

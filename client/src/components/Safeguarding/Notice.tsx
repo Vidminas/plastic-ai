@@ -1,6 +1,11 @@
 import { useAtom } from 'jotai';
+import { SAFEGUARDING_NOTICES } from 'librechat-data-provider';
 import { OGDialog, OGDialogTemplate } from '@librechat/client';
-import type { TSafeguardingErrorInfo, TSafeguardingReason } from 'librechat-data-provider';
+import type {
+  TSafeguardingReason,
+  SafeguardingNoticeKind,
+  TSafeguardingErrorInfo,
+} from 'librechat-data-provider';
 import type { ErrorRendererProps } from '~/components/Messages/Content/Error/parts';
 import type { TranslationKeys } from '~/hooks';
 import { readObject, readString } from '~/components/Messages/Content/Error/parts';
@@ -79,19 +84,51 @@ function useReasonList(reasons: TSafeguardingReason[]): string {
   return new Intl.ListFormat(undefined, { type: 'conjunction' }).format([...labels]);
 }
 
-/** Where to find help after a strong detection: `safeguarding.signposting` in librechat.yaml. */
-export function SafeguardingSupport() {
+/**
+ * Picks the notice for a block's reasons: each reason picks the notice that lists it, and the
+ * most serious of those is shown (`SAFEGUARDING_NOTICES` order). A reason no notice lists, or
+ * a block without reasons, gets the crisis notice; that includes `MODEL_FILTER` (a reply the
+ * model's own safety filter stopped) unless a notice lists it.
+ */
+function useNoticeKind(reasons: TSafeguardingReason[]): SafeguardingNoticeKind {
+  const { data: startupConfig } = useGetStartupConfig();
+  const notices = startupConfig?.safeguardingNotices ?? {};
+  if (reasons.length === 0) {
+    return 'crisis';
+  }
+  /** A reason no notice lists ranks as the crisis notice, first in the order. */
+  const rank = (name: string): number =>
+    Math.max(
+      0,
+      SAFEGUARDING_NOTICES.findIndex((notice) => notices[notice]?.reasons.includes(name) === true),
+    );
+  return SAFEGUARDING_NOTICES[Math.min(...reasons.map(({ name }) => rank(name)))];
+}
+
+/**
+ * Where to find help after a strong detection: the `message` and `signposting` of the notice
+ * the block got (`safeguarding.crisis`, `nonUrgent`, `unsuitable` or `conduct` in
+ * librechat.yaml). Without a crisis notice, the crisis case lists `safeguarding.signposting`
+ * (or `openingHours.support`) under the app's own introduction, as before the notices existed.
+ */
+export function SafeguardingSupport({ kind = 'crisis' }: { kind?: SafeguardingNoticeKind }) {
   const localize = useLocalize();
   const { data: startupConfig } = useGetStartupConfig();
-  const support = startupConfig?.safeguardingSupport ?? [];
-  if (support.length === 0) {
+  const notice = startupConfig?.safeguardingNotices?.[kind];
+  const legacy = kind === 'crisis' ? (startupConfig?.safeguardingSupport ?? []) : [];
+  const services = notice?.signposting ?? legacy;
+  if (notice == null && services.length === 0) {
     return null;
+  }
+  const message = notice?.message ?? localize('com_safeguarding_support_intro');
+  if (services.length === 0) {
+    return <p>{message}</p>;
   }
   return (
     <section className="flex flex-col gap-2" aria-label={localize('com_ui_resting_support')}>
-      <p>{localize('com_safeguarding_support_intro')}</p>
+      <p>{message}</p>
       <ul className="flex flex-col gap-2">
-        {support.map((service) => (
+        {services.map((service) => (
           <SupportService key={service.name} service={service} />
         ))}
       </ul>
@@ -103,6 +140,7 @@ export function SafeguardingSupport() {
 function NoticeBody({ info }: { info: TSafeguardingErrorInfo }) {
   const localize = useLocalize();
   const reasons = useReasonList(info.reasons);
+  const kind = useNoticeKind(info.reasons);
   if (info.unavailable) {
     return <>{localize('com_safeguarding_unavailable')}</>;
   }
@@ -110,7 +148,7 @@ function NoticeBody({ info }: { info: TSafeguardingErrorInfo }) {
     <div className="flex flex-col gap-2">
       <p>{localize(HEADLINE_KEYS[info.source])}</p>
       <p>{localize('com_safeguarding_reason', { 0: reasons })}</p>
-      <SafeguardingSupport />
+      <SafeguardingSupport kind={kind} />
     </div>
   );
 }

@@ -344,6 +344,12 @@ router.get('/', async function (req, res) {
         ? {
             safeguardingSupport:
               appConfig.safeguarding.signposting ?? appConfig.openingHours?.support ?? [],
+            safeguardingNotices: {
+              crisis: appConfig.safeguarding.crisis,
+              nonUrgent: appConfig.safeguarding.nonUrgent,
+              unsuitable: appConfig.safeguarding.unsuitable,
+              conduct: appConfig.safeguarding.conduct,
+            },
           }
         : {}),
       ...(codeEnvironmentDecisionVersion != null ? { codeEnvironmentDecisionVersion } : {}),
