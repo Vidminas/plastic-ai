@@ -9,6 +9,7 @@ const {
 } = require('~/server/middleware');
 const {
   restoreTenantContextFromReq,
+  requireAvatarUploadEnabled,
   createStorageQuotaCheck,
   createUploadScreeningCheck,
 } = require('@librechat/api');
@@ -75,7 +76,14 @@ const initialize = async () => {
     screening,
   );
   // router.post('/images/avatar', upload.single('file'), restoreTenantContextFromReq);
-  router.post('/images/avatar', upload.single('file'), restoreTenantContextFromReq, screening);
+  // router.post('/images/avatar', upload.single('file'), restoreTenantContextFromReq, screening);
+  router.post(
+    '/images/avatar',
+    requireAvatarUploadEnabled,
+    upload.single('file'),
+    restoreTenantContextFromReq,
+    screening,
+  );
   router.post(
     '/images/agents/:agent_id/avatar',
     upload.single('file'),

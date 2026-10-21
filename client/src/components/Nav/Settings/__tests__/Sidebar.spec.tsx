@@ -29,6 +29,7 @@ const ctx: SettingsContextValue = {
   replyNotificationsAllowed: true,
   replyNotificationSoundAllowed: true,
   forkingEnabled: true,
+  avatarUploadEnabled: true,
 };
 
 function setup(extra: Partial<SettingsContextValue> = {}, query = '') {

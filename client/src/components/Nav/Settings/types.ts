@@ -63,6 +63,8 @@ export interface SettingsContextValue {
   replyNotificationSoundAllowed: boolean;
   /** Whether the deployment offers conversation forking (`interface.forking`). */
   forkingEnabled: boolean;
+  /** Whether the deployment lets users upload a profile picture (`interface.avatarUpload`). */
+  avatarUploadEnabled: boolean;
 }
 
 export interface SettingEntry {

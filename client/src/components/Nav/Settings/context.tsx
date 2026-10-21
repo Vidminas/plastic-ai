@@ -44,6 +44,7 @@ export function useSettingsContext(): SettingsContextValue {
   const allowAccountDeletion = startupConfig?.allowAccountDeletion !== false;
   const aboutEnabled = startupConfig?.interface?.buildInfo !== false;
   const forkingEnabled = startupConfig?.interface?.forking !== false;
+  const avatarUploadEnabled = startupConfig?.interface?.avatarUpload !== false;
   /* Offered only once the deployment has answered, matching the capability hook the alerts
      read: before then a toggle could store a preference, or raise the browser's permission
      prompt, for a capability the operator turns off. */
@@ -87,6 +88,7 @@ export function useSettingsContext(): SettingsContextValue {
       replyNotificationsAllowed,
       replyNotificationSoundAllowed,
       forkingEnabled,
+      avatarUploadEnabled,
     }),
     [
       balanceEnabled,
@@ -112,6 +114,7 @@ export function useSettingsContext(): SettingsContextValue {
       replyNotificationsAllowed,
       replyNotificationSoundAllowed,
       forkingEnabled,
+      avatarUploadEnabled,
     ],
   );
 }

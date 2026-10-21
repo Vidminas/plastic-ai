@@ -57,6 +57,8 @@ interface:
   bookmarks: false
   multiConvo: false
   forking: false
+  # Participants keep the default avatar: no profile picture uploads.
+  avatarUpload: false
   # The footer's reminders sit one per line, which fits a narrow pane.
   footerLayout: stack
   # Skill imports take .zip/.skill archives and files of any type, which the

@@ -2721,6 +2721,8 @@ export const interfaceSchema = z
     feedback: z.boolean().optional(),
     /** Forking a conversation from a message into a new one. Enabled by default. */
     forking: z.boolean().optional(),
+    /** Uploading a profile picture in Settings › Account. Enabled by default. */
+    avatarUpload: z.boolean().optional(),
     currency: z
       .object({
         code: z.string(),
@@ -2945,6 +2947,7 @@ export const interfaceSchema = z
     artifactUndocking: true,
     feedback: true,
     forking: true,
+    avatarUpload: true,
     peoplePicker: {
       users: true,
       groups: true,

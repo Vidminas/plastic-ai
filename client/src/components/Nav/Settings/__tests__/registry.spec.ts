@@ -31,6 +31,7 @@ const settingsContext: SettingsContextValue = {
   replyNotificationsAllowed: true,
   replyNotificationSoundAllowed: true,
   forkingEnabled: true,
+  avatarUploadEnabled: true,
 };
 
 const policyProviders = ['local', 'ldap', null, undefined];
@@ -157,6 +158,18 @@ describe('settings registry', () => {
 
     it('hides the setting when stateful code sessions are unavailable', () => {
       expect(entry?.show?.({ ...settingsContext, hasStatefulCodeSessions: false })).toBe(false);
+    });
+  });
+
+  describe('profile picture visibility', () => {
+    const entry = registry.find((setting) => setting.id === 'avatar');
+
+    it('shows the profile picture upload by default', () => {
+      expect(entry?.show?.(settingsContext)).toBe(true);
+    });
+
+    it('hides it when the deployment turns profile picture uploads off', () => {
+      expect(entry?.show?.({ ...settingsContext, avatarUploadEnabled: false })).toBe(false);
     });
   });
 

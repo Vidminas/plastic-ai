@@ -26,6 +26,7 @@ export * from './messageFilterPii';
 export * from './messageValidation';
 export * from './feedback';
 export * from './forking';
+export * from './avatar';
 export * from './generationRetry';
 export * from './code';
 export * from './management';

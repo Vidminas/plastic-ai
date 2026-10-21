@@ -52,6 +52,7 @@ export async function loadDefaultInterface({
     contextCost: interfaceConfig?.contextCost ?? defaults.contextCost,
     feedback: interfaceConfig?.feedback ?? defaults.feedback,
     forking: interfaceConfig?.forking ?? defaults.forking,
+    avatarUpload: interfaceConfig?.avatarUpload ?? defaults.avatarUpload,
     currency: interfaceConfig?.currency ?? defaults.currency,
     theme: interfaceConfig?.theme,
     steerArmConfirmationTimeoutMs:
