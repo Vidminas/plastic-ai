@@ -1,4 +1,4 @@
-import { agencySchema, agencyIntentionsSchema, AGENCY_TEXT_MAX } from './agency';
+import { agencySchema, AGENCY_TEXT_MAX, agencyGoalSchema, agencyIntentionsSchema } from './agency';
 import { configSchema } from './config';
 
 describe('agencySchema', () => {
@@ -37,5 +37,41 @@ describe('agencyIntentionsSchema', () => {
     ['field over the length limit', { goals: 'x'.repeat(AGENCY_TEXT_MAX + 1) }],
   ])('rejects a %s', (_label, input) => {
     expect(agencyIntentionsSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe('agencySchema goalSuggestions', () => {
+  const suggestion = { id: 'exams', title: 'Prepare for exams', icon: 'book' };
+
+  it('takes suggestions with unique ids and known icons', () => {
+    expect(agencySchema.parse({ goalSuggestions: [suggestion] }).goalSuggestions).toEqual([
+      suggestion,
+    ]);
+    expect(agencySchema.safeParse({ goalSuggestions: [suggestion, suggestion] }).success).toBe(
+      false,
+    );
+    expect(
+      agencySchema.safeParse({ goalSuggestions: [{ ...suggestion, icon: 'rocket' }] }).success,
+    ).toBe(false);
+    expect(
+      agencySchema.safeParse({ goalSuggestions: [{ ...suggestion, id: 'Exams!' }] }).success,
+    ).toBe(false);
+  });
+});
+
+describe('agencyGoalSchema', () => {
+  it('takes the text and the suggestion it started from', () => {
+    expect(agencyGoalSchema.parse({ text: ' Revise ', suggestionId: 'exams' })).toEqual({
+      text: 'Revise',
+      suggestionId: 'exams',
+    });
+    expect(agencyGoalSchema.parse({ text: 'Revise', suggestionId: null })).toEqual({
+      text: 'Revise',
+      suggestionId: null,
+    });
+    expect(agencyGoalSchema.safeParse({ text: '', suggestionId: 'exams' }).success).toBe(false);
+    expect(agencyGoalSchema.safeParse({ text: 'x', suggestionId: 'Not An Id' }).success).toBe(
+      false,
+    );
   });
 });

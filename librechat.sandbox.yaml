@@ -276,6 +276,37 @@ agency:
   conversationGoal: true
   goalChecks: true
   recap: true
+  # Goals the conversation goal card suggests. The participant can pick one,
+  # add their own words to it, or write a goal of their own; a picked
+  # suggestion is enough to start. The recap groups chats by the suggestion
+  # they started from. Placeholders for the research team to replace. Icons:
+  # book, calculator, clock, compass, flask, globe, heart, lightbulb, pen, run,
+  # target, users.
+  goalSuggestions:
+    - id: understand
+      title: "Understand a subject better"
+      description: "Get to grips with ideas or topics I find hard."
+      icon: lightbulb
+    - id: exams
+      title: "Prepare for exams"
+      description: "Revise, practise and check what I know."
+      icon: book
+    - id: writing
+      title: "Get better at writing"
+      description: "Plan, draft and improve my own writing."
+      icon: pen
+    - id: next-steps
+      title: "Decide what to study next"
+      description: "Explore subjects, courses and where they lead."
+      icon: compass
+    - id: planning
+      title: "Plan my time"
+      description: "Organise my work and keep on top of deadlines."
+      icon: clock
+    - id: verify
+      title: "Verify information against other sources"
+      description: "Check what the AI says against books, notes or trusted websites."
+      icon: target
 
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.

@@ -89,6 +89,25 @@ describe('conversation goals', () => {
   });
 });
 
+describe('conversation goals from a suggestion', () => {
+  it('keeps the suggestion with the text, until it is dropped', async () => {
+    await methods.setConversationGoal(userId, 'c1', 'Revise algebra', 'exams');
+    await expect(methods.getConversationGoal(userId, 'c1')).resolves.toMatchObject({
+      text: 'Revise algebra',
+      suggestionId: 'exams',
+    });
+    /** Text alone keeps the suggestion; null drops it. */
+    await methods.setConversationGoal(userId, 'c1', 'Revise geometry');
+    await expect(methods.getConversationGoal(userId, 'c1')).resolves.toMatchObject({
+      suggestionId: 'exams',
+    });
+    await methods.setConversationGoal(userId, 'c1', 'Something else', null);
+    await expect(methods.getConversationGoal(userId, 'c1')).resolves.not.toHaveProperty(
+      'suggestionId',
+    );
+  });
+});
+
 describe('getAgencyRecap', () => {
   it('counts engagement and returns the latest examples, for this user only', async () => {
     await mongoose.models.Conversation.create([

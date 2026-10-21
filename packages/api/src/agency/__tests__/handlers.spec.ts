@@ -11,8 +11,13 @@ jest.mock('~/safeguarding/service', () => ({
   screenForSafeguarding: jest.fn(),
 }));
 
-const allOn = { intentions: true, conversationGoal: true, goalChecks: true, recap: true };
-
+const allOn = {
+  intentions: true,
+  conversationGoal: true,
+  goalChecks: true,
+  recap: true,
+  goalSuggestions: [{ id: 'exams', title: 'Prepare for exams', icon: 'book' }],
+};
 const makeDeps = () => ({
   getAgencyIntentions: jest.fn().mockResolvedValue(null),
   setAgencyIntentions: jest.fn().mockImplementation(async (_u, update) => update),
@@ -209,7 +214,7 @@ describe('createAgencyHandlers', () => {
       makeReq({ params: { conversationId: 'c1' }, body: { text: ' new goal ' } }) as never,
       res as never,
     );
-    expect(deps.setConversationGoal).toHaveBeenCalledWith('u1', 'c1', 'new goal');
+    expect(deps.setConversationGoal).toHaveBeenCalledWith('u1', 'c1', 'new goal', undefined);
     expect(res.body).toEqual({ goal: { text: 'new goal' } });
     expect(deps.record.event).toHaveBeenCalledWith({
       userId: 'u1',
@@ -245,5 +250,26 @@ describe('createAgencyHandlers', () => {
     await createAgencyHandlers(deps).getRecap(makeReq() as never, res as never);
     expect(res.statusCode).toBe(500);
     expect(JSON.stringify(res.body)).not.toContain('secret');
+  });
+
+  it('keeps the suggested goal a goal started from, refusing an unknown one', async () => {
+    const deps = makeDeps();
+    const handlers = createAgencyHandlers(deps);
+    const req = makeReq({
+      params: { conversationId: 'c1' },
+      body: { text: 'Revise algebra', suggestionId: 'exams' },
+    });
+    await handlers.putGoal(req as never, makeRes() as never);
+    expect(deps.setConversationGoal).toHaveBeenCalledWith('u1', 'c1', 'Revise algebra', 'exams');
+
+    const unknown = makeRes();
+    await handlers.putGoal(
+      makeReq({
+        params: { conversationId: 'c1' },
+        body: { text: 'Fly', suggestionId: 'flying' },
+      }) as never,
+      unknown as never,
+    );
+    expect(unknown.statusCode).toBe(400);
   });
 });

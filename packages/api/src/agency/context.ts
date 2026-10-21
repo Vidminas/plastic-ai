@@ -4,6 +4,7 @@ import type { TAgencyConfig, TConversationGoal } from 'librechat-data-provider';
 import type { AppConfig } from '@librechat/data-schemas';
 import type { AgencyEventRecorder } from './events';
 import { maskUserText } from '~/guardrails/stored';
+import { suggestionOf } from './handlers';
 
 const { clarify, goalCheck } = AGENCY_QUESTION_IDS;
 
@@ -54,7 +55,7 @@ export function withAgencyContext(context: string | undefined, agency: string | 
 type GoalRequest = {
   config?: Pick<AppConfig, 'agency'> & Partial<AppConfig>;
   user?: { id?: string };
-  body?: { goal?: unknown };
+  body?: { goal?: unknown; goalSuggestionId?: unknown };
 };
 
 export interface AgencyContextDeps {
@@ -63,6 +64,7 @@ export interface AgencyContextDeps {
     userId: string,
     conversationId: string,
     text: string,
+    suggestionId?: string | null,
   ): Promise<TConversationGoal>;
   record: AgencyEventRecorder;
 }
@@ -74,7 +76,9 @@ const isOn = (agency: TAgencyConfig | undefined): agency is TAgencyConfig =>
  * The agency context for this turn of `conversationId`. The goal a learner sets on a new
  * conversation arrives with its first message (`body.goal`), already screened by the
  * safeguarding check with that message; it is masked and saved once, and read back on later
- * turns. A failure to read or save the goal is logged and the turn goes on without it.
+ * turns. The suggested goal it started from (`body.goalSuggestionId`) is kept with it when
+ * `agency.goalSuggestions` has it. A failure to read or save the goal is logged and the turn
+ * goes on without it.
  */
 export async function resolveAgencyContext(
   req: GoalRequest,
@@ -93,7 +97,12 @@ export async function resolveAgencyContext(
       const submitted = agencyGoalSchema.safeParse({ text: req.body?.goal });
       if (goal == null && submitted.success) {
         goal = await maskUserText(req.config ?? {}, submitted.data.text);
-        await deps.setConversationGoal(userId, conversationId, goal);
+        const requested = req.body?.goalSuggestionId;
+        const suggestionId =
+          typeof requested === 'string' && suggestionOf(req, requested) != null
+            ? requested
+            : undefined;
+        await deps.setConversationGoal(userId, conversationId, goal, suggestionId);
         deps.record.event({ userId, conversationId, type: 'goal_set' });
       }
     } catch (error) {

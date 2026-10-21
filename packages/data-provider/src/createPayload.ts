@@ -32,6 +32,7 @@ export default function createPayload(submission: t.TSubmission) {
     recoverySteerId,
     expectedPredecessorCreatedAt,
     goal,
+    goalSuggestionId,
   } = submission;
   const { conversationId } = s.tConvoUpdateSchema.parse(conversation);
   const { endpoint: _e, endpointType } = endpointOption as {
@@ -72,6 +73,7 @@ export default function createPayload(submission: t.TSubmission) {
     recoverySteerId,
     expectedPredecessorCreatedAt,
     ...(goal ? { goal } : {}),
+    ...(goalSuggestionId ? { goalSuggestionId } : {}),
   };
 
   return { server, payload };

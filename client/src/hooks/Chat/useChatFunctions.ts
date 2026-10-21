@@ -620,10 +620,10 @@ export default function useChatFunctions({
     });
 
     /** The goal card's goal goes with a new conversation's first message only. */
-    const goal =
-      conversationId == Constants.NEW_CONVO && !regenerateShaped
-        ? (jotaiStore.get(pendingGoalAtom) ?? undefined)
-        : undefined;
+    const firstMessage = conversationId == Constants.NEW_CONVO && !regenerateShaped;
+    const pendingGoal = firstMessage ? jotaiStore.get(pendingGoalAtom) : null;
+    const goal = pendingGoal?.text || undefined;
+    const goalSuggestionId = pendingGoal?.suggestionId ?? undefined;
     if (conversationId == Constants.NEW_CONVO) {
       parentMessageId = Constants.NO_PARENT;
       currentMessages = [];
@@ -913,8 +913,9 @@ export default function useChatFunctions({
       expectedPredecessorCreatedAt: overrideExpectedPredecessorCreatedAt,
       queuedMessageOrigin: overrideQueuedMessageOrigin,
       ...(goal ? { goal } : {}),
+      ...(goalSuggestionId ? { goalSuggestionId } : {}),
     };
-    if (goal) {
+    if (pendingGoal != null) {
       jotaiStore.set(pendingGoalAtom, null);
     }
 

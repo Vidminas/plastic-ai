@@ -27,10 +27,15 @@ export interface AgencyMethods {
   getAgencyIntentions(userId: UserId): Promise<TAgencyIntentions | null>;
   setAgencyIntentions(userId: UserId, update: AgencyIntentionsUpdate): Promise<TAgencyIntentions>;
   getConversationGoal(userId: UserId, conversationId: string): Promise<TConversationGoal | null>;
+  /**
+   * Saves a conversation's goal. `suggestionId` records the suggested goal it started from;
+   * null drops it, and undefined leaves it as it is.
+   */
   setConversationGoal(
     userId: UserId,
     conversationId: string,
     text: string,
+    suggestionId?: string | null,
   ): Promise<TConversationGoal>;
   /** Deletes the goals of these conversations, or of every conversation when omitted. */
   deleteConversationGoals(userId: UserId, conversationIds?: string[]): Promise<number>;
@@ -50,7 +55,8 @@ const toIntentions = (doc: IAgencyIntentions): TAgencyIntentions => ({
 });
 
 const toGoal = (doc: IAgencyGoal): TConversationGoal => ({
-  text: doc.text,
+  text: doc.text ?? '',
+  ...(doc.suggestionId != null ? { suggestionId: doc.suggestionId } : {}),
   setAt: doc.setAt?.toISOString(),
 });
 
@@ -117,11 +123,16 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
     userId: UserId,
     conversationId: string,
     text: string,
+    suggestionId?: string | null,
   ): Promise<TConversationGoal> {
+    const set: Record<string, unknown> = { userId, conversationId, text, setAt: new Date() };
+    if (suggestionId != null) {
+      set.suggestionId = suggestionId;
+    }
     const doc = await goalModel()
       .findOneAndUpdate(
         { userId, conversationId },
-        { $set: { userId, conversationId, text, setAt: new Date() } },
+        suggestionId === null ? { $set: set, $unset: { suggestionId: 1 } } : { $set: set },
         { upsert: true, new: true, runValidators: true },
       )
       .lean<IAgencyGoal>();

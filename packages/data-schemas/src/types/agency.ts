@@ -17,6 +17,8 @@ export interface IAgencyGoal extends Document {
   userId: Types.ObjectId;
   conversationId: string;
   text: string;
+  /** The suggested goal it started from. */
+  suggestionId?: string;
   setAt: Date;
   tenantId?: string;
 }

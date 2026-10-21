@@ -14,9 +14,11 @@ import { GoalBanner, GoalCard, useGoalCardAsking } from '../Goal';
 const mockRecordEvent = jest.fn();
 const mockMutate = jest.fn();
 const mockShowToast = jest.fn();
-let mockGoal: { text: string } | null = null;
+const mockSubmitMessage = jest.fn();
+let mockGoal: { text: string; suggestionId?: string } | null = null;
 let mockEnabled = true;
 let mockSaveSucceeds = false;
+let mockSuggestions: Array<{ id: string; title: string; icon?: string }> = [];
 
 jest.mock('@librechat/client', () => ({
   ...jest.requireActual('@librechat/client'),
@@ -25,13 +27,21 @@ jest.mock('@librechat/client', () => ({
 
 jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string) => key,
+  useSubmitMessage: () => ({ submitMessage: mockSubmitMessage }),
 }));
 
 jest.mock('~/lib/rum/actions', () => ({ trackAction: jest.fn() }));
 
 jest.mock('~/data-provider', () => ({
   recordAgencyEvent: (event: unknown) => mockRecordEvent(event),
-  useGetStartupConfig: () => ({ data: { agency: { conversationGoal: mockEnabled } } }),
+  useGetStartupConfig: () => ({
+    data: {
+      agency: {
+        conversationGoal: mockEnabled,
+        ...(mockSuggestions.length > 0 ? { goalSuggestions: mockSuggestions } : {}),
+      },
+    },
+  }),
   useConversationGoalQuery: () => ({ data: { goal: mockGoal }, isLoading: false }),
   useUpdateConversationGoalMutation: (options?: { onSuccess?: () => void }) => ({
     mutate: (variables: unknown) => {
@@ -67,9 +77,11 @@ function Landing() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSubmitMessage.mockReset();
   mockGoal = null;
   mockEnabled = true;
   mockSaveSucceeds = false;
+  mockSuggestions = [];
 });
 
 describe('GoalCard', () => {
@@ -79,11 +91,55 @@ describe('GoalCard', () => {
     expect(screen.getByRole('textbox')).toHaveFocus();
 
     await userEvent.type(screen.getByRole('textbox'), 'plan my essay');
-    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_set' }));
+    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_start' }));
 
-    expect(store.get(pendingGoalAtom)).toBe('plan my essay');
+    expect(store.get(pendingGoalAtom)?.text).toBe('plan my essay');
     expect(screen.getByText('plan my essay')).toBeInTheDocument();
     expect(screen.getByTestId('composer')).toBeInTheDocument();
+  });
+
+  it('sends the goal as the first message, carrying the goal with it', async () => {
+    const store = renderWith(<Landing />);
+    mockSubmitMessage.mockImplementation(() => {
+      /** The first message reads the pending goal as it is sent. */
+      expect(store.get(pendingGoalAtom)?.text).toBe('plan my essay');
+    });
+    await userEvent.type(screen.getByRole('textbox'), 'plan my essay');
+    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_start' }));
+    expect(mockSubmitMessage).toHaveBeenCalledWith({ text: 'plan my essay' });
+    expect(mockSubmitMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a sent goal for the first message to take when the card goes', async () => {
+    const store = createStore();
+    const { unmount } = render(
+      <MemoryRouter>
+        <Provider store={store}>
+          <Landing />
+        </Provider>
+      </MemoryRouter>,
+    );
+    await userEvent.type(screen.getByRole('textbox'), 'plan my essay');
+    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_start' }));
+    unmount();
+    expect(store.get(pendingGoalAtom)?.text).toBe('plan my essay');
+    expect(store.get(goalCardStepAtom)).toBe('ask');
+  });
+
+  it('keeps the goal for the composer when the first message is refused', async () => {
+    mockSubmitMessage.mockReturnValue(false);
+    const store = renderWith(<Landing />);
+    await userEvent.type(screen.getByRole('textbox'), 'plan my essay');
+    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_start' }));
+    expect(store.get(goalCardStepAtom)).toBe('set');
+    expect(store.get(pendingGoalAtom)?.text).toBe('plan my essay');
+    expect(screen.getByTestId('composer')).toBeInTheDocument();
+  });
+
+  it('sends nothing on a skip', async () => {
+    renderWith(<Landing />);
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_skip' }));
+    expect(mockSubmitMessage).not.toHaveBeenCalled();
   });
 
   it('records a skip and brings the composer back', async () => {
@@ -114,14 +170,14 @@ describe('GoalCard', () => {
   it('cancels an edit back to the goal already set, without skipping', async () => {
     const store = renderWith(<Landing />);
     await userEvent.type(screen.getByRole('textbox'), 'first goal');
-    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_set' }));
+    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_start' }));
     await userEvent.click(screen.getByRole('button', { name: 'com_ui_edit' }));
     expect(screen.queryByTestId('composer')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'com_ui_cancel' }));
 
     expect(store.get(goalCardStepAtom)).toBe('set');
-    expect(store.get(pendingGoalAtom)).toBe('first goal');
+    expect(store.get(pendingGoalAtom)?.text).toBe('first goal');
     expect(mockRecordEvent).not.toHaveBeenCalled();
     expect(screen.getByTestId('composer')).toBeInTheDocument();
   });
@@ -151,6 +207,125 @@ describe('GoalCard', () => {
     renderWith(<Landing />);
     expect(screen.getByTestId('composer')).toBeInTheDocument();
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  });
+});
+
+describe('GoalCard with suggested goals', () => {
+  beforeEach(() => {
+    mockSuggestions = [
+      { id: 'exams', title: 'Prepare for exams', icon: 'book' },
+      { id: 'writing', title: 'Get better at writing', icon: 'pen' },
+    ];
+  });
+
+  it("combines a chosen suggestion with optional words of the learner's own", async () => {
+    const store = renderWith(<Landing />);
+    await userEvent.click(screen.getByRole('button', { name: 'Prepare for exams' }));
+    expect(screen.getByRole('button', { name: 'Prepare for exams' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('textbox')).toHaveValue('');
+    expect(screen.getByLabelText('com_agency_goal_details_label')).toBeInTheDocument();
+    await userEvent.type(screen.getByRole('textbox'), 'chemistry mock');
+    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_start' }));
+
+    expect(store.get(pendingGoalAtom)).toEqual({
+      text: 'Prepare for exams: chemistry mock',
+      suggestionId: 'exams',
+    });
+  });
+
+  it('sets a chosen suggestion alone once the learner deletes what they typed', async () => {
+    const store = renderWith(<Landing />);
+    await userEvent.click(screen.getByRole('button', { name: 'Prepare for exams' }));
+    await userEvent.type(screen.getByRole('textbox'), 'maths');
+    await userEvent.clear(screen.getByRole('textbox'));
+    const set = screen.getByRole('button', { name: 'com_agency_goal_start' });
+    expect(set).toBeEnabled();
+    await userEvent.click(set);
+    expect(store.get(pendingGoalAtom)).toEqual({
+      text: 'Prepare for exams',
+      suggestionId: 'exams',
+    });
+  });
+
+  it("keeps the learner's words across suggestions, and needs words once none is chosen", async () => {
+    const store = renderWith(<Landing />);
+    await userEvent.type(screen.getByRole('textbox'), 'my own goal');
+    await userEvent.click(screen.getByRole('button', { name: 'Get better at writing' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Prepare for exams' }));
+    expect(screen.getByRole('textbox')).toHaveValue('my own goal');
+    await userEvent.click(screen.getByRole('button', { name: 'Prepare for exams' }));
+    await userEvent.clear(screen.getByRole('textbox'));
+    expect(screen.getByRole('button', { name: 'com_agency_goal_start' })).toBeDisabled();
+
+    await userEvent.type(screen.getByRole('textbox'), 'just mine');
+    await userEvent.click(screen.getByRole('button', { name: 'com_agency_goal_start' }));
+    expect(store.get(pendingGoalAtom)).toEqual({ text: 'just mine', suggestionId: null });
+  });
+
+  it('reopens a saved goal as plain text, still tied to its suggestion', async () => {
+    mockGoal = { text: 'Prepare for exams: chemistry', suggestionId: 'exams' };
+    renderWith(<GoalBanner conversationId="c1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_edit' }));
+    expect(screen.getByRole('textbox')).toHaveValue('Prepare for exams: chemistry');
+    await userEvent.type(screen.getByRole('textbox'), ' and physics');
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+    expect(mockMutate).toHaveBeenCalledWith({
+      conversationId: 'c1',
+      text: 'Prepare for exams: chemistry and physics',
+      suggestionId: 'exams',
+    });
+  });
+
+  it('swaps the title rather than stacking one when a suggestion is picked again', async () => {
+    mockGoal = { text: 'Prepare for exams: chemistry', suggestionId: 'exams' };
+    renderWith(<GoalBanner conversationId="c1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Prepare for exams' }));
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+    expect(mockMutate).toHaveBeenLastCalledWith({
+      conversationId: 'c1',
+      text: 'Prepare for exams: chemistry',
+      suggestionId: 'exams',
+    });
+
+    /** The save is left pending here, so the editor stays open for another pick. */
+    await userEvent.click(screen.getByRole('button', { name: 'Get better at writing' }));
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+    expect(mockMutate).toHaveBeenLastCalledWith({
+      conversationId: 'c1',
+      text: 'Get better at writing: chemistry',
+      suggestionId: 'writing',
+    });
+  });
+
+  it('drops the suggestion once the goal no longer starts with its title', async () => {
+    mockGoal = { text: 'Prepare for exams: chemistry', suggestionId: 'exams' };
+    renderWith(<GoalBanner conversationId="c1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_edit' }));
+    await userEvent.clear(screen.getByRole('textbox'));
+    await userEvent.type(screen.getByRole('textbox'), 'plan my history essay');
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+    expect(mockMutate).toHaveBeenCalledWith({
+      conversationId: 'c1',
+      text: 'plan my history essay',
+      suggestionId: null,
+    });
+  });
+
+  it('sends the suggestion when a goal is changed', async () => {
+    mockGoal = { text: 'revise algebra' };
+    renderWith(<GoalBanner conversationId="c1" />);
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Prepare for exams' }));
+    await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+    expect(mockMutate).toHaveBeenCalledWith({
+      conversationId: 'c1',
+      text: 'Prepare for exams: revise algebra',
+      suggestionId: 'exams',
+    });
   });
 });
 

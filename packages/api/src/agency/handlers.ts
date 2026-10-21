@@ -31,6 +31,7 @@ export interface AgencyHandlerDeps {
     userId: UserId,
     conversationId: string,
     text: string,
+    suggestionId?: string | null,
   ): Promise<TConversationGoal>;
   getAgencyRecap(userId: UserId, options?: { conversationId?: string }): Promise<TAgencyRecap>;
   /** Resolves when the user owns the conversation; null when there is no such conversation. */
@@ -175,18 +176,23 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
       if (conversationId == null || !parsed.success) {
         return res.status(400).json({ message: 'Invalid goal' });
       }
+      const { text, suggestionId } = parsed.data;
+      if (suggestionId != null && suggestionOf(req, suggestionId) == null) {
+        return res.status(400).json({ message: 'Unknown suggestion' });
+      }
       if ((await deps.getConvo(userId, conversationId)) == null) {
         return res.status(404).json(NOT_FOUND);
       }
-      const screened = await screenLearnerText(
-        req,
-        { text: parsed.data.text },
-        { source: 'goal', conversationId },
-      );
+      const screened = await screenLearnerText(req, { text }, { source: 'goal', conversationId });
       if (!screened.ok) {
         return blocked(res, screened.info);
       }
-      const goal = await deps.setConversationGoal(userId, conversationId, screened.fields.text);
+      const goal = await deps.setConversationGoal(
+        userId,
+        conversationId,
+        screened.fields.text,
+        suggestionId,
+      );
       deps.record.event({ userId, conversationId, type: 'goal_updated' });
       return res.json({ goal });
     }),
@@ -213,4 +219,12 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
       return res.json(await deps.getAgencyRecap(userId, scope));
     }),
   };
+}
+
+/** A suggestion in `agency.goalSuggestions`, by its id. */
+export function suggestionOf(
+  req: { config?: Pick<AppConfig, 'agency'> },
+  id: string,
+): { id: string; title: string } | undefined {
+  return req.config?.agency?.goalSuggestions?.find((suggestion) => suggestion.id === id);
 }

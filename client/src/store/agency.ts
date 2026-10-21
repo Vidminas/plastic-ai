@@ -1,7 +1,10 @@
 import { atom } from 'jotai';
 
-/** The goal set on the goal card of a new conversation, sent with its first message. */
-export const pendingGoalAtom = atom<string | null>(null);
+/**
+ * The goal set on the goal card of a new conversation, and the suggested goal it started from,
+ * sent with its first message.
+ */
+export const pendingGoalAtom = atom<{ text: string; suggestionId: string | null } | null>(null);
 
 /**
  * Where the goal card of the new conversation now open has got to. While it is `ask`, the

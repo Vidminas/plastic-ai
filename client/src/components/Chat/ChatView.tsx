@@ -254,14 +254,13 @@ function ChatView({
                               isLandingPage && 'max-w-3xl transition-all duration-200 xl:max-w-4xl',
                             )}
                           >
-                            {isLandingPage && <GoalCard />}
-                            {!isLandingPage &&
-                              !isSubagentThreadReadOnly &&
-                              conversationId != null &&
-                              conversationId !== Constants.NEW_CONVO &&
-                              conversationId !== Constants.SEARCH && (
+                            {isLandingPage ? (
+                              <GoalCard />
+                            ) : (
+                              !isSubagentThreadReadOnly && (
                                 <GoalBanner conversationId={conversationId} />
-                              )}
+                              )
+                            )}
                             {/* The goal card stands in for the composer, and for the starters
                               that would send a message past it, until a goal is set or skipped. */}
                             {isLandingPage && !goalCardAsking && <ConversationStarters />}

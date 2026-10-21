@@ -58,7 +58,12 @@ export const useConversationGoalQuery = (
     },
   );
 
-export type UpdateConversationGoalParams = { conversationId: string; text: string };
+export type UpdateConversationGoalParams = {
+  conversationId: string;
+  text: string;
+  /** The suggested goal it started from; null drops it, undefined leaves it as it is. */
+  suggestionId?: string | null;
+};
 
 export const useUpdateConversationGoalMutation = (
   options?: UseMutationOptions<{ goal: TConversationGoal }, Error, UpdateConversationGoalParams>,
@@ -66,7 +71,11 @@ export const useUpdateConversationGoalMutation = (
   const queryClient = useQueryClient();
   return useMutation<{ goal: TConversationGoal }, Error, UpdateConversationGoalParams>(
     [MutationKeys.updateAgencyGoal],
-    ({ conversationId, text }) => dataService.updateConversationGoal(conversationId, text),
+    ({ conversationId, text, suggestionId }) =>
+      dataService.updateConversationGoal(conversationId, {
+        text,
+        ...(suggestionId !== undefined ? { suggestionId } : {}),
+      }),
     {
       ...options,
       onSuccess: (data, variables, context) => {

@@ -1822,9 +1822,9 @@ export const getConversationGoal = (
 
 export const updateConversationGoal = (
   conversationId: string,
-  text: string,
+  goal: { text: string; suggestionId?: string | null },
 ): Promise<{ goal: TConversationGoal }> => {
-  return request.put(endpoints.agencyGoal(conversationId), { text });
+  return request.put(endpoints.agencyGoal(conversationId), goal);
 };
 
 export const recordAgencyEvent = (event: TClientAgencyEvent): Promise<void> => {

@@ -47,13 +47,40 @@ describe('resolveAgencyContext', () => {
   it("saves a new conversation's goal once and records it", async () => {
     const d = deps();
     const text = await resolveAgencyContext(req('  plan my essay '), 'c1', d);
-    expect(d.setConversationGoal).toHaveBeenCalledWith('u1', 'c1', 'plan my essay');
+    expect(d.setConversationGoal).toHaveBeenCalledWith('u1', 'c1', 'plan my essay', undefined);
     expect(d.record.event).toHaveBeenCalledWith({
       userId: 'u1',
       conversationId: 'c1',
       type: 'goal_set',
     });
     expect(text).toContain('plan my essay');
+  });
+
+  it('keeps the suggestion a first goal started from, when the config has it', async () => {
+    const d = deps();
+    const withSuggestions = { ...agency, goalSuggestions: [{ id: 'exams', title: 'Exams' }] };
+    await resolveAgencyContext(
+      {
+        config: { agency: withSuggestions },
+        user: { id: 'u1' },
+        body: { goal: 'revise', goalSuggestionId: 'exams' },
+      },
+      'c1',
+      d,
+    );
+    expect(d.setConversationGoal).toHaveBeenCalledWith('u1', 'c1', 'revise', 'exams');
+
+    const unknown = deps();
+    await resolveAgencyContext(
+      {
+        config: { agency: withSuggestions },
+        user: { id: 'u1' },
+        body: { goal: 'revise', goalSuggestionId: 'flying' },
+      },
+      'c1',
+      unknown,
+    );
+    expect(unknown.setConversationGoal).toHaveBeenCalledWith('u1', 'c1', 'revise', undefined);
   });
 
   it('keeps the stored goal over one sent again', async () => {

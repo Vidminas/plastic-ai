@@ -16,6 +16,55 @@ export const AGENCY_TEXT_MAX = 2000;
 
 const agencyTextSchema = z.string().trim().max(AGENCY_TEXT_MAX);
 
+/** A stable id written in librechat.yaml: lower case, digits, `_` and `-`. */
+const configIdSchema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
+
+/** Adds an issue for each `id` already used earlier in `items`. */
+const uniqueIds =
+  (field: string) =>
+  (items: ReadonlyArray<{ id: string }>, ctx: z.RefinementCtx): void => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index, 'id'],
+          message: `"${item.id}" is already used in ${field}`,
+        });
+      }
+      seen.add(item.id);
+    });
+  };
+
+/** Longest a suggested goal's title may be, in characters. */
+export const GOAL_SUGGESTION_TITLE_MAX = 200;
+
+/** Icons a suggested goal may show, mapped to lucide icons in the client. */
+export const GOAL_SUGGESTION_ICONS = [
+  'book',
+  'calculator',
+  'clock',
+  'compass',
+  'flask',
+  'globe',
+  'heart',
+  'lightbulb',
+  'pen',
+  'run',
+  'target',
+  'users',
+] as const;
+export type GoalSuggestionIcon = (typeof GOAL_SUGGESTION_ICONS)[number];
+
+/** A goal the goal card suggests. The title and description are the study's own copy. */
+export const goalSuggestionSchema = z.object({
+  id: configIdSchema,
+  title: z.string().trim().min(1).max(GOAL_SUGGESTION_TITLE_MAX),
+  description: z.string().trim().max(400).optional(),
+  icon: z.enum(GOAL_SUGGESTION_ICONS).optional(),
+});
+export type TGoalSuggestion = z.infer<typeof goalSuggestionSchema>;
+
 /**
  * `agency` in librechat.yaml: features that support a learner's agency over their own
  * learning. Every switch defaults to off, so without the block nothing changes.
@@ -32,6 +81,17 @@ export const agencySchema = z.object({
   goalChecks: z.boolean().default(false),
   /** The agency recap page and its sidebar link. */
   recap: z.boolean().default(false),
+  /**
+   * Goals the conversation goal card suggests: the learner can pick one, add their own words to
+   * it, or write their own, and the recap groups conversations by the suggestion they started
+   * from. Unset, the card asks for the learner's own words only.
+   */
+  goalSuggestions: z
+    .array(goalSuggestionSchema)
+    .min(1)
+    .max(12)
+    .superRefine(uniqueIds('goalSuggestions'))
+    .optional(),
 });
 export type TAgencyConfig = z.infer<typeof agencySchema>;
 
@@ -53,13 +113,19 @@ export type TAgencyIntentions = z.infer<typeof agencyIntentionsSchema> & {
   updatedAt?: string;
 };
 
+/**
+ * A conversation's goal: what the learner wants from it, in their words, and the suggested goal
+ * it started from, if any (`suggestionId: null` drops it).
+ */
 export const agencyGoalSchema = z.object({
   text: agencyTextSchema.min(1),
+  suggestionId: configIdSchema.nullable().optional(),
 });
 
 /** A conversation's goal, as stored on the conversation. */
 export type TConversationGoal = {
   text: string;
+  suggestionId?: string;
   setAt?: string;
 };
 
