@@ -5,6 +5,9 @@ cache: true
 fileStrategy: "s3"
 
 interface:
+  # The learning journey palette: LibreChat's light mode warmed to match the learning journey
+  # page. Dark mode keeps the stock dark palette.
+  theme: journey
   customWelcome: 'Welcome to LibreChat! Enjoy your experience.'
   # Deleting a chat or file removes it from the app, but not from the interaction
   # logs and traces the study keeps; the delete dialogs say so.

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { IThemeAppearance, IThemeRGB } from './types';
 import { clickHouseDarkTheme, clickHouseLightTheme, clickHouseTheme } from './themes/clickhouse';
 import { highContrastDarkTheme, highContrastLightTheme } from './themes/highContrast';
+import { journeyLightTheme } from './themes/journey';
 import { fieldControl } from '../components/Field';
 import { defaultTheme } from './themes/default';
 import { defaultAppearance } from './registry';
@@ -250,6 +251,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s theme text contrast', (_name, theme: IThemeRGB) => {
   it('keeps neutral text at WCAG AA on every surface it renders on', () => {
@@ -350,6 +352,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s series contrast', (_name, theme: IThemeRGB) => {
   it('keeps every series slot at the 3:1 mark floor on its consumer surfaces', () => {
@@ -404,6 +407,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s control focus', (_name, theme: IThemeRGB) => {
   it('keeps the keyboard focus ring at the 3:1 floor on every control canvas', () => {
@@ -430,6 +434,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s skill indicators', (_name, theme: IThemeRGB) => {
   it('keeps informational marks at the 3:1 floor on every skill surface', () => {
@@ -460,6 +465,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s success fill', (_name, theme: IThemeRGB) => {
   it('carries its label at WCAG AA', () => {
@@ -513,6 +519,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s verified fill', (_name, theme: IThemeRGB) => {
   it('carries its check at the 3:1 mark floor', () => {
@@ -572,6 +579,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s default avatar', (_name, theme: IThemeRGB) => {
   it('keeps the glyph at the 3:1 mark floor against its fill', () => {
@@ -591,6 +599,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s switch track', (_name, theme: IThemeRGB) => {
   it('keeps the unchecked track at the 3:1 mark floor against thumb and checked fill', () => {
@@ -610,6 +619,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s table header', (_name, theme: IThemeRGB) => {
   it('keeps column names readable on the header fill', () => {
@@ -732,6 +742,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s control border', (_name, theme: IThemeRGB) => {
   it('keeps the form-control outline at the 3:1 floor on every canvas', () => {
@@ -754,6 +765,7 @@ describe.each([
   ['high contrast light', highContrastLightTheme],
   ['high contrast dark', highContrastDarkTheme],
   ['clickhouse light', clickHouseLightTheme],
+  ['journey light', journeyLightTheme],
   ['clickhouse dark', clickHouseDarkTheme],
 ])('%s focus roles', (_name, theme: IThemeRGB) => {
   it.each(['rgb-focus-outline', 'rgb-focus-control'] as const)(
@@ -824,6 +836,7 @@ describe('state role defaults', () => {
     ['high contrast light', highContrastLightTheme],
     ['high contrast dark', highContrastDarkTheme],
     ['clickhouse light', clickHouseLightTheme],
+    ['journey light', journeyLightTheme],
     ['clickhouse dark', clickHouseDarkTheme],
   ])('keeps %s badge labels at AA on the resting badge fill', (_name, theme: IThemeRGB) => {
     const ink = toRgb(theme, 'rgb-badge-label');
@@ -849,6 +862,7 @@ describe('state role defaults', () => {
 
   it.each([
     ['clickhouse light', clickHouseLightTheme],
+    ['journey light', journeyLightTheme],
     ['clickhouse dark', clickHouseDarkTheme],
   ])('keeps the %s focused field edge at 3:1 on every field canvas', (_name, theme: IThemeRGB) => {
     const edge = toRgb(theme, 'rgb-border-field-focus');
@@ -869,6 +883,7 @@ describe('state role defaults', () => {
 
   it.each([
     ['clickhouse light', clickHouseLightTheme],
+    ['journey light', journeyLightTheme],
     ['clickhouse dark', clickHouseDarkTheme],
   ])('keeps %s dialog titles at AA on the dialog surface', (_name, theme: IThemeRGB) => {
     expect(

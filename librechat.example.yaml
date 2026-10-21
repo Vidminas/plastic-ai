@@ -180,7 +180,7 @@ interface:
   # historyCacheRecent: 1
   # Deployment theme applied to every user, in both light and dark mode (default: unset).
   # It is not saved to the browser, outranks REACT_APP_THEME_* colors and stored themes,
-  # and yields to the high-contrast modes. Either a bundled theme name (librechat, clickhouse):
+  # and yields to the high-contrast modes. Either a bundled theme name (librechat, clickhouse, journey):
   # theme: clickhouse
   # or an inline definition. Colors are space-separated RGB triplets keyed by rgb-* token:
   # theme:
