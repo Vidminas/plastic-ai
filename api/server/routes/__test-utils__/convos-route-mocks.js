@@ -85,6 +85,9 @@ module.exports = {
     getGuardrailTextMasker: jest.fn(() => undefined),
     requireForkingEnabled: jest.requireActual('../../../../packages/api/src/middleware/forking.ts')
       .requireForkingEnabled,
+    requireConversationImportEnabled: jest.requireActual(
+      '../../../../packages/api/src/middleware/importing.ts',
+    ).requireConversationImportEnabled,
     createGeneratedTitleHandler: jest.fn(() => jest.fn()),
     createRenameConversationHandler: jest.fn((deps) => {
       renameHandlerInputs.push(deps);

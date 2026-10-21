@@ -43,6 +43,7 @@ const {
   maskUserText,
   getGuardrailTextMasker,
   requireForkingEnabled,
+  requireConversationImportEnabled,
 } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys, EModelEndpoint } = require('librechat-data-provider');
@@ -759,6 +760,7 @@ router.post(
   importIpLimiter,
   importUserLimiter,
   configMiddleware,
+  requireConversationImportEnabled,
   handleUpload,
   restoreTenantContextFromReq,
   async (req, res) => {

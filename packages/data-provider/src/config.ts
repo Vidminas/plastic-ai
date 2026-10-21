@@ -2723,6 +2723,8 @@ export const interfaceSchema = z
     forking: z.boolean().optional(),
     /** Uploading a profile picture in Settings › Account. Enabled by default. */
     avatarUpload: z.boolean().optional(),
+    /** Importing conversations from a JSON file in Settings › Data controls. Enabled by default. */
+    conversationImport: z.boolean().optional(),
     currency: z
       .object({
         code: z.string(),
@@ -2948,6 +2950,7 @@ export const interfaceSchema = z
     feedback: true,
     forking: true,
     avatarUpload: true,
+    conversationImport: true,
     peoplePicker: {
       users: true,
       groups: true,

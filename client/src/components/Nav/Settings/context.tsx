@@ -27,6 +27,10 @@ export function useSettingsContext(): SettingsContextValue {
     permissionType: PermissionTypes.MULTI_CONVO,
     permission: Permissions.USE,
   });
+  const canCreateSharedLinks = useHasAccess({
+    permissionType: PermissionTypes.SHARED_LINKS,
+    permission: Permissions.CREATE,
+  });
   const hasPrompts = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,
     permission: Permissions.USE,
@@ -45,6 +49,10 @@ export function useSettingsContext(): SettingsContextValue {
   const aboutEnabled = startupConfig?.interface?.buildInfo !== false;
   const forkingEnabled = startupConfig?.interface?.forking !== false;
   const avatarUploadEnabled = startupConfig?.interface?.avatarUpload !== false;
+  const conversationImportEnabled = startupConfig?.interface?.conversationImport !== false;
+  /** Shared links are offered when the server allows them and the user's role may create them,
+   *  which `interface.sharedLinks` sets in either form (`false` or `{ create: false }`). */
+  const sharedLinksEnabled = startupConfig?.sharedLinksEnabled === true && canCreateSharedLinks;
   /* Offered only once the deployment has answered, matching the capability hook the alerts
      read: before then a toggle could store a preference, or raise the browser's permission
      prompt, for a capability the operator turns off. */
@@ -89,6 +97,8 @@ export function useSettingsContext(): SettingsContextValue {
       replyNotificationSoundAllowed,
       forkingEnabled,
       avatarUploadEnabled,
+      conversationImportEnabled,
+      sharedLinksEnabled,
     }),
     [
       balanceEnabled,
@@ -115,6 +125,8 @@ export function useSettingsContext(): SettingsContextValue {
       replyNotificationSoundAllowed,
       forkingEnabled,
       avatarUploadEnabled,
+      conversationImportEnabled,
+      sharedLinksEnabled,
     ],
   );
 }

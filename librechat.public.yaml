@@ -59,6 +59,8 @@ interface:
   forking: false
   # Participants keep the default avatar: no profile picture uploads.
   avatarUpload: false
+  # Chats start here: no importing conversations from a JSON file.
+  conversationImport: false
   # The footer's reminders sit one per line, which fits a narrow pane.
   footerLayout: stack
   # File search runs through agents, so they are on here as in the sandbox.

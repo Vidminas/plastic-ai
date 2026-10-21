@@ -7,10 +7,13 @@ import { useSettingsContext } from '../context';
 type LegacyProviderUser = Omit<TUser, 'provider'> & { provider?: string | null };
 
 let mockUser: LegacyProviderUser | undefined;
+let mockAccess: Record<string, boolean> = {};
+let mockStartupConfig: { sharedLinksEnabled?: boolean } | undefined;
 
 jest.mock('~/hooks', () => ({
   useAuthContext: () => ({ user: mockUser }),
-  useHasAccess: () => false,
+  useHasAccess: ({ permissionType, permission }: { permissionType: string; permission: string }) =>
+    mockAccess[`${permissionType}:${permission}`] === true,
   useGetAgentsConfig: () => ({ agentsConfig: undefined }),
 }));
 
@@ -20,7 +23,7 @@ jest.mock('~/hooks/usePersonalizationAccess', () => () => ({
 }));
 
 jest.mock('~/data-provider', () => ({
-  useGetStartupConfig: () => ({ data: undefined }),
+  useGetStartupConfig: () => ({ data: mockStartupConfig }),
 }));
 
 jest.mock('../../SettingsTabs/ProviderKeys/useProviderKeys', () => () => []);
@@ -74,5 +77,32 @@ describe('useSettingsContext two-factor policy scope', () => {
 
   it('withholds the policy capability when no authenticated user is loaded', () => {
     expect(policyProviderFor(undefined)).toBe(false);
+  });
+});
+
+describe('useSettingsContext shared links', () => {
+  afterEach(() => {
+    mockAccess = {};
+    mockStartupConfig = undefined;
+  });
+
+  const sharedLinksEnabled = () =>
+    renderHook(() => useSettingsContext(), { wrapper }).result.current.sharedLinksEnabled;
+
+  it('offers shared links when the server allows them and the role may create them', () => {
+    mockStartupConfig = { sharedLinksEnabled: true };
+    mockAccess = { 'SHARED_LINKS:CREATE': true };
+    expect(sharedLinksEnabled()).toBe(true);
+  });
+
+  it('leaves them out when the role may not create them, as `{ create: false }` sets', () => {
+    mockStartupConfig = { sharedLinksEnabled: true };
+    expect(sharedLinksEnabled()).toBe(false);
+  });
+
+  it('leaves them out when the server does not allow them', () => {
+    mockStartupConfig = { sharedLinksEnabled: false };
+    mockAccess = { 'SHARED_LINKS:CREATE': true };
+    expect(sharedLinksEnabled()).toBe(false);
   });
 });

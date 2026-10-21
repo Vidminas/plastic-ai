@@ -685,6 +685,7 @@ export const registry: SettingEntry[] = [
     tab: DATA,
     section: 'data',
     labelKey: 'com_ui_settings_label_import',
+    show: (ctx) => ctx.conversationImportEnabled,
     Component: ImportConversations,
   },
   {
@@ -692,6 +693,7 @@ export const registry: SettingEntry[] = [
     tab: DATA,
     section: 'data',
     labelKey: 'com_ui_settings_label_shared_links',
+    show: (ctx) => ctx.sharedLinksEnabled,
     Component: SharedLinks,
   },
   {
@@ -733,6 +735,8 @@ export const registry: SettingEntry[] = [
     tab: DATA,
     section: 'apiKeys',
     labelKey: 'com_ui_settings_label_revoke_keys',
+    /** It revokes the keys users entered for their own endpoints, so it needs one they can. */
+    show: (ctx) => ctx.hasUserProvidedEndpoints,
     Component: RevokeKeys,
   },
   // Langfuse

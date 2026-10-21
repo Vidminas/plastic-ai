@@ -53,6 +53,7 @@ export async function loadDefaultInterface({
     feedback: interfaceConfig?.feedback ?? defaults.feedback,
     forking: interfaceConfig?.forking ?? defaults.forking,
     avatarUpload: interfaceConfig?.avatarUpload ?? defaults.avatarUpload,
+    conversationImport: interfaceConfig?.conversationImport ?? defaults.conversationImport,
     currency: interfaceConfig?.currency ?? defaults.currency,
     theme: interfaceConfig?.theme,
     steerArmConfirmationTimeoutMs:
