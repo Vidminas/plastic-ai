@@ -9,6 +9,7 @@ import AgentMarketplaceButton from '~/components/Nav/AgentMarketplaceButton';
 import { CLOSE_SIDEBAR_ID } from '~/components/Chat/Menus/OpenSidebar';
 import { lazyWithRecovery } from '~/lib/assets/lazy';
 import useNewChat from '~/hooks/Chat/useNewChat';
+import { routePanelOf } from './constants';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -143,7 +144,9 @@ function ExpandedPanel({
   const location = useLocation();
   const { active, setActive } = useActivePanel();
   const effectiveActive = resolveActivePanel(active, links);
-  const isInsightsRoute = location.pathname.startsWith('/insights');
+  // const isInsightsRoute = location.pathname.startsWith('/insights');
+  const routePanel = routePanelOf(location.pathname);
+  const isInsightsRoute = routePanel != null;
 
   const toggleLabel = expanded ? 'com_nav_close_sidebar' : 'com_nav_open_sidebar';
   const toggleClick = expanded ? onCollapse : onExpand;
@@ -181,11 +184,12 @@ function ExpandedPanel({
           <NavIconButton
             key={link.id}
             link={link}
-            isActive={
-              link.id === 'insights'
-                ? isInsightsRoute
-                : !isInsightsRoute && link.id === effectiveActive
-            }
+            // isActive={
+            //   link.id === 'insights'
+            //     ? isInsightsRoute
+            //     : !isInsightsRoute && link.id === effectiveActive
+            // }
+            isActive={link.id === (routePanel ?? effectiveActive)}
             expanded={expanded ?? true}
             setActive={setActive}
             onExpand={onExpand}
