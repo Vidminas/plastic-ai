@@ -43,6 +43,8 @@ interface:
 
   modelSelect: true
   parameters: true
+  # Reasoning is set in the Parameters panel only, not from the composer.
+  composerReasoning: false
   presets: false
   prompts:
     use: false
@@ -50,7 +52,10 @@ interface:
     share: false
     public: false
   bookmarks: false
-  multiConvo: true
+  multiConvo: false
+  forking: false
+  # The footer's reminders sit one per line, which fits a narrow pane.
+  footerLayout: stack
   # File search runs through agents, so they are on here as in the sandbox.
   # Skill imports take .zip/.skill archives and files of any type, which the
   # upload policy does not allow, so users cannot create skills.
