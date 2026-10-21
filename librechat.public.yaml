@@ -46,6 +46,8 @@ interface:
 
   modelSelect: true
   parameters: true
+  # Participants keep the token and context limits the deployment sets.
+  hiddenParameterSections: ['limits']
   # Reasoning is set in the Parameters panel only, not from the composer.
   composerReasoning: false
   presets: false

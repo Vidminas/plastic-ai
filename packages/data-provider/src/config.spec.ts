@@ -574,6 +574,18 @@ describe('safeguardingSchema', () => {
   });
 });
 
+describe('interfaceSchema.hiddenParameterSections', () => {
+  it('takes the Parameters panel section ids', () => {
+    expect(interfaceSchema.parse({ hiddenParameterSections: ['limits'] })).toMatchObject({
+      hiddenParameterSections: ['limits'],
+    });
+  });
+
+  it('refuses an id the panel does not have, rather than hide nothing', () => {
+    expect(interfaceSchema.safeParse({ hiddenParameterSections: ['limit'] }).success).toBe(false);
+  });
+});
+
 describe('bedrockEndpointSchema', () => {
   it('preserves guardrailConfig from configSchema parsing', () => {
     const guardrailConfig = {

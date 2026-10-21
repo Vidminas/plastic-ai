@@ -2643,6 +2643,18 @@ export const isAllDataRetention = (mode?: RetentionMode | null): boolean =>
 export const isForcedTemporaryRetention = (mode?: RetentionMode | null): boolean =>
   mode === RetentionMode.EPHEMERAL;
 
+/** The Parameters panel's sections, in the order it shows them. */
+export const PARAMETER_SECTIONS = [
+  'identity',
+  'sampling',
+  'limits',
+  'reasoning',
+  'context',
+  'advanced',
+  'other',
+] as const;
+export type ParameterSectionId = (typeof PARAMETER_SECTIONS)[number];
+
 export const interfaceSchema = z
   .object({
     theme: deploymentThemeSchema.optional(),
@@ -2675,6 +2687,12 @@ export const interfaceSchema = z
       .max(AGENT_SELECTOR_LIMIT_MAX)
       .default(DEFAULT_AGENT_SELECTOR_LIMIT),
     parameters: z.boolean().optional(),
+    /**
+     * Sections of the Parameters panel to leave out, by id (`PARAMETER_SECTIONS`): identity,
+     * sampling, limits, reasoning, context, advanced or other. Users then keep the defaults (or
+     * the model spec's preset) for those parameters. Unset, every section shows.
+     */
+    hiddenParameterSections: z.array(z.enum(PARAMETER_SECTIONS)).optional(),
     /** The reasoning control in the composer footer. Enabled by default; when off, reasoning
      * is set only in the Parameters panel. */
     composerReasoning: z.boolean().optional(),
