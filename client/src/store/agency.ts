@@ -24,5 +24,11 @@ export const goalEditorHostAtom = atom<boolean>(false);
  */
 export const heldGoalCheckAtom = atom<{ submit: () => void } | null>(null);
 
+/**
+ * The reflection dialog: closed (null), open on the list of reflections, or open on one to
+ * edit (`reflectionId`).
+ */
+export const reflectionDialogAtom = atom<{ reflectionId?: string } | null>(null);
+
 /** Whether the long-term intentions dialog, opened from the sidebar, is open. */
 export const intentionsDialogAtom = atom<boolean>(false);

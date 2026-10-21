@@ -276,6 +276,10 @@ agency:
   conversationGoal: true
   goalChecks: true
   recap: true
+  # A "Reflect" button in the sidebar: fixed questions about one moment the
+  # participant decided how to use the AI, saved with the time, to review and
+  # edit later, as many times as they like.
+  reflections: true
   # Goals the conversation goal card suggests. The participant can pick one,
   # add their own words to it, or write a goal of their own; a picked
   # suggestion is enough to start. The recap groups chats by the suggestion

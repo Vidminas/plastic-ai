@@ -1,4 +1,10 @@
-import { agencySchema, AGENCY_TEXT_MAX, agencyGoalSchema, agencyIntentionsSchema } from './agency';
+import {
+  agencySchema,
+  AGENCY_TEXT_MAX,
+  agencyGoalSchema,
+  agencyIntentionsSchema,
+  agencyReflectionSchema,
+} from './agency';
 import { configSchema } from './config';
 
 describe('agencySchema', () => {
@@ -8,6 +14,7 @@ describe('agencySchema', () => {
       conversationGoal: false,
       goalChecks: false,
       recap: false,
+      reflections: false,
     });
   });
 
@@ -73,5 +80,20 @@ describe('agencyGoalSchema', () => {
     expect(agencyGoalSchema.safeParse({ text: 'x', suggestionId: 'Not An Id' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('agencyReflectionSchema', () => {
+  it('fills skipped questions with empty answers', () => {
+    expect(agencyReflectionSchema.parse({ answers: { working_on: ' My essay ' } })).toEqual({
+      answers: { working_on: 'My essay', decision: '', reason: '', outcome: '', happy: '' },
+    });
+  });
+
+  it('refuses a reflection with no answers, or an unknown question', () => {
+    expect(agencyReflectionSchema.safeParse({ answers: { reason: '  ' } }).success).toBe(false);
+    expect(
+      agencyReflectionSchema.safeParse({ answers: { working_on: 'x', mood: 'ok' } }).success,
+    ).toBe(false);
   });
 });

@@ -34,6 +34,7 @@ export { default as memorySchema, isValidMemoryKey } from './memory';
 export { default as agencyIntentionsSchema } from './agencyIntentions';
 export { default as agencyGoalSchema } from './agencyGoal';
 export { default as agencyEventSchema } from './agencyEvent';
+export { default as agencyReflectionSchema } from './agencyReflection';
 export { default as toolFavoriteSchema } from './favorite';
 export { default as groupSchema } from './group';
 export { default as systemGrantSchema } from './systemGrant';

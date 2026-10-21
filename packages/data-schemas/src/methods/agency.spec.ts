@@ -16,6 +16,8 @@ let methods: AgencyMethods;
 const userId = new mongoose.Types.ObjectId();
 const otherUserId = new mongoose.Types.ObjectId();
 
+const blank = { working_on: '', decision: '', reason: '', outcome: '', happy: '' };
+
 const intentions = {
   goals: 'Get confident with statistics',
   intendedUse: 'Explore options',
@@ -37,8 +39,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await Promise.all(
-    ['AgencyIntentions', 'AgencyGoal', 'AgencyEvent', 'Conversation'].map((name) =>
-      mongoose.models[name].deleteMany({}),
+    ['AgencyIntentions', 'AgencyGoal', 'AgencyEvent', 'AgencyReflection', 'Conversation'].map(
+      (name) => mongoose.models[name].deleteMany({}),
     ),
   );
 });
@@ -181,5 +183,53 @@ describe('deleting conversations', () => {
     await expect(methods.getConversationGoal(userId, 'c1')).resolves.toBeNull();
     await expect(methods.getConversationGoal(userId, 'c2')).resolves.not.toBeNull();
     await expect(mongoose.models.AgencyEvent.countDocuments({ userId })).resolves.toBe(1);
+  });
+});
+
+describe('reflections', () => {
+  it("lists them newest first, and edits only the learner's own, keeping when each was saved", async () => {
+    const first = await methods.createAgencyReflection(userId, {
+      ...blank,
+      working_on: 'History essay',
+      decision: 'Asked for questions',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const second = await methods.createAgencyReflection(userId, { ...blank, happy: 'Yes' });
+    expect(first.createdAt).toBe(first.updatedAt);
+
+    const listed = await methods.listAgencyReflections(userId);
+    expect(listed.map((reflection) => reflection.id)).toEqual([second.id, first.id]);
+    expect(listed[1].answers).toEqual({
+      working_on: 'History essay',
+      decision: 'Asked for questions',
+      reason: '',
+      outcome: '',
+      happy: '',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const edited = await methods.updateAgencyReflection(userId, first.id, {
+      ...first.answers,
+      outcome: 'Clearer argument',
+    });
+    expect(edited?.answers.outcome).toBe('Clearer argument');
+    expect(edited?.createdAt).toBe(first.createdAt);
+    expect(edited && edited.updatedAt > first.updatedAt).toBe(true);
+
+    await expect(
+      methods.updateAgencyReflection(otherUserId, first.id, { ...blank, happy: 'No' }),
+    ).resolves.toBeNull();
+    await expect(methods.updateAgencyReflection(userId, 'nope', blank)).resolves.toBeNull();
+    await expect(methods.listAgencyReflections(otherUserId)).resolves.toEqual([]);
+  });
+
+  it('deletes reflections with the rest of the agency data', async () => {
+    await methods.createAgencyReflection(userId, { ...blank, reason: 'Mine' });
+    await methods.createAgencyReflection(otherUserId, { ...blank, reason: 'Theirs' });
+    await methods.deleteAgencyData(userId);
+    await expect(mongoose.models.AgencyReflection.countDocuments({ userId })).resolves.toBe(0);
+    await expect(
+      mongoose.models.AgencyReflection.countDocuments({ userId: otherUserId }),
+    ).resolves.toBe(1);
   });
 });

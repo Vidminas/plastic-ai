@@ -43,6 +43,7 @@ const HEADLINE_KEYS: Record<TSafeguardingErrorInfo['source'], TranslationKeys> =
   response: 'com_safeguarding_blocked_response',
   goal: 'com_safeguarding_blocked_goal',
   intentions: 'com_safeguarding_blocked_intentions',
+  reflection: 'com_safeguarding_blocked_reflection',
 };
 
 /** The payload's `info`, read defensively: it crosses the wire as stored message text. */

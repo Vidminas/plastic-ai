@@ -644,6 +644,9 @@ export const agencyGoal = (conversationId: string) =>
 export const agencyEvents = () => `${agency()}/events`;
 export const agencyRecap = (conversationId?: string) =>
   `${agency()}/recap${conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : ''}`;
+export const agencyReflections = () => `${agency()}/reflections`;
+export const agencyReflection = (reflectionId: string) =>
+  `${agency()}/reflections/${encodeURIComponent(reflectionId)}`;
 
 export const searchPrincipals = (params: q.PrincipalSearchParams) => {
   const { q: query, limit, types } = params;

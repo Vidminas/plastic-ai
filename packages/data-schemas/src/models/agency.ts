@@ -1,7 +1,13 @@
 import type { Model } from 'mongoose';
-import type { IAgencyEvent, IAgencyGoal, IAgencyIntentions } from '~/types/agency';
+import type {
+  IAgencyGoal,
+  IAgencyEvent,
+  IAgencyIntentions,
+  IAgencyReflection,
+} from '~/types/agency';
 import { applyTenantIsolation } from '~/models/plugins/tenantIsolation';
 import agencyIntentionsSchema from '~/schema/agencyIntentions';
+import agencyReflectionSchema from '~/schema/agencyReflection';
 import agencyEventSchema from '~/schema/agencyEvent';
 import agencyGoalSchema from '~/schema/agencyGoal';
 
@@ -24,5 +30,15 @@ export function createAgencyEventModel(mongoose: typeof import('mongoose')): Mod
   applyTenantIsolation(agencyEventSchema);
   return (
     mongoose.models.AgencyEvent || mongoose.model<IAgencyEvent>('AgencyEvent', agencyEventSchema)
+  );
+}
+
+export function createAgencyReflectionModel(
+  mongoose: typeof import('mongoose'),
+): Model<IAgencyReflection> {
+  applyTenantIsolation(agencyReflectionSchema);
+  return (
+    mongoose.models.AgencyReflection ||
+    mongoose.model<IAgencyReflection>('AgencyReflection', agencyReflectionSchema)
   );
 }

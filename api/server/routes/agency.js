@@ -11,6 +11,9 @@ const handlers = createAgencyHandlers({
   setConversationGoal: db.setConversationGoal,
   getAgencyRecap: db.getAgencyRecap,
   getConvo: db.getConvo,
+  listAgencyReflections: db.listAgencyReflections,
+  createAgencyReflection: db.createAgencyReflection,
+  updateAgencyReflection: db.updateAgencyReflection,
   record: createAgencyEventRecorder({ recordAgencyEvent: db.recordAgencyEvent }),
 });
 
@@ -21,5 +24,8 @@ router.get('/conversations/:conversationId/goal', handlers.getGoal);
 router.put('/conversations/:conversationId/goal', handlers.putGoal);
 router.post('/events', handlers.postEvent);
 router.get('/recap', handlers.getRecap);
+router.get('/reflections', handlers.getReflections);
+router.post('/reflections', handlers.postReflection);
+router.patch('/reflections/:reflectionId', handlers.patchReflection);
 
 module.exports = router;

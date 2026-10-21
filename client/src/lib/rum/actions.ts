@@ -22,6 +22,7 @@ export const UI_ACTIONS = [
   'agency.goal_updated',
   'agency.intentions_updated',
   'agency.recap_viewed',
+  'agency.reflection_saved',
 ] as const;
 
 export type UiAction = (typeof UI_ACTIONS)[number];

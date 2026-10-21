@@ -1,6 +1,12 @@
 import { buildGoalContext, withAgencyContext, resolveAgencyContext } from '../context';
 
-const agency = { intentions: false, conversationGoal: true, goalChecks: true, recap: false };
+const agency = {
+  intentions: false,
+  conversationGoal: true,
+  goalChecks: true,
+  recap: false,
+  reflections: false,
+};
 
 const deps = (stored: string | null = null) => ({
   getConversationGoal: jest.fn().mockResolvedValue(stored == null ? null : { text: stored }),

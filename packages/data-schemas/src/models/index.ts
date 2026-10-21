@@ -2,6 +2,7 @@ import {
   createAgencyEventModel,
   createAgencyGoalModel,
   createAgencyIntentionsModel,
+  createAgencyReflectionModel,
 } from './agency';
 import { createAgentQueuedTurnModel, createAgentQueuedTurnSequenceModel } from './queuedTurn';
 import { createAgentTriggerLaneSequenceModel } from './triggerLaneSequence';
@@ -93,6 +94,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
   AgencyIntentions: ReturnType<typeof createAgencyIntentionsModel>;
   AgencyGoal: ReturnType<typeof createAgencyGoalModel>;
   AgencyEvent: ReturnType<typeof createAgencyEventModel>;
+  AgencyReflection: ReturnType<typeof createAgencyReflectionModel>;
   ToolFavorite: ReturnType<typeof createToolFavoriteModel>;
   AccessRole: ReturnType<typeof createAccessRoleModel>;
   AclEntry: ReturnType<typeof createAclEntryModel>;
@@ -147,6 +149,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
     AgencyIntentions: createAgencyIntentionsModel(mongoose),
     AgencyGoal: createAgencyGoalModel(mongoose),
     AgencyEvent: createAgencyEventModel(mongoose),
+    AgencyReflection: createAgencyReflectionModel(mongoose),
     ToolFavorite: createToolFavoriteModel(mongoose),
     AccessRole: createAccessRoleModel(mongoose),
     AclEntry: createAclEntryModel(mongoose),

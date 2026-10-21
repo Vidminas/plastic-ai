@@ -2,6 +2,7 @@ import { logger } from '@librechat/data-schemas';
 import {
   ErrorTypes,
   agencyGoalSchema,
+  agencyReflectionSchema,
   agencyIntentionsSchema,
   clientAgencyEventSchema,
 } from 'librechat-data-provider';
@@ -10,7 +11,9 @@ import type {
   TAgencyConfig,
   TConversationGoal,
   TAgencyIntentions,
+  TAgencyReflection,
   TSafeguardingErrorInfo,
+  TAgencyReflectionAnswers,
 } from 'librechat-data-provider';
 import type { AppConfig } from '@librechat/data-schemas';
 import type { Request, Response } from 'express';
@@ -34,6 +37,16 @@ export interface AgencyHandlerDeps {
     suggestionId?: string | null,
   ): Promise<TConversationGoal>;
   getAgencyRecap(userId: UserId, options?: { conversationId?: string }): Promise<TAgencyRecap>;
+  listAgencyReflections(userId: UserId): Promise<TAgencyReflection[]>;
+  createAgencyReflection(
+    userId: UserId,
+    answers: TAgencyReflectionAnswers,
+  ): Promise<TAgencyReflection>;
+  updateAgencyReflection(
+    userId: UserId,
+    reflectionId: string,
+    answers: TAgencyReflectionAnswers,
+  ): Promise<TAgencyReflection | null>;
   /** Resolves when the user owns the conversation; null when there is no such conversation. */
   getConvo(userId: UserId, conversationId: string): Promise<unknown>;
   record: AgencyEventRecorder;
@@ -53,6 +66,9 @@ export interface AgencyHandlers {
   putGoal: Handler;
   postEvent: Handler;
   getRecap: Handler;
+  getReflections: Handler;
+  postReflection: Handler;
+  patchReflection: Handler;
 }
 
 const NOT_FOUND = { message: 'Not found' };
@@ -103,7 +119,7 @@ type ScreenedText<K extends string> =
 export async function screenLearnerText<K extends string>(
   req: { config?: AppConfig; user?: { id?: string; openidId?: string } },
   fields: Record<K, string>,
-  event: { source: 'goal' | 'intentions'; conversationId?: string },
+  event: { source: 'goal' | 'intentions' | 'reflection'; conversationId?: string },
 ): Promise<ScreenedText<K>> {
   const keys = Object.keys(fields) as K[];
   const masked = await Promise.all(keys.map((key) => maskUserText(req.config ?? {}, fields[key])));
@@ -218,7 +234,60 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
           : undefined;
       return res.json(await deps.getAgencyRecap(userId, scope));
     }),
+
+    getReflections: gated('reflections', 'load reflections', async (_req, res, userId) =>
+      res.json({ reflections: await deps.listAgencyReflections(userId) }),
+    ),
+
+    postReflection: gated('reflections', 'save reflection', async (req, res, userId) => {
+      const answers = await screenedReflection(req, res);
+      if (answers == null) {
+        return res;
+      }
+      const reflection = await deps.createAgencyReflection(userId, answers);
+      deps.record.event({ userId, type: 'reflection_saved', detail: reflection.id });
+      return res.status(201).json({ reflection });
+    }),
+
+    patchReflection: gated('reflections', 'save reflection', async (req, res, userId) => {
+      const { reflectionId } = req.params as { reflectionId?: string };
+      if (typeof reflectionId !== 'string' || !/^[a-f0-9]{24}$/.test(reflectionId)) {
+        return res.status(400).json({ message: 'Invalid reflection' });
+      }
+      const answers = await screenedReflection(req, res);
+      if (answers == null) {
+        return res;
+      }
+      const reflection = await deps.updateAgencyReflection(userId, reflectionId, answers);
+      if (reflection == null) {
+        return res.status(404).json(NOT_FOUND);
+      }
+      deps.record.event({ userId, type: 'reflection_updated', detail: reflection.id });
+      return res.json({ reflection });
+    }),
   };
+}
+
+/**
+ * A reflection's answers from the request, masked one by one and screened together, as
+ * reflection text. Answers 400 or the safeguarding refusal itself, and resolves null, when the
+ * answers cannot be saved.
+ */
+async function screenedReflection(
+  req: AgencyRequest,
+  res: Response,
+): Promise<TAgencyReflectionAnswers | null> {
+  const parsed = agencyReflectionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: 'Invalid reflection' });
+    return null;
+  }
+  const screened = await screenLearnerText(req, parsed.data.answers, { source: 'reflection' });
+  if (!screened.ok) {
+    blocked(res, screened.info);
+    return null;
+  }
+  return screened.fields;
 }
 
 /** A suggestion in `agency.goalSuggestions`, by its id. */

@@ -16,6 +16,7 @@ const allOn = {
   conversationGoal: true,
   goalChecks: true,
   recap: true,
+  reflections: true,
   goalSuggestions: [{ id: 'exams', title: 'Prepare for exams', icon: 'book' }],
 };
 const makeDeps = () => ({
@@ -25,6 +26,19 @@ const makeDeps = () => ({
   setConversationGoal: jest.fn().mockImplementation(async (_u, _c, text) => ({ text })),
   getAgencyRecap: jest.fn().mockResolvedValue({ goals: { set: 0, conversations: 0 } }),
   getConvo: jest.fn().mockResolvedValue({ conversationId: 'c1' }),
+  listAgencyReflections: jest.fn().mockResolvedValue([]),
+  createAgencyReflection: jest.fn().mockImplementation(async (_u, answers) => ({
+    id: 'r1',
+    answers,
+    createdAt: 'a',
+    updatedAt: 'a',
+  })),
+  updateAgencyReflection: jest.fn().mockImplementation(async (_u, id, answers) => ({
+    id,
+    answers,
+    createdAt: 'a',
+    updatedAt: 'b',
+  })),
   record: { event: jest.fn() },
 });
 
@@ -271,5 +285,103 @@ describe('createAgencyHandlers', () => {
       unknown as never,
     );
     expect(unknown.statusCode).toBe(400);
+  });
+
+  describe('reflections', () => {
+    const answers = {
+      working_on: 'History essay',
+      decision: 'Asked for questions',
+      reason: '',
+      outcome: 'Got 7 out of 10',
+      happy: '',
+    };
+
+    it('answers 404 while reflections are off', async () => {
+      const res = makeRes();
+      await createAgencyHandlers(makeDeps()).getReflections(
+        makeReq({ config: { agency: { ...allOn, reflections: false } } }) as never,
+        res as never,
+      );
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('masks each answer, screens them together as a reflection, and records the save', async () => {
+      const deps = makeDeps();
+      (screenForSafeguarding as jest.Mock).mockResolvedValue({ ok: true });
+      const res = makeRes();
+      await createAgencyHandlers(deps).postReflection(
+        makeReq({ config: { agency: allOn, safeguarding: {} }, body: { answers } }) as never,
+        res as never,
+      );
+      expect(res.statusCode).toBe(201);
+      expect(screenForSafeguarding).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'History essay\n\nAsked for questions\n\nGot # out of ##',
+          event: expect.objectContaining({ source: 'reflection' }),
+        }),
+      );
+      expect(deps.createAgencyReflection).toHaveBeenCalledWith('u1', {
+        ...answers,
+        outcome: 'Got # out of ##',
+      });
+      expect(deps.record.event).toHaveBeenCalledWith({
+        userId: 'u1',
+        type: 'reflection_saved',
+        detail: 'r1',
+      });
+    });
+
+    it('refuses an empty reflection, and one safeguarding blocks', async () => {
+      const deps = makeDeps();
+      const handlers = createAgencyHandlers(deps);
+      const empty = makeRes();
+      await handlers.postReflection(makeReq({ body: { answers: {} } }) as never, empty as never);
+      expect(empty.statusCode).toBe(400);
+
+      const info = { source: 'reflection', reasons: [{ type: 'topic', name: 'self-harm' }] };
+      (screenForSafeguarding as jest.Mock).mockResolvedValue({ ok: false, info });
+      const refused = makeRes();
+      await handlers.postReflection(
+        makeReq({ config: { agency: allOn, safeguarding: {} }, body: { answers } }) as never,
+        refused as never,
+      );
+      expect(refused.statusCode).toBe(422);
+      expect(deps.createAgencyReflection).not.toHaveBeenCalled();
+    });
+
+    it("edits a reflection of the learner's own, recording the edit", async () => {
+      const deps = makeDeps();
+      const handlers = createAgencyHandlers(deps);
+      const id = 'c'.repeat(24);
+      const res = makeRes();
+      await handlers.patchReflection(
+        makeReq({ params: { reflectionId: id }, body: { answers } }) as never,
+        res as never,
+      );
+      expect(deps.updateAgencyReflection).toHaveBeenCalledWith('u1', id, {
+        ...answers,
+        outcome: 'Got # out of ##',
+      });
+      expect(deps.record.event).toHaveBeenCalledWith({
+        userId: 'u1',
+        type: 'reflection_updated',
+        detail: id,
+      });
+
+      deps.updateAgencyReflection.mockResolvedValue(null);
+      const missing = makeRes();
+      await handlers.patchReflection(
+        makeReq({ params: { reflectionId: id }, body: { answers } }) as never,
+        missing as never,
+      );
+      expect(missing.statusCode).toBe(404);
+
+      const bad = makeRes();
+      await handlers.patchReflection(
+        makeReq({ params: { reflectionId: 'x' }, body: { answers } }) as never,
+        bad as never,
+      );
+      expect(bad.statusCode).toBe(400);
+    });
   });
 });

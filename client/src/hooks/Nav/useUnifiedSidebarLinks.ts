@@ -4,13 +4,13 @@ import { useRecoilValue } from 'recoil';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useUserKeyQuery } from 'librechat-data-provider/react-query';
 import { getConfigDefaults, getEndpointField } from 'librechat-data-provider';
-import { Sprout, Compass, BarChart3, MessagesSquare } from 'lucide-react';
+import { Sprout, Compass, BarChart3, NotebookPen, MessagesSquare } from 'lucide-react';
 import type { TEndpointsConfig } from 'librechat-data-provider';
 import type { NavLink } from '~/common';
 import { useGetEndpointsQuery, useGetStartupConfig, useInsightsAccessQuery } from '~/data-provider';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
+import { reflectionDialogAtom, intentionsDialogAtom } from '~/store/agency';
 import useSideNavLinks from '~/hooks/Nav/useSideNavLinks';
-import { intentionsDialogAtom } from '~/store/agency';
 import { useAuthContext } from '~/hooks';
 import store from '~/store';
 
@@ -145,6 +145,23 @@ export default function useUnifiedSidebarLinks() {
     return [...withRecap, intentionsLink];
   }, [intentionsEnabled, openIntentions, withRecap]);
 
+  /** Reflections (`agency.reflections`) open in a dialog over whatever page is showing. */
+  const reflectionsEnabled = startupConfig?.agency?.reflections === true;
+  const openReflections = useSetAtom(reflectionDialogAtom);
+  const withReflections = useMemo(() => {
+    if (!reflectionsEnabled) {
+      return withIntentions;
+    }
+    const reflectLink: NavLink = {
+      title: 'com_agency_reflections_navigation',
+      label: '',
+      icon: NotebookPen,
+      id: 'agency-reflections',
+      onClick: () => openReflections({}),
+    };
+    return [...withIntentions, reflectLink];
+  }, [openReflections, reflectionsEnabled, withIntentions]);
+
   // return links;
-  return withIntentions;
+  return withReflections;
 }

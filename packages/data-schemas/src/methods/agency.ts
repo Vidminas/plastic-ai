@@ -1,16 +1,19 @@
 import { Types } from 'mongoose';
-import { GOAL_CHECK_OUTCOMES } from 'librechat-data-provider';
+import { GOAL_CHECK_OUTCOMES, AGENCY_REFLECTION_QUESTIONS } from 'librechat-data-provider';
 import type {
   TAgencyRecap,
   TAgencyEvent,
   AgencyFactor,
   TConversationGoal,
   TAgencyIntentions,
+  TAgencyReflection,
+  TAgencyReflectionAnswers,
 } from 'librechat-data-provider';
 import type {
   IAgencyGoal,
   IAgencyEvent,
   IAgencyIntentions,
+  IAgencyReflection,
   RecordAgencyEventParams,
 } from '~/types/agency';
 
@@ -39,10 +42,22 @@ export interface AgencyMethods {
   ): Promise<TConversationGoal>;
   /** Deletes the goals of these conversations, or of every conversation when omitted. */
   deleteConversationGoals(userId: UserId, conversationIds?: string[]): Promise<number>;
+  /** The learner's reflections, newest first. */
+  listAgencyReflections(userId: UserId): Promise<TAgencyReflection[]>;
+  createAgencyReflection(
+    userId: UserId,
+    answers: TAgencyReflectionAnswers,
+  ): Promise<TAgencyReflection>;
+  /** Replaces a reflection's answers; null when there is no such reflection of theirs. */
+  updateAgencyReflection(
+    userId: UserId,
+    reflectionId: string,
+    answers: TAgencyReflectionAnswers,
+  ): Promise<TAgencyReflection | null>;
   recordAgencyEvent(params: RecordAgencyEventParams): Promise<void>;
   /** Counts and the latest examples, for one conversation or all of them. */
   getAgencyRecap(userId: UserId, options?: { conversationId?: string }): Promise<TAgencyRecap>;
-  /** Deletes the user's intentions, goals and engagement events. */
+  /** Deletes the user's intentions, goals, reflections and engagement events. */
   deleteAgencyData(userId: UserId): Promise<void>;
 }
 
@@ -68,6 +83,15 @@ const toEvent = (doc: IAgencyEvent): TAgencyEvent => ({
   createdAt: doc.createdAt.toISOString(),
 });
 
+const toReflection = (doc: IAgencyReflection): TAgencyReflection => ({
+  id: String(doc._id),
+  answers: Object.fromEntries(
+    AGENCY_REFLECTION_QUESTIONS.map((question) => [question, doc.answers?.[question] ?? '']),
+  ) as TAgencyReflectionAnswers,
+  createdAt: doc.createdAt.toISOString(),
+  updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
+});
+
 /**
  * Deletes the goals and engagement events of deleted conversations. Called from
  * `deleteConvos`, so whatever removes a conversation removes these with it.
@@ -91,6 +115,7 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
   const intentionsModel = () => mongoose.models.AgencyIntentions;
   const goalModel = () => mongoose.models.AgencyGoal;
   const eventModel = () => mongoose.models.AgencyEvent;
+  const reflectionModel = () => mongoose.models.AgencyReflection;
 
   async function getAgencyIntentions(userId: UserId): Promise<TAgencyIntentions | null> {
     const doc = await intentionsModel().findOne({ userId }).lean<IAgencyIntentions>();
@@ -137,6 +162,40 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
       )
       .lean<IAgencyGoal>();
     return toGoal(doc as IAgencyGoal);
+  }
+
+  async function listAgencyReflections(userId: UserId): Promise<TAgencyReflection[]> {
+    const docs = await reflectionModel()
+      .find({ userId })
+      .sort({ createdAt: -1 })
+      .lean<IAgencyReflection[]>();
+    return docs.map(toReflection);
+  }
+
+  async function createAgencyReflection(
+    userId: UserId,
+    answers: TAgencyReflectionAnswers,
+  ): Promise<TAgencyReflection> {
+    const doc = await reflectionModel().create({ userId, answers });
+    return toReflection(doc.toObject() as IAgencyReflection);
+  }
+
+  async function updateAgencyReflection(
+    userId: UserId,
+    reflectionId: string,
+    answers: TAgencyReflectionAnswers,
+  ): Promise<TAgencyReflection | null> {
+    if (!Types.ObjectId.isValid(reflectionId)) {
+      return null;
+    }
+    const doc = await reflectionModel()
+      .findOneAndUpdate(
+        { _id: reflectionId, userId },
+        { $set: { answers } },
+        { new: true, runValidators: true },
+      )
+      .lean<IAgencyReflection>();
+    return doc ? toReflection(doc) : null;
   }
 
   async function deleteConversationGoals(
@@ -228,6 +287,7 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
       intentionsModel().deleteMany({ userId }),
       goalModel().deleteMany({ userId }),
       eventModel().deleteMany({ userId }),
+      reflectionModel().deleteMany({ userId }),
     ]);
   }
 
@@ -237,6 +297,9 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
     getConversationGoal,
     setConversationGoal,
     deleteConversationGoals,
+    listAgencyReflections,
+    createAgencyReflection,
+    updateAgencyReflection,
     recordAgencyEvent,
     getAgencyRecap,
     deleteAgencyData,

@@ -82,6 +82,11 @@ export const agencySchema = z.object({
   /** The agency recap page and its sidebar link. */
   recap: z.boolean().default(false),
   /**
+   * A sidebar button that opens a reflection: fixed questions about one moment the learner
+   * decided how to use the AI, which they can save, review and edit, as often as they like.
+   */
+  reflections: z.boolean().default(false),
+  /**
    * Goals the conversation goal card suggests: the learner can pick one, add their own words to
    * it, or write their own, and the recap groups conversations by the suggestion they started
    * from. Unset, the card asks for the learner's own words only.
@@ -129,6 +134,47 @@ export type TConversationGoal = {
   setAt?: string;
 };
 
+/**
+ * The questions of a reflection, in the order they are asked: a moment the learner decided how
+ * to use the AI (or not to), what they did, why, how it went, and whether they are happy with
+ * it. Fixed, so the client can ask each in the learner's language.
+ */
+export const AGENCY_REFLECTION_QUESTIONS = [
+  'working_on',
+  'decision',
+  'reason',
+  'outcome',
+  'happy',
+] as const;
+export type AgencyReflectionQuestion = (typeof AGENCY_REFLECTION_QUESTIONS)[number];
+
+export type TAgencyReflectionAnswers = Record<AgencyReflectionQuestion, string>;
+
+/** A reflection's answers; any question may be skipped, but not every one. */
+export const agencyReflectionSchema = z
+  .object({
+    answers: z
+      .object(
+        Object.fromEntries(
+          AGENCY_REFLECTION_QUESTIONS.map((question) => [question, agencyTextSchema.default('')]),
+        ) as Record<AgencyReflectionQuestion, z.ZodDefault<typeof agencyTextSchema>>,
+      )
+      .strict(),
+  })
+  .strict()
+  .refine((reflection) => Object.values(reflection.answers).some((answer) => answer.length > 0), {
+    message: 'Answer at least one question',
+  });
+export type TAgencyReflectionInput = z.input<typeof agencyReflectionSchema>;
+
+/** A saved reflection: when it was first saved, and when it was last edited. */
+export type TAgencyReflection = {
+  id: string;
+  answers: TAgencyReflectionAnswers;
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** How a learner answered a goal check. */
 export const GOAL_CHECK_OUTCOMES = ['continue', 'refocus', 'goal_changed'] as const;
 export type GoalCheckOutcome = (typeof GOAL_CHECK_OUTCOMES)[number];
@@ -151,6 +197,8 @@ export const AGENCY_EVENT_TYPES = [
   'goal_check_offered',
   'goal_check_resolved',
   'recap_viewed',
+  'reflection_saved',
+  'reflection_updated',
 ] as const;
 export type AgencyEventType = (typeof AGENCY_EVENT_TYPES)[number];
 

@@ -13,7 +13,8 @@ export type SafeguardingSource =
   | 'upload'
   | 'response'
   | 'goal'
-  | 'intentions';
+  | 'intentions'
+  | 'reflection';
 
 export type SafeguardingSeverity = 'none' | 'flag' | 'block';
 

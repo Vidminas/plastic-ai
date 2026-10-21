@@ -1,18 +1,20 @@
 import type { AxiosResponse } from 'axios';
 import type {
+  TAgencyRecap,
+  TConversationGoal,
+  TAgencyIntentions,
+  TAgencyReflection,
+  TClientAgencyEvent,
+  TAgencyIntentionsInput,
+  TAgencyReflectionInput,
+} from './agency';
+import type {
   TTracePage,
   TTracePageParams,
   TTraceAvailability,
   TTraceRecordParams,
   TTraceRecordDetail,
 } from './types/traces';
-import type {
-  TAgencyRecap,
-  TConversationGoal,
-  TAgencyIntentions,
-  TClientAgencyEvent,
-  TAgencyIntentionsInput,
-} from './agency';
 import type { TInsightsAccessResponse, TInsightsParams, TInsightsResponse } from './types/insights';
 import type { ScheduleMCPConsentView, ConfirmScheduleMCPConsent } from './types/scheduleConsent';
 import type { TFileConfig } from './file-config';
@@ -1825,6 +1827,23 @@ export const updateConversationGoal = (
   goal: { text: string; suggestionId?: string | null },
 ): Promise<{ goal: TConversationGoal }> => {
   return request.put(endpoints.agencyGoal(conversationId), goal);
+};
+
+export const getAgencyReflections = (): Promise<{ reflections: TAgencyReflection[] }> => {
+  return request.get(endpoints.agencyReflections());
+};
+
+export const createAgencyReflection = (
+  reflection: TAgencyReflectionInput,
+): Promise<{ reflection: TAgencyReflection }> => {
+  return request.post(endpoints.agencyReflections(), reflection);
+};
+
+export const updateAgencyReflection = (
+  reflectionId: string,
+  reflection: TAgencyReflectionInput,
+): Promise<{ reflection: TAgencyReflection }> => {
+  return request.patch(endpoints.agencyReflection(reflectionId), reflection);
 };
 
 export const recordAgencyEvent = (event: TClientAgencyEvent): Promise<void> => {

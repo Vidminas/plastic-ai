@@ -1,4 +1,8 @@
-import type { AgencyEventType, AgencyFactor } from 'librechat-data-provider';
+import type {
+  AgencyFactor,
+  AgencyEventType,
+  TAgencyReflectionAnswers,
+} from 'librechat-data-provider';
 import type { Types, Document } from 'mongoose';
 
 /** A learner's long-term intentions; never sent to a model. */
@@ -20,6 +24,16 @@ export interface IAgencyGoal extends Document {
   /** The suggested goal it started from. */
   suggestionId?: string;
   setAt: Date;
+  tenantId?: string;
+}
+
+/** A reflection a learner wrote: their answers to the reflection's questions. */
+export interface IAgencyReflection extends Document {
+  _id: Types.ObjectId;
+  userId: Types.ObjectId;
+  answers: TAgencyReflectionAnswers;
+  createdAt: Date;
+  updatedAt: Date;
   tenantId?: string;
 }
 

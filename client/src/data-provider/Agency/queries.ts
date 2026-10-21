@@ -5,8 +5,10 @@ import type {
   TAgencyRecap,
   TConversationGoal,
   TAgencyIntentions,
+  TAgencyReflection,
   TClientAgencyEvent,
   TAgencyIntentionsInput,
+  TAgencyReflectionInput,
 } from 'librechat-data-provider';
 import type {
   UseQueryOptions,
@@ -99,6 +101,67 @@ export const useAgencyRecapQuery = (
     () => dataService.getAgencyRecap(conversationId),
     { refetchOnWindowFocus: false, ...config },
   );
+
+export const useAgencyReflectionsQuery = (
+  config?: UseQueryOptions<{ reflections: TAgencyReflection[] }>,
+): QueryObserverResult<{ reflections: TAgencyReflection[] }> =>
+  useQuery<{ reflections: TAgencyReflection[] }>(
+    [QueryKeys.agencyReflections],
+    () => dataService.getAgencyReflections(),
+    { refetchOnWindowFocus: false, ...config },
+  );
+
+/** After a reflection is saved or edited, the list and the recap are read again. */
+const useReflectionsChanged = () => {
+  const queryClient = useQueryClient();
+  return () => {
+    queryClient.invalidateQueries([QueryKeys.agencyReflections]);
+    queryClient.invalidateQueries([QueryKeys.agencyRecap]);
+  };
+};
+
+export const useCreateAgencyReflectionMutation = (
+  options?: UseMutationOptions<{ reflection: TAgencyReflection }, Error, TAgencyReflectionInput>,
+) => {
+  const changed = useReflectionsChanged();
+  return useMutation<{ reflection: TAgencyReflection }, Error, TAgencyReflectionInput>(
+    [MutationKeys.createAgencyReflection],
+    (reflection) => dataService.createAgencyReflection(reflection),
+    {
+      ...options,
+      onSuccess: (...args) => {
+        changed();
+        options?.onSuccess?.(...args);
+      },
+    },
+  );
+};
+
+export type UpdateAgencyReflectionParams = {
+  reflectionId: string;
+  reflection: TAgencyReflectionInput;
+};
+
+export const useUpdateAgencyReflectionMutation = (
+  options?: UseMutationOptions<
+    { reflection: TAgencyReflection },
+    Error,
+    UpdateAgencyReflectionParams
+  >,
+) => {
+  const changed = useReflectionsChanged();
+  return useMutation<{ reflection: TAgencyReflection }, Error, UpdateAgencyReflectionParams>(
+    [MutationKeys.updateAgencyReflection],
+    ({ reflectionId, reflection }) => dataService.updateAgencyReflection(reflectionId, reflection),
+    {
+      ...options,
+      onSuccess: (...args) => {
+        changed();
+        options?.onSuccess?.(...args);
+      },
+    },
+  );
+};
 
 /** Reports an engagement only the browser sees; a failure is not the learner's concern. */
 export const recordAgencyEvent = (event: TClientAgencyEvent): void => {
