@@ -2643,6 +2643,18 @@ export const isAllDataRetention = (mode?: RetentionMode | null): boolean =>
 export const isForcedTemporaryRetention = (mode?: RetentionMode | null): boolean =>
   mode === RetentionMode.EPHEMERAL;
 
+/** The Parameters panel's sections, in the order it shows them. */
+export const PARAMETER_SECTIONS = [
+  'identity',
+  'sampling',
+  'limits',
+  'reasoning',
+  'context',
+  'advanced',
+  'other',
+] as const;
+export type ParameterSectionId = (typeof PARAMETER_SECTIONS)[number];
+
 export const interfaceSchema = z
   .object({
     theme: deploymentThemeSchema.optional(),
@@ -2654,6 +2666,9 @@ export const interfaceSchema = z
       .optional(),
     termsOfService: termsOfServiceSchema.optional(),
     customWelcome: z.string().optional(),
+    /** How the footer's `|`-separated parts sit under the composer: side by side (`row`, the
+     * default) or one per line (`stack`), which reads better in a narrow pane. */
+    footerLayout: z.enum(['row', 'stack']).optional(),
     /** Adds a note to the dialogs that delete conversations and files: deleting removes them
      * from the app, but not from records kept outside it (interaction logs and traces). */
     deletionLogNotice: z.boolean().optional(),
@@ -2672,6 +2687,15 @@ export const interfaceSchema = z
       .max(AGENT_SELECTOR_LIMIT_MAX)
       .default(DEFAULT_AGENT_SELECTOR_LIMIT),
     parameters: z.boolean().optional(),
+    /**
+     * Sections of the Parameters panel to leave out, by id (`PARAMETER_SECTIONS`): identity,
+     * sampling, limits, reasoning, context, advanced or other. Users then keep the defaults (or
+     * the model spec's preset) for those parameters. Unset, every section shows.
+     */
+    hiddenParameterSections: z.array(z.enum(PARAMETER_SECTIONS)).optional(),
+    /** The reasoning control in the composer footer. Enabled by default; when off, reasoning
+     * is set only in the Parameters panel. */
+    composerReasoning: z.boolean().optional(),
     multiConvo: z.boolean().optional(),
     bookmarks: z.boolean().optional(),
     memories: z.boolean().optional(),
@@ -2713,6 +2737,12 @@ export const interfaceSchema = z
      *  the docked pane. */
     artifactUndocking: z.boolean().optional(),
     feedback: z.boolean().optional(),
+    /** Forking a conversation from a message into a new one. Enabled by default. */
+    forking: z.boolean().optional(),
+    /** Uploading a profile picture in Settings › Account. Enabled by default. */
+    avatarUpload: z.boolean().optional(),
+    /** Importing conversations from a JSON file in Settings › Data controls. Enabled by default. */
+    conversationImport: z.boolean().optional(),
     currency: z
       .object({
         code: z.string(),
@@ -2936,6 +2966,9 @@ export const interfaceSchema = z
     contextCost: false,
     artifactUndocking: true,
     feedback: true,
+    forking: true,
+    avatarUpload: true,
+    conversationImport: true,
     peoplePicker: {
       users: true,
       groups: true,
@@ -3154,7 +3187,10 @@ export type TStartupConfig = {
   maxUserMessageChars?: number;
   /** `openingHours`, with the server's clock (ms) when sent, so the browser shows the resting page on time. */
   openingHours?: TOpeningHours & { serverTime: number };
-  /** `safeguarding.signposting` (or `openingHours.support`): where blocked content points to. */
+  /** `safeguarding.crisis`, `nonUrgent`, `unsuitable` and `conduct`: who blocked content points to. */
+  safeguardingNotices?: Partial<Record<SafeguardingNoticeKind, TSafeguardingNotice>>;
+  /** `safeguarding.signposting` (or `openingHours.support`): the services shown with blocked
+   *  content when no crisis notice is configured. */
   safeguardingSupport?: TSupportService[];
   /** Conversation-owned code-environment decision protocol supported by the API.
    * Clients must not emit selection-less decisions unless this is advertised. */
@@ -3861,11 +3897,36 @@ const safeguardingLevelsSchema = (fallback: SafeguardingConfidence) =>
     .default({});
 
 /**
+ * A safeguarding notice: the reasons it is for (denied topic names, content filter categories,
+ * and `MODEL_FILTER` for a reply the model's own safety filter stopped), the message shown
+ * under why the content was blocked, and the services it points to, written out in full,
+ * possibly none. The message introduces the services when there are any, so it can end with
+ * a colon.
+ */
+const safeguardingNoticeSchema = z.object({
+  reasons: z.array(z.string().min(1)).min(1),
+  message: z.string().min(1),
+  signposting: z.array(supportServiceSchema),
+});
+
+export type TSafeguardingNotice = z.infer<typeof safeguardingNoticeSchema>;
+
+/** The safeguarding notices, most serious first: a block shows the first its reasons reach. */
+export const SAFEGUARDING_NOTICES = ['crisis', 'nonUrgent', 'unsuitable', 'conduct'] as const;
+export type SafeguardingNoticeKind = (typeof SAFEGUARDING_NOTICES)[number];
+
+/**
  * Screens what participants write and upload, and what models reply, with Bedrock guardrail
  * content filters, denied topics and word filters. A detection at `flag` or above is logged
  * for the safeguarding team and the content goes through; at `block` or above the content
- * is blocked, the participant sees why and where to find support (`signposting`), and
+ * is blocked, the participant sees why and where to find support (the notices), and
  * `alerts.topicArn` is notified.
+ *
+ * Which notice blocked content gets depends on its reasons: each reason picks the notice that
+ * lists it, and the most serious of them is shown, in `SAFEGUARDING_NOTICES` order. A reason
+ * no notice lists, or a block without reasons, gets the crisis notice. Every notice names its
+ * own services; nothing is filled in from elsewhere. Without a crisis notice, the crisis case
+ * shows the services in `signposting`, as before the notices existed.
  *
  * Prompts, answers to the model's questions and upload text go through `guardrail` with
  * ApplyGuardrail, which only detects; the app compares each confidence with these levels.
@@ -3874,23 +3935,57 @@ const safeguardingLevelsSchema = (fallback: SafeguardingConfidence) =>
  * `trace: enabled_full`), which blocks at the `block` levels itself. Unset, nothing is
  * screened.
  */
-export const safeguardingSchema = z.object({
-  guardrail: guardrailReferenceSchema,
-  /** The confidence, per content filter, at which a detection is flagged. */
-  flag: safeguardingLevelsSchema('MEDIUM'),
-  /** The confidence, per content filter, at which content is blocked. */
-  block: safeguardingLevelsSchema('HIGH'),
-  /** What a denied topic's detection does, by the topic's name in the guardrail. Unlisted: `flag`. */
-  topics: z.record(z.string(), z.enum(['flag', 'block'])).default({}),
-  /** Word filter and managed word list matches are flagged, or ignored with `off`. */
-  words: z.enum(['flag', 'off']).default('flag'),
-  /** `refuse` turns content away when the guardrail cannot be reached; `allow` lets it through. */
-  onError: z.enum(['refuse', 'allow']).default('refuse'),
-  /** The SNS topic blocked content is reported to; unset, no alerts are sent. */
-  alerts: z.object({ topicArn: z.string().min(1) }).optional(),
-  /** Services shown with blocked content, as on the resting page. Unset, `openingHours.support`. */
-  signposting: z.array(supportServiceSchema).optional(),
-});
+export const safeguardingSchema = z
+  .object({
+    guardrail: guardrailReferenceSchema,
+    /** The confidence, per content filter, at which a detection is flagged. */
+    flag: safeguardingLevelsSchema('MEDIUM'),
+    /** The confidence, per content filter, at which content is blocked. */
+    block: safeguardingLevelsSchema('HIGH'),
+    /** What a denied topic's detection does, by the topic's name in the guardrail. Unlisted: `flag`. */
+    topics: z.record(z.string(), z.enum(['flag', 'block'])).default({}),
+    /** Word filter and managed word list matches are flagged, or ignored with `off`. */
+    words: z.enum(['flag', 'off']).default('flag'),
+    /** `refuse` turns content away when the guardrail cannot be reached; `allow` lets it through. */
+    onError: z.enum(['refuse', 'allow']).default('refuse'),
+    /** The SNS topic blocked content is reported to; unset, no alerts are sent. */
+    alerts: z.object({ topicArn: z.string().min(1) }).optional(),
+    /**
+     * Where the participant may be at risk, such as self-harm: the crisis services. Also shown
+     * for any reason no other notice lists; unset, that notice lists no services.
+     */
+    crisis: safeguardingNoticeSchema.optional(),
+    /** No emergency, such as bullying or insults: an adult the participant trusts. */
+    nonUrgent: safeguardingNoticeSchema.optional(),
+    /**
+     * Not suitable here, such as sexual content or violence: says so, and points to an adult the
+     * participant trusts, in case they were writing about something that happened to them.
+     */
+    unsuitable: safeguardingNoticeSchema.optional(),
+    /** About how the assistant is used, such as prompt attacks: steers back to learning. */
+    conduct: safeguardingNoticeSchema.optional(),
+    /**
+     * Services shown with blocked content, as on the resting page, when `crisis` is unset.
+     * Unset, `openingHours.support`. A configured crisis notice replaces it.
+     */
+    signposting: z.array(supportServiceSchema).optional(),
+  })
+  .superRefine((config, ctx) => {
+    const seen = new Map<string, string>();
+    for (const notice of SAFEGUARDING_NOTICES) {
+      for (const reason of config[notice]?.reasons ?? []) {
+        const other = seen.get(reason);
+        if (other != null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [notice, 'reasons'],
+            message: `"${reason}" is already listed in ${other}.reasons`,
+          });
+        }
+        seen.set(reason, notice);
+      }
+    }
+  });
 
 export type TSafeguarding = z.infer<typeof safeguardingSchema>;
 

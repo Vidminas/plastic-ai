@@ -82,6 +82,11 @@ mono family to Inconsolata over a real fallback stack, and raises every surface 
 `shadow.1`, at 0.15 alpha in light mode and 0.6 in dark. Select it for a deployment with
 `interface.theme: clickhouse` in `librechat.yaml`.
 
+The bundled learning journey theme (`themes/journey.ts`) is the reference for a theme built on the
+stock light palette: it spreads `defaultTheme`, keeps its backgrounds and borders, recolours the
+text and controls, and defines no dark mode, so dark mode resolves to LibreChat's. Select it with
+`interface.theme: journey`.
+
 `themeRGB`, `REACT_APP_THEME_*`, and the existing localStorage keys remain supported through legacy
 adapters. Theme application removes only variables owned by the theme module when a theme is reset.
 

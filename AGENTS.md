@@ -191,10 +191,7 @@ Boundaries" for the companion module-placement policy.
   additive wiring over rewrites. `ENDPOINTS=agents,bedrock` and `fileStrategy: "s3"` switch behavior
   through configuration instead of editing the code paths they select.
 - **Create new files instead of replacing existing ones** where practical, so upstream files stay
-  byte-close to their origin. The DynamoDB port lives in new `packages/data-schemas/src/dynamo/*` and
-  `packages/api/src/dynamo/*`; the Bedrock Knowledge Base in `packages/api/src/bedrock-kb/*`; the 501
-  profile in `packages/api/src/http/unsupported.ts` — none rewrite the upstream Mongoose models in
-  place.
+  byte-close to their origin.
 
 ## Configuration and Docker changes
 
@@ -205,7 +202,7 @@ safe placeholder (never a real secret). The two files must stay in lockstep so a
 
 Make all Docker changes in `docker-compose.override.yml`, never by editing the upstream
 `docker-compose.yml`. The override file is where the fork adds and re-points services (new init
-containers such as `dynamodb-init`/`s3-init`/`bedrock-kb-init`, ministack endpoints, and the
+containers such as `s3-init`, ministack endpoints, and the
 commented-out legacy `MONGO_URI`/`RAG_API_URL` anchors), which keeps the upstream compose file
 byte-close to its origin and every fork-specific service additive. `docker-compose.override.yml.example`
 is upstream LibreChat's commented override template, not a mirror of the fork's override — the fork's

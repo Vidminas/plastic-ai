@@ -336,15 +336,50 @@ describe('AskUserQuestions', () => {
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
   });
 
-  test('skips the whole batch from any step', () => {
-    renderBatch('ask-skip');
+  test('skips only the question on screen, keeping the answers already given', () => {
+    renderBatch('ask-skip-last');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.click(screen.getByRole('button', { name: /Staging/ }));
+    /** A single choice moves on to the next question by itself. */
     fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
 
     expect(mockSubmitAskAnswer).toHaveBeenCalledWith(
-      'ask-skip',
-      { environment: ASK_USER_DECLINED_ANSWER, window: ASK_USER_DECLINED_ANSWER },
+      'ask-skip-last',
+      { environment: 'staging', window: ASK_USER_DECLINED_ANSWER },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
+  test('moves on from a skipped question, and sends it as declined with the rest', () => {
+    renderBatch('ask-skip-first');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(mockSubmitAskAnswer).not.toHaveBeenCalled();
+    expect(isShown('Which time window?')).toBe(true);
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Tonight' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(mockSubmitAskAnswer).toHaveBeenCalledWith(
+      'ask-skip-first',
+      { environment: ASK_USER_DECLINED_ANSWER, window: 'Tonight' },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
+  test('takes a skipped question back when it is answered after all', () => {
+    renderBatch('ask-skip-undo');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    /** A single choice moves on to the next question by itself. */
+    fireEvent.click(screen.getByRole('button', { name: /Production/ }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Tonight' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(mockSubmitAskAnswer).toHaveBeenCalledWith(
+      'ask-skip-undo',
+      { environment: 'production', window: 'Tonight' },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
   });

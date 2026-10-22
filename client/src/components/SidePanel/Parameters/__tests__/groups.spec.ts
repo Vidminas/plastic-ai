@@ -1,6 +1,13 @@
 import { ComponentTypes } from 'librechat-data-provider';
 import type { SettingDefinition } from 'librechat-data-provider';
-import { countModified, groupParameters, hasControl, isModified, isWideParameter } from '../groups';
+import {
+  hasControl,
+  isModified,
+  countModified,
+  groupParameters,
+  isWideParameter,
+  withoutHiddenSections,
+} from '../groups';
 
 const setting = (key: string, over: Partial<SettingDefinition> = {}): SettingDefinition =>
   ({ key, type: 'number', component: 'slider', ...over }) as SettingDefinition;
@@ -199,5 +206,27 @@ describe('isWideParameter', () => {
     expect(
       isWideParameter(setting('promptCacheTtl', { type: 'string', component: 'combobox' })),
     ).toBe(false);
+  });
+});
+
+describe('withoutHiddenSections', () => {
+  const sections = groupParameters([
+    setting('temperature'),
+    setting('maxContextTokens'),
+    setting('maxOutputTokens'),
+    setting('thinking', { type: 'boolean', component: 'switch' } as Partial<SettingDefinition>),
+  ]);
+
+  it('leaves out the sections a deployment hides, with every parameter in them', () => {
+    const shown = withoutHiddenSections(sections, ['limits']);
+    expect(shown.map((section) => section.id)).toEqual(['sampling', 'reasoning']);
+    expect(shown.flatMap((section) => section.settings.map((item) => item.key))).not.toContain(
+      'maxOutputTokens',
+    );
+  });
+
+  it('shows every section when none is hidden', () => {
+    expect(withoutHiddenSections(sections, undefined)).toBe(sections);
+    expect(withoutHiddenSections(sections, [])).toBe(sections);
   });
 });

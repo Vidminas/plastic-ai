@@ -722,15 +722,19 @@ const ChatForm = memo(function ChatForm({
      conversation has nothing beneath it, so it keeps only enough to clear the
      surface's own shadow. Below `sm` the composer runs to the viewport floor in
      every state. */
+  /* A stacked footer (`interface.footerLayout: stack`) needs a band two lines tall. */
+  const footerBand = startupConfig?.interface?.footerLayout === 'stack' ? 'sm:mb-14' : 'sm:mb-10';
   const landingClearance =
-    centerFormOnLanding && !isSubmitting ? 'transition-all duration-200 sm:mb-28' : 'sm:mb-10';
+    // centerFormOnLanding && !isSubmitting ? 'transition-all duration-200 sm:mb-28' : 'sm:mb-10';
+    centerFormOnLanding && !isSubmitting ? 'transition-all duration-200 sm:mb-28' : footerBand;
   let bottomClearance = 'sm:mb-4';
   if (isLandingPage) {
     bottomClearance = landingClearance;
   } else if (footerBelow) {
     /* A conversation that carries a configured footer keeps the band that bar
        needs, exactly as the welcome screen does. */
-    bottomClearance = 'sm:mb-10';
+    // bottomClearance = 'sm:mb-10';
+    bottomClearance = footerBand;
   }
 
   /** Answer mode, then during-run steering or queueing (a run in flight, or a

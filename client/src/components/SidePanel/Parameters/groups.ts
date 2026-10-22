@@ -1,9 +1,14 @@
 import { ComponentTypes, SettingTypes } from 'librechat-data-provider';
-import type { SettingDefinition, TConversation, TPreset } from 'librechat-data-provider';
+import type {
+  TPreset,
+  TConversation,
+  SettingDefinition,
+  ParameterSectionId,
+} from 'librechat-data-provider';
 import type { TranslationKeys } from '~/hooks';
 
 export interface ParameterSection {
-  id: string;
+  id: ParameterSectionId;
   label: TranslationKeys;
   settings: SettingDefinition[];
 }
@@ -23,7 +28,11 @@ export interface ParameterSection {
  * misdescribes it; an unknown key falls to the last section instead, where it is
  * still visible and still editable.
  */
-const SECTIONS: ReadonlyArray<{ id: string; label: TranslationKeys; keys: readonly string[] }> = [
+const SECTIONS: ReadonlyArray<{
+  id: ParameterSectionId;
+  label: TranslationKeys;
+  keys: readonly string[];
+}> = [
   {
     id: 'identity',
     label: 'com_ui_params_identity',
@@ -142,6 +151,17 @@ export function groupParameters(parameters: SettingDefinition[]): ParameterSecti
     }
   }
   return sections;
+}
+
+/** The sections a deployment has not left out (`interface.hiddenParameterSections`). */
+export function withoutHiddenSections(
+  sections: ParameterSection[],
+  hidden: readonly ParameterSectionId[] | undefined,
+): ParameterSection[] {
+  if (hidden == null || hidden.length === 0) {
+    return sections;
+  }
+  return sections.filter((section) => !hidden.includes(section.id));
 }
 
 /**

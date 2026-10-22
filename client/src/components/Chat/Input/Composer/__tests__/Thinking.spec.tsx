@@ -60,8 +60,12 @@ jest.mock('~/hooks', () => ({
   },
 }));
 
+let mockInterfaceConfig: { parameters?: boolean; composerReasoning?: boolean } = {
+  parameters: true,
+};
+
 jest.mock('~/data-provider', () => ({
-  useGetStartupConfig: () => ({ data: { interface: { parameters: true } } }),
+  useGetStartupConfig: () => ({ data: { interface: mockInterfaceConfig } }),
 }));
 
 jest.mock('~/Providers', () => ({
@@ -91,6 +95,7 @@ describe('Thinking', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPendingOverride = undefined;
+    mockInterfaceConfig = { parameters: true };
     mockSetting = {
       key: 'reasoning_effort',
       type: 'enum',
@@ -101,6 +106,13 @@ describe('Thinking', () => {
       conversationId: 'convo-1',
       reasoning_effort: 'low',
     } as unknown as TConversation;
+  });
+
+  it('leaves reasoning to the Parameters panel when the composer control is off', () => {
+    mockInterfaceConfig = { parameters: true, composerReasoning: false };
+    renderInComposer();
+
+    expect(screen.queryByTestId('composer-thinking-button')).not.toBeInTheDocument();
   });
 
   it('forwards the composer disabled state to the enum control', () => {

@@ -162,6 +162,337 @@ index c308a93..d22e2b6 100644
  }
  function hasLangfuseEnvKeys() {
  	return isPresent(process.env.LANGFUSE_SECRET_KEY) && isPresent(process.env.LANGFUSE_PUBLIC_KEY);
+diff --git a/node_modules/@librechat/agents/dist/cjs/llm/bedrock/index.cjs b/node_modules/@librechat/agents/dist/cjs/llm/bedrock/index.cjs
+index 5694879..710c6b3 100644
+--- a/node_modules/@librechat/agents/dist/cjs/llm/bedrock/index.cjs
++++ b/node_modules/@librechat/agents/dist/cjs/llm/bedrock/index.cjs
+@@ -8,6 +8,7 @@ const require_message_inputs = require("./utils/message_inputs.cjs");
+ const require_message_outputs = require("./utils/message_outputs.cjs");
+ require("./utils/index.cjs");
+ const require_cachePoints = require("./cachePoints.cjs");
++const require_thinkTags = require("./thinkTags.cjs");
+ let _langchain_core_messages = require("@langchain/core/messages");
+ let _langchain_core_outputs = require("@langchain/core/outputs");
+ let _langchain_aws = require("@langchain/aws");
+@@ -116,93 +117,121 @@ var CustomChatBedrockConverse = class extends _langchain_aws.ChatBedrockConverse
+ 				};
+ 			};
+ 			const enrichChunk = this.enrichChunk.bind(this);
++			const thinkTags = require_thinkTags.createThinkTagJoiner();
++			let lastTextDelta;
++			const releaseHeldText = function* () {
++				const held = thinkTags.flush();
++				if (held === "" || lastTextDelta == null) return;
++				const { delta, indices } = lastTextDelta;
++				yield {
++					text: held,
++					smooth: true,
++					emit: (piece) => buildDeltaEmission(delta, piece.text, indices)
++				};
++			};
+ 			const smoothed = require_smoother.smoothStream({
+ 				source: (async function* () {
+-					for await (const event of stream) if (event.contentBlockStart != null) {
+-						const startChunk = require_message_outputs.handleConverseStreamContentBlockStart(event.contentBlockStart);
+-						if (startChunk != null) {
+-							const idx = event.contentBlockStart.contentBlockIndex;
+-							if (idx != null) {
+-								seenBlockIndices.add(idx);
+-								if (event.contentBlockStart.start?.toolUse != null) toolUseBlockIndices.add(idx);
++					for await (const event of stream) {
++						if (typeof event.contentBlockDelta?.delta?.text !== "string") yield* releaseHeldText();
++						if (event.contentBlockStart != null) {
++							const startChunk = require_message_outputs.handleConverseStreamContentBlockStart(event.contentBlockStart);
++							if (startChunk != null) {
++								const idx = event.contentBlockStart.contentBlockIndex;
++								if (idx != null) {
++									seenBlockIndices.add(idx);
++									if (event.contentBlockStart.start?.toolUse != null) toolUseBlockIndices.add(idx);
++								}
++								const enrichedStart = enrichChunk(startChunk, seenBlockIndices);
++								if (enrichedStart !== startChunk) require_streamLimits.linkStreamLimitCanonical(startChunk.message, enrichedStart.message);
++								yield {
++									text: "",
++									smooth: false,
++									emit: () => ({
++										chunk: enrichedStart,
++										callbackChunk: startChunk,
++										callbackToken: startChunk.text
++									})
++								};
++							}
++						} else if (event.contentBlockDelta != null) {
++							const contentBlockDelta = event.contentBlockDelta;
++							const delta = contentBlockDelta.delta;
++							if (delta == null) throw new Error("No delta found in content block.");
++							const idx = contentBlockDelta.contentBlockIndex;
++							if (idx != null) seenBlockIndices.add(idx);
++							const indicesSnapshot = new Set(seenBlockIndices);
++							if (typeof delta.text === "string" && delta.text !== "") {
++								lastTextDelta = {
++									delta: contentBlockDelta,
++									indices: indicesSnapshot
++								};
++								for (const segment of thinkTags.push(delta.text)) yield {
++									text: segment.text,
++									smooth: !segment.tag,
++									emit: (piece) => buildDeltaEmission(contentBlockDelta, segment.tag ? segment.text : piece.text, indicesSnapshot)
++								};
++								continue;
++							}
++							const visibleText = resolveVisibleText(delta.text, delta.reasoningContent?.text);
++							if (visibleText === "") {
++								yield {
++									text: "",
++									smooth: false,
++									emit: () => buildDeltaEmission(contentBlockDelta, visibleText, indicesSnapshot)
++								};
++								continue;
+ 							}
+-							const enrichedStart = enrichChunk(startChunk, seenBlockIndices);
+-							if (enrichedStart !== startChunk) require_streamLimits.linkStreamLimitCanonical(startChunk.message, enrichedStart.message);
++							yield {
++								text: visibleText,
++								smooth: true,
++								emit: (piece) => buildDeltaEmission(contentBlockDelta, piece.text, indicesSnapshot)
++							};
++						} else if (event.metadata != null) {
++							const metadataChunk = require_message_outputs.handleConverseStreamMetadata(event.metadata, { streamUsage });
+ 							yield {
+ 								text: "",
+ 								smooth: false,
+ 								emit: () => ({
+-									chunk: enrichedStart,
+-									callbackChunk: startChunk,
+-									callbackToken: startChunk.text
++									chunk: metadataChunk,
++									callbackToken: ""
+ 								})
+ 							};
+-						}
+-					} else if (event.contentBlockDelta != null) {
+-						const contentBlockDelta = event.contentBlockDelta;
+-						const delta = contentBlockDelta.delta;
+-						if (delta == null) throw new Error("No delta found in content block.");
+-						const idx = contentBlockDelta.contentBlockIndex;
+-						if (idx != null) seenBlockIndices.add(idx);
+-						const visibleText = resolveVisibleText(delta.text, delta.reasoningContent?.text);
+-						const indicesSnapshot = new Set(seenBlockIndices);
+-						if (visibleText === "") {
++						} else if (event.contentBlockStop != null) {
++							const stopIdx = event.contentBlockStop.contentBlockIndex;
++							if (stopIdx != null) {
++								seenBlockIndices.add(stopIdx);
++								if (sealToolUseOnStop && toolUseBlockIndices.has(stopIdx)) {
++									const sealChunk = require_message_outputs.createConverseToolUseStopChunk(stopIdx);
++									yield {
++										text: "",
++										smooth: false,
++										emit: () => ({
++											chunk: sealChunk,
++											callbackChunk: sealChunk,
++											callbackToken: sealChunk.text
++										})
++									};
++								}
++							}
++						} else {
++							const eventChunk = new _langchain_core_outputs.ChatGenerationChunk({
++								text: "",
++								message: new _langchain_core_messages.AIMessageChunk({
++									content: "",
++									response_metadata: { ...event }
++								})
++							});
+ 							yield {
+ 								text: "",
+ 								smooth: false,
+-								emit: () => buildDeltaEmission(contentBlockDelta, visibleText, indicesSnapshot)
++								emit: () => ({
++									chunk: eventChunk,
++									callbackToken: ""
++								})
+ 							};
+-							continue;
+-						}
+-						yield {
+-							text: visibleText,
+-							smooth: true,
+-							emit: (piece) => buildDeltaEmission(contentBlockDelta, piece.text, indicesSnapshot)
+-						};
+-					} else if (event.metadata != null) {
+-						const metadataChunk = require_message_outputs.handleConverseStreamMetadata(event.metadata, { streamUsage });
+-						yield {
+-							text: "",
+-							smooth: false,
+-							emit: () => ({
+-								chunk: metadataChunk,
+-								callbackToken: ""
+-							})
+-						};
+-					} else if (event.contentBlockStop != null) {
+-						const stopIdx = event.contentBlockStop.contentBlockIndex;
+-						if (stopIdx != null) {
+-							seenBlockIndices.add(stopIdx);
+-							if (sealToolUseOnStop && toolUseBlockIndices.has(stopIdx)) {
+-								const sealChunk = require_message_outputs.createConverseToolUseStopChunk(stopIdx);
+-								yield {
+-									text: "",
+-									smooth: false,
+-									emit: () => ({
+-										chunk: sealChunk,
+-										callbackChunk: sealChunk,
+-										callbackToken: sealChunk.text
+-									})
+-								};
+-							}
+ 						}
+-					} else {
+-						const eventChunk = new _langchain_core_outputs.ChatGenerationChunk({
+-							text: "",
+-							message: new _langchain_core_messages.AIMessageChunk({
+-								content: "",
+-								response_metadata: { ...event }
+-							})
+-						});
+-						yield {
+-							text: "",
+-							smooth: false,
+-							emit: () => ({
+-								chunk: eventChunk,
+-								callbackToken: ""
+-							})
+-						};
+ 					}
++					yield* releaseHeldText();
+ 				})(),
+ 				delayMs: this._lc_stream_delay,
+ 				signal: options.signal,
+diff --git a/node_modules/@librechat/agents/dist/cjs/llm/bedrock/thinkTags.cjs b/node_modules/@librechat/agents/dist/cjs/llm/bedrock/thinkTags.cjs
+new file mode 100644
+index 0000000..0d1d1ae
+--- /dev/null
++++ b/node_modules/@librechat/agents/dist/cjs/llm/bedrock/thinkTags.cjs
+@@ -0,0 +1,38 @@
++//#region src/llm/bedrock/thinkTags.ts
++const THINK_TAGS = ["<thinking>", "</thinking>"];
++const LONGEST_TAG = Math.max(...THINK_TAGS.map((tag) => tag.length));
++const TAG_PATTERN = /(<\/?thinking>)/;
++function trailingTagFragment(text) {
++	for (let length = Math.min(LONGEST_TAG - 1, text.length); length > 0; length--) {
++		const end = text.slice(-length);
++		if (THINK_TAGS.some((tag) => tag !== end && tag.startsWith(end))) return length;
++	}
++	return 0;
++}
++function createThinkTagJoiner() {
++	let held = "";
++	return {
++		push(text) {
++			let buffer = held + text;
++			held = "";
++			const fragment = trailingTagFragment(buffer);
++			if (fragment > 0) {
++				held = buffer.slice(-fragment);
++				buffer = buffer.slice(0, -fragment);
++			}
++			return buffer.split(TAG_PATTERN).filter((part) => part !== "").map((part) => ({
++				text: part,
++				tag: TAG_PATTERN.test(part)
++			}));
++		},
++		flush() {
++			const rest = held;
++			held = "";
++			return rest;
++		}
++	};
++}
++//#endregion
++exports.createThinkTagJoiner = createThinkTagJoiner;
++
++//# sourceMappingURL=thinkTags.cjs.map
+\ No newline at end of file
+diff --git a/node_modules/@librechat/agents/dist/cjs/main.cjs b/node_modules/@librechat/agents/dist/cjs/main.cjs
+index 5e69373..212cfe6 100644
+--- a/node_modules/@librechat/agents/dist/cjs/main.cjs
++++ b/node_modules/@librechat/agents/dist/cjs/main.cjs
+@@ -777,6 +777,7 @@ exports.normalizeSearchResultData = require_tool.normalizeSearchResultData;
+ exports.normalizeServerFilter = require_ToolSearch.normalizeServerFilter;
+ exports.normalizeSubagentConfigEntries = require_childGraphConfig.normalizeSubagentConfigEntries;
+ exports.normalizeSubagentConfigs = require_childGraphConfig.normalizeSubagentConfigs;
++exports.normalizeThinkTags = require_stream.normalizeThinkTags;
+ exports.normalizeToBashIdentifier = require_BashProgrammaticToolCalling.normalizeToBashIdentifier;
+ exports.normalizeToPythonIdentifier = require_ProgrammaticToolCalling.normalizeToPythonIdentifier;
+ exports.outcomeFieldsFromResult = require_intentArg.outcomeFieldsFromResult;
+diff --git a/node_modules/@librechat/agents/dist/cjs/stream.cjs b/node_modules/@librechat/agents/dist/cjs/stream.cjs
+index 6dbacff..2301fb0 100644
+--- a/node_modules/@librechat/agents/dist/cjs/stream.cjs
++++ b/node_modules/@librechat/agents/dist/cjs/stream.cjs
+@@ -22,6 +22,10 @@ const require_toolOutputReferences = require("./tools/toolOutputReferences.cjs")
+ const require_toolErrorContent = require("./tools/toolErrorContent.cjs");
+ //#region src/stream.ts
+ const LOCAL_CODING_BUNDLE_NAME_SET = new Set(require_enum.LOCAL_CODING_BUNDLE_NAMES);
++function normalizeThinkTags(content) {
++	if (typeof content !== "string" || !content.includes("thinking>")) return content;
++	return content.replace(/<thinking>/g, "<think>").replace(/<\/thinking>/g, "</think>");
++}
+ function parseThinkingContent(content) {
+ 	if (!content.includes("<think>")) return {
+ 		text: content,
+@@ -688,11 +692,11 @@ var ChatModelStreamHandler = class {
+ 		if (runScopeInvalidated()) return;
+ 		throwIfRunBreakerTripped();
+ 		const agentContext = graph.getAgentContext(metadata);
+-		const content = getChunkContent({
++		const content = normalizeThinkTags(getChunkContent({
+ 			chunk,
+ 			reasoningKey: agentContext.reasoningKey,
+ 			provider: agentContext.provider
+-		});
++		}));
+ 		const skipHandling = await require_handlers.handleServerToolResult({
+ 			graph,
+ 			content,
+@@ -926,6 +930,7 @@ hasToolCallChunks: ${hasToolCallChunks}
+ 		})) }, metadata);
+ 	}
+ 	handleReasoning(chunk, agentContext) {
++		const text = normalizeThinkTags(chunk.content);
+ 		let reasoning_content = chunk.additional_kwargs?.[agentContext.reasoningKey];
+ 		if (Array.isArray(chunk.content) && (chunk.content[0]?.type === "thinking" || chunk.content[0]?.type === "reasoning" || chunk.content[0]?.type === "reasoning_content" || chunk.content[0]?.type === "redacted_thinking")) reasoning_content = "valid";
+ 		else if ((agentContext.provider === "openAI" || agentContext.provider === "azureOpenAI") && reasoning_content != null && typeof reasoning_content !== "string" && reasoning_content.summary?.[0]?.text != null && reasoning_content.summary[0].text) reasoning_content = "valid";
+@@ -938,18 +943,18 @@ hasToolCallChunks: ${hasToolCallChunks}
+ 			agentContext.currentTokenType = "text";
+ 			agentContext.tokenTypeSwitch = "content";
+ 			agentContext.reasoningTransitionCount++;
+-		} else if (chunk.content != null && typeof chunk.content === "string" && chunk.content.includes("<think>") && chunk.content.includes("</think>")) {
++		} else if (text != null && typeof text === "string" && text.includes("<think>") && text.includes("</think>")) {
+ 			agentContext.currentTokenType = "think_and_text";
+ 			agentContext.tokenTypeSwitch = "content";
+-		} else if (chunk.content != null && typeof chunk.content === "string" && chunk.content.includes("<think>")) {
++		} else if (text != null && typeof text === "string" && text.includes("<think>")) {
+ 			agentContext.currentTokenType = "think";
+ 			agentContext.tokenTypeSwitch = "content";
+ 		} else if (agentContext.lastToken != null && agentContext.lastToken.includes("</think>")) {
+ 			agentContext.currentTokenType = "text";
+ 			agentContext.tokenTypeSwitch = "content";
+ 		}
+-		if (typeof chunk.content !== "string") return;
+-		agentContext.lastToken = chunk.content;
++		if (typeof text !== "string") return;
++		agentContext.lastToken = text;
+ 	}
+ };
+ function createContentAggregator() {
+@@ -1312,5 +1317,6 @@ exports.SDK_STREAM_DISPATCH = SDK_STREAM_DISPATCH;
+ exports.createContentAggregator = createContentAggregator;
+ exports.dispatchesChatModelStream = dispatchesChatModelStream;
+ exports.getChunkContent = getChunkContent;
++exports.normalizeThinkTags = normalizeThinkTags;
+ 
+ //# sourceMappingURL=stream.cjs.map
+\ No newline at end of file
 diff --git a/node_modules/@librechat/agents/dist/esm/instrumentation.mjs b/node_modules/@librechat/agents/dist/esm/instrumentation.mjs
 index 1652bbf..54429a2 100644
 --- a/node_modules/@librechat/agents/dist/esm/instrumentation.mjs
@@ -326,6 +657,345 @@ index f0afab7..7a0ab30 100644
  }
  function hasLangfuseEnvKeys() {
  	return isPresent(process.env.LANGFUSE_SECRET_KEY) && isPresent(process.env.LANGFUSE_PUBLIC_KEY);
+diff --git a/node_modules/@librechat/agents/dist/esm/llm/bedrock/index.mjs b/node_modules/@librechat/agents/dist/esm/llm/bedrock/index.mjs
+index 00fe1a7..f22e6d6 100644
+--- a/node_modules/@librechat/agents/dist/esm/llm/bedrock/index.mjs
++++ b/node_modules/@librechat/agents/dist/esm/llm/bedrock/index.mjs
+@@ -7,6 +7,7 @@ import { convertToConverseMessages } from "./utils/message_inputs.mjs";
+ import { createConverseToolUseStopChunk, handleConverseStreamContentBlockDelta, handleConverseStreamContentBlockStart, handleConverseStreamMetadata } from "./utils/message_outputs.mjs";
+ import "./utils/index.mjs";
+ import { applyCachePointsToConversePayload } from "./cachePoints.mjs";
++import { createThinkTagJoiner } from "./thinkTags.mjs";
+ import { AIMessageChunk } from "@langchain/core/messages";
+ import { ChatGenerationChunk } from "@langchain/core/outputs";
+ import { ChatBedrockConverse } from "@langchain/aws";
+@@ -115,93 +116,121 @@ var CustomChatBedrockConverse = class extends ChatBedrockConverse {
+ 				};
+ 			};
+ 			const enrichChunk = this.enrichChunk.bind(this);
++			const thinkTags = createThinkTagJoiner();
++			let lastTextDelta;
++			const releaseHeldText = function* () {
++				const held = thinkTags.flush();
++				if (held === "" || lastTextDelta == null) return;
++				const { delta, indices } = lastTextDelta;
++				yield {
++					text: held,
++					smooth: true,
++					emit: (piece) => buildDeltaEmission(delta, piece.text, indices)
++				};
++			};
+ 			const smoothed = smoothStream({
+ 				source: (async function* () {
+-					for await (const event of stream) if (event.contentBlockStart != null) {
+-						const startChunk = handleConverseStreamContentBlockStart(event.contentBlockStart);
+-						if (startChunk != null) {
+-							const idx = event.contentBlockStart.contentBlockIndex;
+-							if (idx != null) {
+-								seenBlockIndices.add(idx);
+-								if (event.contentBlockStart.start?.toolUse != null) toolUseBlockIndices.add(idx);
++					for await (const event of stream) {
++						if (typeof event.contentBlockDelta?.delta?.text !== "string") yield* releaseHeldText();
++						if (event.contentBlockStart != null) {
++							const startChunk = handleConverseStreamContentBlockStart(event.contentBlockStart);
++							if (startChunk != null) {
++								const idx = event.contentBlockStart.contentBlockIndex;
++								if (idx != null) {
++									seenBlockIndices.add(idx);
++									if (event.contentBlockStart.start?.toolUse != null) toolUseBlockIndices.add(idx);
++								}
++								const enrichedStart = enrichChunk(startChunk, seenBlockIndices);
++								if (enrichedStart !== startChunk) linkStreamLimitCanonical(startChunk.message, enrichedStart.message);
++								yield {
++									text: "",
++									smooth: false,
++									emit: () => ({
++										chunk: enrichedStart,
++										callbackChunk: startChunk,
++										callbackToken: startChunk.text
++									})
++								};
++							}
++						} else if (event.contentBlockDelta != null) {
++							const contentBlockDelta = event.contentBlockDelta;
++							const delta = contentBlockDelta.delta;
++							if (delta == null) throw new Error("No delta found in content block.");
++							const idx = contentBlockDelta.contentBlockIndex;
++							if (idx != null) seenBlockIndices.add(idx);
++							const indicesSnapshot = new Set(seenBlockIndices);
++							if (typeof delta.text === "string" && delta.text !== "") {
++								lastTextDelta = {
++									delta: contentBlockDelta,
++									indices: indicesSnapshot
++								};
++								for (const segment of thinkTags.push(delta.text)) yield {
++									text: segment.text,
++									smooth: !segment.tag,
++									emit: (piece) => buildDeltaEmission(contentBlockDelta, segment.tag ? segment.text : piece.text, indicesSnapshot)
++								};
++								continue;
++							}
++							const visibleText = resolveVisibleText(delta.text, delta.reasoningContent?.text);
++							if (visibleText === "") {
++								yield {
++									text: "",
++									smooth: false,
++									emit: () => buildDeltaEmission(contentBlockDelta, visibleText, indicesSnapshot)
++								};
++								continue;
+ 							}
+-							const enrichedStart = enrichChunk(startChunk, seenBlockIndices);
+-							if (enrichedStart !== startChunk) linkStreamLimitCanonical(startChunk.message, enrichedStart.message);
++							yield {
++								text: visibleText,
++								smooth: true,
++								emit: (piece) => buildDeltaEmission(contentBlockDelta, piece.text, indicesSnapshot)
++							};
++						} else if (event.metadata != null) {
++							const metadataChunk = handleConverseStreamMetadata(event.metadata, { streamUsage });
+ 							yield {
+ 								text: "",
+ 								smooth: false,
+ 								emit: () => ({
+-									chunk: enrichedStart,
+-									callbackChunk: startChunk,
+-									callbackToken: startChunk.text
++									chunk: metadataChunk,
++									callbackToken: ""
+ 								})
+ 							};
+-						}
+-					} else if (event.contentBlockDelta != null) {
+-						const contentBlockDelta = event.contentBlockDelta;
+-						const delta = contentBlockDelta.delta;
+-						if (delta == null) throw new Error("No delta found in content block.");
+-						const idx = contentBlockDelta.contentBlockIndex;
+-						if (idx != null) seenBlockIndices.add(idx);
+-						const visibleText = resolveVisibleText(delta.text, delta.reasoningContent?.text);
+-						const indicesSnapshot = new Set(seenBlockIndices);
+-						if (visibleText === "") {
++						} else if (event.contentBlockStop != null) {
++							const stopIdx = event.contentBlockStop.contentBlockIndex;
++							if (stopIdx != null) {
++								seenBlockIndices.add(stopIdx);
++								if (sealToolUseOnStop && toolUseBlockIndices.has(stopIdx)) {
++									const sealChunk = createConverseToolUseStopChunk(stopIdx);
++									yield {
++										text: "",
++										smooth: false,
++										emit: () => ({
++											chunk: sealChunk,
++											callbackChunk: sealChunk,
++											callbackToken: sealChunk.text
++										})
++									};
++								}
++							}
++						} else {
++							const eventChunk = new ChatGenerationChunk({
++								text: "",
++								message: new AIMessageChunk({
++									content: "",
++									response_metadata: { ...event }
++								})
++							});
+ 							yield {
+ 								text: "",
+ 								smooth: false,
+-								emit: () => buildDeltaEmission(contentBlockDelta, visibleText, indicesSnapshot)
++								emit: () => ({
++									chunk: eventChunk,
++									callbackToken: ""
++								})
+ 							};
+-							continue;
+-						}
+-						yield {
+-							text: visibleText,
+-							smooth: true,
+-							emit: (piece) => buildDeltaEmission(contentBlockDelta, piece.text, indicesSnapshot)
+-						};
+-					} else if (event.metadata != null) {
+-						const metadataChunk = handleConverseStreamMetadata(event.metadata, { streamUsage });
+-						yield {
+-							text: "",
+-							smooth: false,
+-							emit: () => ({
+-								chunk: metadataChunk,
+-								callbackToken: ""
+-							})
+-						};
+-					} else if (event.contentBlockStop != null) {
+-						const stopIdx = event.contentBlockStop.contentBlockIndex;
+-						if (stopIdx != null) {
+-							seenBlockIndices.add(stopIdx);
+-							if (sealToolUseOnStop && toolUseBlockIndices.has(stopIdx)) {
+-								const sealChunk = createConverseToolUseStopChunk(stopIdx);
+-								yield {
+-									text: "",
+-									smooth: false,
+-									emit: () => ({
+-										chunk: sealChunk,
+-										callbackChunk: sealChunk,
+-										callbackToken: sealChunk.text
+-									})
+-								};
+-							}
+ 						}
+-					} else {
+-						const eventChunk = new ChatGenerationChunk({
+-							text: "",
+-							message: new AIMessageChunk({
+-								content: "",
+-								response_metadata: { ...event }
+-							})
+-						});
+-						yield {
+-							text: "",
+-							smooth: false,
+-							emit: () => ({
+-								chunk: eventChunk,
+-								callbackToken: ""
+-							})
+-						};
+ 					}
++					yield* releaseHeldText();
+ 				})(),
+ 				delayMs: this._lc_stream_delay,
+ 				signal: options.signal,
+diff --git a/node_modules/@librechat/agents/dist/esm/llm/bedrock/thinkTags.mjs b/node_modules/@librechat/agents/dist/esm/llm/bedrock/thinkTags.mjs
+new file mode 100644
+index 0000000..4ee18cd
+--- /dev/null
++++ b/node_modules/@librechat/agents/dist/esm/llm/bedrock/thinkTags.mjs
+@@ -0,0 +1,38 @@
++//#region src/llm/bedrock/thinkTags.ts
++const THINK_TAGS = ["<thinking>", "</thinking>"];
++const LONGEST_TAG = Math.max(...THINK_TAGS.map((tag) => tag.length));
++const TAG_PATTERN = /(<\/?thinking>)/;
++function trailingTagFragment(text) {
++	for (let length = Math.min(LONGEST_TAG - 1, text.length); length > 0; length--) {
++		const end = text.slice(-length);
++		if (THINK_TAGS.some((tag) => tag !== end && tag.startsWith(end))) return length;
++	}
++	return 0;
++}
++function createThinkTagJoiner() {
++	let held = "";
++	return {
++		push(text) {
++			let buffer = held + text;
++			held = "";
++			const fragment = trailingTagFragment(buffer);
++			if (fragment > 0) {
++				held = buffer.slice(-fragment);
++				buffer = buffer.slice(0, -fragment);
++			}
++			return buffer.split(TAG_PATTERN).filter((part) => part !== "").map((part) => ({
++				text: part,
++				tag: TAG_PATTERN.test(part)
++			}));
++		},
++		flush() {
++			const rest = held;
++			held = "";
++			return rest;
++		}
++	};
++}
++//#endregion
++export { createThinkTagJoiner };
++
++//# sourceMappingURL=thinkTags.mjs.map
+\ No newline at end of file
+diff --git a/node_modules/@librechat/agents/dist/esm/main.mjs b/node_modules/@librechat/agents/dist/esm/main.mjs
+index 9b2e11f..7e52374 100644
+--- a/node_modules/@librechat/agents/dist/esm/main.mjs
++++ b/node_modules/@librechat/agents/dist/esm/main.mjs
+@@ -48,7 +48,7 @@ import { joinKeys, resetIfNotEmpty } from "./utils/graph.mjs";
+ import { resolveFetchProxyAgent, shouldBypassProxy } from "./utils/proxy.mjs";
+ import { handleServerToolResult, handleToolCallChunks, handleToolCalls, toolResultTypes } from "./tools/handlers.mjs";
+ import { INTENT_ARG, INTENT_DESCRIPTION, INTENT_LABEL_MARKER, INTENT_PROPERTY, applyOutcome, isIntentLabelProperty, outcomeFieldsFromResult, readIntent, readOutcomeFields, resolveToolOutcome, stripIntent, withIntent, withoutIntent } from "./tools/intentArg.mjs";
+-import { ChatModelStreamHandler, SDK_STREAM_DISPATCH, createContentAggregator, dispatchesChatModelStream, getChunkContent } from "./stream.mjs";
++import { ChatModelStreamHandler, SDK_STREAM_DISPATCH, createContentAggregator, dispatchesChatModelStream, getChunkContent, normalizeThinkTags } from "./stream.mjs";
+ import { HandlerRegistry, LLMStreamHandler, ModelEndHandler, TestChatStreamHandler, TestLLMStreamHandler, ToolEndHandler, composeEventHandlers, createMetadataAggregator } from "./events.mjs";
+ import { createHandlers } from "./utils/handlers.mjs";
+ import { RunnableCallable, sleep } from "./utils/run.mjs";
+@@ -139,4 +139,4 @@ import { createSystemOneReranker } from "./rerank/systemone.mjs";
+ import { createWebSearchReranker } from "./rerank/search.mjs";
+ import "./rerank/index.mjs";
+ import { BaseCheckpointSaver, Command, INTERRUPT, MemorySaver, interrupt, isInterrupted } from "@langchain/langgraph";
+-export { ACTIVITY_LABEL_RUN_NAME, ACTIVITY_PHASE_LABEL_RUN_NAME, ACTIVITY_PHASE_RUN_NAME, AGENT_MODEL_CALL_RUN_NAME, AIMessage, AIMessageChunk, ANTHROPIC_TOOL_TOKEN_MULTIPLIER, ASK_USER_QUESTION_ID_PATTERN, AgentSession, BASH_SHELL_GUIDANCE, BaseCheckpointSaver, BaseMessage, BaseMessageChunk, BashExecutionToolDefinition, BashExecutionToolDescription, BashExecutionToolName, BashExecutionToolSchema, BashProgrammaticToolCallingDefinition, BashProgrammaticToolCallingDescription, BashProgrammaticToolCallingName, BashProgrammaticToolCallingSchema, BashToolOutputReferencesGuide, CALIBRATION_RATIO_MAX, CALIBRATION_RATIO_MIN, CLOUDFLARE_BASH_CODING_TOOL_NAMES, CLOUDFLARE_CODING_TOOL_NAMES, CODE_API_AUTHORIZATION_ERROR_MESSAGE, CODE_API_CAPABILITY_ERROR_MESSAGE, CODE_API_EXECUTION_FAILED_ERROR_MESSAGE, CODE_API_EXPECTED_PROFILE_HEADER, CODE_API_INVALID_REQUEST_ERROR_MESSAGE, CODE_API_RATE_LIMITED_ERROR_MESSAGE, CODE_API_UNAVAILABLE_ERROR_MESSAGE, CODE_ARTIFACT_PATH_GUIDANCE, CODE_EXECUTION_TOOLS, COMPACTION_SEMANTIC_INDEX_LIMITS, Calculator, CalculatorSchema, CalculatorToolDefinition, CalculatorToolDescription, CalculatorToolName, Callback, ChatModelStreamHandler, CloudflareBashExecutionToolDescription, CloudflareCodeExecutionToolDescription, CodeApiRequestError, CodeExecutionToolDefinition, CodeExecutionToolDescription, CodeExecutionToolName, CodeExecutionToolSchema, Command, CommonEvents, CompileCheckToolName, Constants, ContentTypes, DATE_RANGE, DECISION_PRESETS, DEFAULT_API_KEY_ENV, DEFAULT_CONTEXT_PRUNING_SETTINGS, DEFAULT_COUNTRY_DESCRIPTION, DEFAULT_HOOK_TIMEOUT_MS, DEFAULT_INTRA_TURN_RETAIN_RATIO, DEFAULT_MAX_SEALS, DEFAULT_MAX_STOP_CONTINUATIONS, DEFAULT_MAX_TOOL_CALL_ARG_BYTES, DEFAULT_PREEMPT_RESTART_GRACE_MS, DEFAULT_PROMPT_CACHE_TTL, DEFAULT_QUERY_DESCRIPTION, DEFAULT_RECURSION_LIMIT, DEFAULT_RESERVE_RATIO, DEFAULT_RETAIN_RECENT_TURNS, DEFAULT_STREAM_DELAY, DEFAULT_SUBAGENT_DESCRIPTION, DEFAULT_TOOL_TOKEN_MULTIPLIER, DecisionError, DynamicStructuredTool, EnvVar, EventActorExecutor, FADING_MIN_BUDGET_TOKENS, FADING_TIER_VERSION, FAILED_EXECUTION_FILE_REMINDER, FakeChatModel, GitHubCompareTool, GitHubCompareToolDefinition, GitHubCompareToolDescription, GitHubCompareToolName, GitHubCompareToolSchema, GitHubComparisonError, Graph, GraphEvents, GraphNodeActions, GraphNodeKeys, HARD_MAX_TOOL_CALL_INPUT_CHARS, HARD_MAX_TOOL_RESULT_CHARS, HARD_MAX_TOTAL_TOOL_OUTPUT_SIZE, HOOK_EVENTS, HOOK_INJECTED_MESSAGES_CAPABLE, HOOK_PREEMPT_BOUNDARY_CAPABLE, HOOK_PREEMPT_RESTART_CAPABLE, HOOK_STOP_CONTINUATION_CAPABLE, HTTP_PROVIDER_ID, HandlerRegistry, HandoffLimitError, HookRegistry, HumanMessage, IMAGE_TOKEN_SAFETY_MARGIN, INSTRUCTIONLESS_HANDOFF_CUE, INTENT_ARG, INTENT_DESCRIPTION, INTENT_LABEL_MARKER, INTENT_PROPERTY, INTERRUPT, InMemorySubagentTaskStore, JsonlSessionStore, LANGFUSE_OBSERVATION_METADATA_ARTIFACT_KEY, LLMStreamHandler, LOCAL_CODING_BUNDLE_NAMES, LOCAL_CODING_TOOL_NAMES, LOCAL_SPAWN_TIMEOUT_MS, LocalBashExecutionToolDescription, LocalCodeExecutionToolDescription, LocalEditFileToolName, LocalEditFileToolSchema, LocalFileCheckpointerImpl, LocalGlobSearchToolName, LocalGlobSearchToolSchema, LocalGrepSearchToolName, LocalGrepSearchToolSchema, LocalListDirectoryToolName, LocalListDirectoryToolSchema, LocalReadFileToolSchema, LocalWriteFileToolName, LocalWriteFileToolSchema, MASKED_RESULT_MIN_CHARS, MAX_ASK_USER_QUESTIONS, MAX_CACHE_SIZE, MAX_PATTERN_LENGTH, MIN_JSON_VALUE_CHARS, MULTI_AGENT_GRAPH_RUN_NAME, ManualSummarizationSkippedError, MemorySaver, ModelEndHandler, MultiAgentGraph, OPENAI_RESPONSES_ACTIVE_REASONING_ID_KEY, OPENAI_RESPONSES_REPLAY_POSITIONS_KEY, ORIGINAL_CONTENT_MAX_CHARS, PREDECESSOR_HANDOFF_CUE, PREEMPT_BOUNDARY_HOOK_TIMEOUT_MS, PRESSURE_THRESHOLD_MASKING, PROVIDER_MESSAGE_PROVENANCE_LIMITS, PROVIDER_MESSAGE_PROVENANCE_VERSION, PROVIDER_TEXT_PROTECTION_VERSION, ProgrammaticToolCallingDefinition, ProgrammaticToolCallingDescription, ProgrammaticToolCallingName, ProgrammaticToolCallingSchema, PromptTemplate, ProviderMessageProjectionInvariantError, ProviderTextProtectionError, Providers, REASONING_LABEL_RUN_NAME, REMOVE_ALL_MESSAGES, REPLY_PRIMER_TOKENS, ReadFileToolDefinition, ReadFileToolDescription, ReadFileToolName, ReadFileToolSchema, Run, Runnable, RunnableCallable, RunnableLambda, RunnableSequence, SDK_STREAM_DISPATCH, STANDARD_GRAPH_RUN_NAME, STATEFUL_BASH_NOTE, STATEFUL_ENV_NOTE, SUBAGENT_CONTEXT_VERSION, SUBAGENT_HOST_ARG_LIMITS, SessionManager, SkillToolDefinition, SkillToolDescription, SkillToolName, SkillToolSchema, StandardGraph, StatefulBashExecutionToolDescription, StatefulCodeExecutionToolDescription, StepTypes, StreamLimitExceededError, StructuredTool, SubagentExecutor, SubagentHostArgumentError, SubagentResolutionError, SubagentToolDefinition, SubagentToolDescription, SubagentToolName, SubagentToolSchema, SystemMessage, TMP_SCRATCH_OUTPUT_REMINDER, TOOL_APPROVAL_EXECUTION_SCOPE_CAPABLE, TOOL_APPROVAL_EXECUTION_SCOPE_CONFIG_KEY, TOOL_INPUT_ELISION_NOTE, TestChatStreamHandler, TestLLMStreamHandler, TitleMethod, TokenEncoderManager, Tool, ToolCallTypes, ToolEndHandler, ToolMessage, ToolNode, ToolSearchToolDefinition, ToolSearchToolDescription, ToolSearchToolName, ToolSearchToolSchema, UnsafeTokenMeasurementError, WebSearchToolDefinition, WebSearchToolDescription, WebSearchToolName, WebSearchToolSchema, _createBashProgramForTests, _resetLocalEngineWarningsForTests, _resetRipgrepCacheForTests, _resetSyntaxCheckProbeCacheForTests, _resetUnrecognizedTriggerWarnings, addBedrockCacheControl, addBedrockTailCacheControl, addCacheControl, addCacheControlToStablePrefixMessages, addCodeApiExecutionProfileHeader, addTailCacheControl, appendCodeSessionFileSummary, appendFailedExecutionFileReminder, appendInstructionlessHandoffCue, appendPredecessorHandoffCue, appendProviderMessageProvenance, appendTmpScratchReminder, applyContextPruning, applyEdit, applyFadingCaps, applyOutcome, applyPreToolUseHooksForBridge, apportionTokenCounts, askUserQuestion, askUserQuestions, attemptInvoke, bashAstFindingsToErrors, booleanQuestion, buildAnthropicCacheControl, buildBashExecutionToolDescription, buildBashExecutionToolSchema, buildBedrockCachePoint, buildChildInputs, buildCodeApiEndpoint, buildCodeApiExecutionErrorMessage, buildCodeApiHttpErrorMessage, buildCodeExecutionToolDescription, buildCodeExecutionToolSchema, buildSandboxRuntimeConfig, buildSubagentHostArgProperties, buildSubagentToolParams, buildSummarizationInstruction, buildSummaryCarrierText, calculateMaxToolCallInputChars, calculateMaxToolResultChars, calculateMaxTotalToolOutputSize, calculateTotalTokens, canSealPreempt, canonicalizeServerName, checkValidNumber, choiceQuestion, clampCalibrationRatio, classifyAttachment, clientExecTimeoutMs, clientFsTimeoutMs, cloneMessage, coalesceAdjacentUserTurns, commandAvailabilityEnvCacheKey, compactSyntheticProviderContextMessage, compareGitHubCommits, composeAbortSignals, composeEventHandlers, computeAdaptivePieceSize, constructorChainHasLcName, convertInjectedMessages, convertMessagesToContent, countNestedGroups, countrySchema, createAgentSession, createBashExecutionTool, createBashProgrammaticToolCallingSchema, createBashProgrammaticToolCallingTool, createCloudflareBashExecutionTool, createCloudflareBashProgrammaticToolCallingTool, createCloudflareBridgeRuntime, createCloudflareCodeExecutionTool, createCloudflareCodingToolBundle, createCloudflareCodingTools, createCloudflareExecutionTool, createCloudflareExecutionWorld, createCloudflareLocalExecutionConfig, createCloudflareProgrammaticToolCallingTool, createCloudflareWorkspaceFS, createCodeExecutionTool, createCompileCheckTool, createCompileCheckToolDefinition, createContentAggregator, createDecisionModel, createEventActorExecutor, createFadingTier, createFakeStreamingLLM, createGraph, createHandlers, createHttpDecisionModel, createLocalBashExecutionTool, createLocalBashProgrammaticToolCallingTool, createLocalCodeExecutionTool, createLocalCodingToolBundle, createLocalCodingToolDefinitions, createLocalCodingToolRegistry, createLocalCodingTools, createLocalEditFileTool, createLocalFileCheckpointer, createLocalGlobSearchTool, createLocalGrepSearchTool, createLocalListDirectoryTool, createLocalProgrammaticToolCallingTool, createLocalReadFileTool, createLocalWriteFileTool, createMetadataAggregator, createProgrammaticToolCallingSchema, createProgrammaticToolCallingTool, createPruneMessages, createRemoveAllMessage, createRunHandlers, createSchemaOnlyTool, createSchemaOnlyTools, createSearchTool, createStructuredChatDecisionModel, createSubagentToolDefinition, createSystemOneReranker, createTokenCounter, createToolErrorOwnership, createToolPolicyHook, createToolSearch, createTransport, createWebSearchReranker, createWorkspacePolicyHook, dateSchema, decisionPreset, decisionProviderNames, decodeFile, defaultOmitOptions, deriveMessages, deserializeMessage, dispatchesChatModelStream, dropIncompleteToolStreamContent, emptyOutputMessage, encodeFile, encodingForModel, encodingOfTokenCounter, enforceOriginalContentCap, ensureThinkingBlockInMessages, escapeRegexSpecialChars, estimateAnthropicImageTokens, estimateDocumentBlockTokens, estimateImageBlockTokens, estimateOpenAIImageTokens, estimateTimedMediaBlockTokens, execWithClientTimeout, executeCloudflareBash, executeCloudflareCode, executeHooks, executeLocalBash, executeLocalBashWithArgs, executeLocalCode, executeParallelSearches, executeTools, extractErrorMessage, extractImageDimensions, extractMcpServerName, extractTextFromContent, extractToolDiscoveries, extractUsedBashToolNames, extractUsedToolNames, fadingBudgetTokens, fadingRungForBudget, fadingRungForExchangeChars, fadingRungForResultChars, fetchSessionFiles, filterBashToolsByUsage, filterGraphSubagentResult, filterSubagentResult, filterToolsByUsage, findLastIndex, flattenLegacyContent, foldToolBlocksForToollessAgent, formatAgentMessages, formatAnthropicArtifactContent, formatAnthropicMessage, formatArtifactPayload, formatCloudflareOutput, formatCompletedResponse, formatContentStrings, formatFromLangChain, formatLangChainMessages, formatMediaMessage, formatMessage, formatServerListing, formatSkillCatalog, getAssistantTextPhase, getAvailableMcpServers, getBaseToolName, getBufferString, getChatModelClass, getChunkContent, getCloudflareWorkspaceRoot, getCodeBaseURL, getContextOverflowInfo, getConverseOverrideMessage, getDeferredToolsListing, getExecutionWorld, getLocalCwd, getLocalSessionId, getMaxOutputTokensKey, getMessageCreationContentMetadata, getMessageId, getMessagesWithinTokenLimit, getProviderMessageProvenance, getProviderSourceMessageIds, getReadRoots, getSpawn, getSubagentHostArgumentFailureMessage, getSubagentResolutionFailureMessage, getTokenCountForMessage, getWorkspaceFS, getWorkspaceRoots, getWriteRoots, handleServerToolResult, handleToolCallChunks, handleToolCalls, hasBijectiveProviderContentPartMapping, hasNestedQuantifier, hasNestedQuantifiers, hasNonEmptyTextContent, hasToolSearchInCurrentTurn, hasUnsafeStructuredSerialization, imageAttachmentContent, imagesSchema, initializeModel, inspectProviderMessageProjection, inspectProviderMessageProvenance, inspectProviderSourceMessageIds, interrupt, isAIMessage, isAnthropicLike, isAskUserQuestionsInterrupt, isBaseMessage, isBooleanAnswer, isChoiceAnswer, isContextOverflowError, isDangerousPattern, isDecisionObject, isFadingTier, isFromAnyMcpServer, isFromMcpServer, isGoogleLike, isGraphSubagentConfig, isInformativeFadingTier, isIntentLabelProperty, isInterrupted, isLegacyConvertible, isLegacyFadingTier, isLibreChatOpenAIModel, isLikelyContextOverflowError, isOpenAILike, isPresent, isProgrammaticRunnerAutoBound, isProgrammaticRunnerResolvedDirectly, isReasoningContentBlock, isScoreAnswer, isSyntheticProviderContextMessage, isThinkingEnabled, isToolMessage, isZodSchema, joinKeys, labelContentByAgent, locateEdit, makeIsDeferred, makeRequest, mapChatMessagesToStoredMessages, mapStoredMessagesToChatMessages, markTokenCounterCacheCompatible, maskConsumedToolResults, matchesQuery, maxFadingRung, mergeAggregatedHookResults, mergeDecisionSettings, messagesStateReducer, modifyDeltaProperties, newsSchema, nodeExecutionWorld, normalizeBashToolResultsForReplay, normalizeCodeApiRequestError, normalizeSearchResultData, normalizeServerFilter, normalizeSubagentConfigEntries, normalizeSubagentConfigs, normalizeToBashIdentifier, normalizeToPythonIdentifier, outcomeFieldsFromResult, parseBooleanEnv, parseEnvelope, partitionAndMarkAnthropicToolCache, performLocalSearch, preFlightTruncateToolCallInputs, preFlightTruncateToolResults, prepareBashProgrammaticCode, prepareProviderRequest, probeLocalCommandAvailability, projectAgentContextUsage, projectAnthropicArtifactContent, projectArtifactPayload, projectCacheControlledToolOutputsToText, projectComputerCallOutputsToText, projectOpenAIChatToolMessageContent, projectOpenAIResponsesToolMessageContent, projectOpenAIToolMessageContent, projectOpenRouterToolMessageContent, projectSingleTextToolOutputsToText, projectStructuredToolOutputsToText, projectToolCallInputs, projectToolMessagesForProvider, projectToolStreamContentForProvider, querySchema, readAnswer, readDecisionUsage, readIntent, readOutcomeFields, readTokenMetadataProperty, registerProvider, removePredecessorHandoffCue, repairOrphanedToolMessages, resetIfNotEmpty, resolveBedrockPromptCacheTtl, resolveCloudflareSandbox, resolveCodeApiAuthHeaders, resolveContextPruningSettings, resolveFadingCaps, resolveFadingTier, resolveFetchProxyAgent, resolveIntraTurnRetainTokens, resolveLocalExecutionConfig, resolveLocalExecutionTools, resolveLocalImplementationNames, resolveLocalToolRegistry, resolveLocalToolsForBinding, resolvePromptCacheTtl, resolveProviderMessageProjectionInvariantMode, resolveSearchOutcome, resolveServerFilters, resolveStreamDelay, resolveStreamLimits, resolveSubagentConfigEntries, resolveSubagentConfigs, resolveSubagentHostArgs, resolveToolOutcome, resolveWorkspacePath, resolveWorkspacePathSafe, runBashAstChecks, runPlainExecution, runPostEditSyntaxCheck, sanitizeOrphanToolBlocks, sanitizeRegex, scoreQuestion, seedFadingTier, selectRuntimeSessionHint, separateSummarizationParameters, serializeMessage, serializeToolCallInput, setCommandAvailabilityCacheEntry, setFreshProviderMessageProvenance, setInvalidProviderMessageProvenance, setProviderMessageProvenance, shellQuote, shiftIndexTokenCountMap, shouldBypassProxy, shouldTriggerSummarization, sleep, sliceWithoutSplittingSurrogates, smoothStream, spawnLocalProcess, splitAssistantTextContentByPhase, splitAtRecencyBoundary, stampSyntheticProviderMessage, strictAlternationProviders, stripAnthropicCacheControl, stripBedrockCacheControl, stripCodeSessionFileSummary, stripIntent, summarizeEvent, supportsBedrockToolCache, syncBudgetDerivedFields, toJsonSchema, toWireQuestion, tool, toolResultTypes, toolsCondition, truncateLocalOutput, truncateToolInput, truncateToolResultContent, tryFallbackProviders, unescapeObject, unwrapToolResponse, validateBashCommand, validateCloudflareBashCommand, validateDecisionQuestions, videosSchema, withClientTimeout, withInstructionlessHandoffCue, withIntent, withMessageRole, withoutIntent, wrapPythonForPlainExecution };
++export { ACTIVITY_LABEL_RUN_NAME, ACTIVITY_PHASE_LABEL_RUN_NAME, ACTIVITY_PHASE_RUN_NAME, AGENT_MODEL_CALL_RUN_NAME, AIMessage, AIMessageChunk, ANTHROPIC_TOOL_TOKEN_MULTIPLIER, ASK_USER_QUESTION_ID_PATTERN, AgentSession, BASH_SHELL_GUIDANCE, BaseCheckpointSaver, BaseMessage, BaseMessageChunk, BashExecutionToolDefinition, BashExecutionToolDescription, BashExecutionToolName, BashExecutionToolSchema, BashProgrammaticToolCallingDefinition, BashProgrammaticToolCallingDescription, BashProgrammaticToolCallingName, BashProgrammaticToolCallingSchema, BashToolOutputReferencesGuide, CALIBRATION_RATIO_MAX, CALIBRATION_RATIO_MIN, CLOUDFLARE_BASH_CODING_TOOL_NAMES, CLOUDFLARE_CODING_TOOL_NAMES, CODE_API_AUTHORIZATION_ERROR_MESSAGE, CODE_API_CAPABILITY_ERROR_MESSAGE, CODE_API_EXECUTION_FAILED_ERROR_MESSAGE, CODE_API_EXPECTED_PROFILE_HEADER, CODE_API_INVALID_REQUEST_ERROR_MESSAGE, CODE_API_RATE_LIMITED_ERROR_MESSAGE, CODE_API_UNAVAILABLE_ERROR_MESSAGE, CODE_ARTIFACT_PATH_GUIDANCE, CODE_EXECUTION_TOOLS, COMPACTION_SEMANTIC_INDEX_LIMITS, Calculator, CalculatorSchema, CalculatorToolDefinition, CalculatorToolDescription, CalculatorToolName, Callback, ChatModelStreamHandler, CloudflareBashExecutionToolDescription, CloudflareCodeExecutionToolDescription, CodeApiRequestError, CodeExecutionToolDefinition, CodeExecutionToolDescription, CodeExecutionToolName, CodeExecutionToolSchema, Command, CommonEvents, CompileCheckToolName, Constants, ContentTypes, DATE_RANGE, DECISION_PRESETS, DEFAULT_API_KEY_ENV, DEFAULT_CONTEXT_PRUNING_SETTINGS, DEFAULT_COUNTRY_DESCRIPTION, DEFAULT_HOOK_TIMEOUT_MS, DEFAULT_INTRA_TURN_RETAIN_RATIO, DEFAULT_MAX_SEALS, DEFAULT_MAX_STOP_CONTINUATIONS, DEFAULT_MAX_TOOL_CALL_ARG_BYTES, DEFAULT_PREEMPT_RESTART_GRACE_MS, DEFAULT_PROMPT_CACHE_TTL, DEFAULT_QUERY_DESCRIPTION, DEFAULT_RECURSION_LIMIT, DEFAULT_RESERVE_RATIO, DEFAULT_RETAIN_RECENT_TURNS, DEFAULT_STREAM_DELAY, DEFAULT_SUBAGENT_DESCRIPTION, DEFAULT_TOOL_TOKEN_MULTIPLIER, DecisionError, DynamicStructuredTool, EnvVar, EventActorExecutor, FADING_MIN_BUDGET_TOKENS, FADING_TIER_VERSION, FAILED_EXECUTION_FILE_REMINDER, FakeChatModel, GitHubCompareTool, GitHubCompareToolDefinition, GitHubCompareToolDescription, GitHubCompareToolName, GitHubCompareToolSchema, GitHubComparisonError, Graph, GraphEvents, GraphNodeActions, GraphNodeKeys, HARD_MAX_TOOL_CALL_INPUT_CHARS, HARD_MAX_TOOL_RESULT_CHARS, HARD_MAX_TOTAL_TOOL_OUTPUT_SIZE, HOOK_EVENTS, HOOK_INJECTED_MESSAGES_CAPABLE, HOOK_PREEMPT_BOUNDARY_CAPABLE, HOOK_PREEMPT_RESTART_CAPABLE, HOOK_STOP_CONTINUATION_CAPABLE, HTTP_PROVIDER_ID, HandlerRegistry, HandoffLimitError, HookRegistry, HumanMessage, IMAGE_TOKEN_SAFETY_MARGIN, INSTRUCTIONLESS_HANDOFF_CUE, INTENT_ARG, INTENT_DESCRIPTION, INTENT_LABEL_MARKER, INTENT_PROPERTY, INTERRUPT, InMemorySubagentTaskStore, JsonlSessionStore, LANGFUSE_OBSERVATION_METADATA_ARTIFACT_KEY, LLMStreamHandler, LOCAL_CODING_BUNDLE_NAMES, LOCAL_CODING_TOOL_NAMES, LOCAL_SPAWN_TIMEOUT_MS, LocalBashExecutionToolDescription, LocalCodeExecutionToolDescription, LocalEditFileToolName, LocalEditFileToolSchema, LocalFileCheckpointerImpl, LocalGlobSearchToolName, LocalGlobSearchToolSchema, LocalGrepSearchToolName, LocalGrepSearchToolSchema, LocalListDirectoryToolName, LocalListDirectoryToolSchema, LocalReadFileToolSchema, LocalWriteFileToolName, LocalWriteFileToolSchema, MASKED_RESULT_MIN_CHARS, MAX_ASK_USER_QUESTIONS, MAX_CACHE_SIZE, MAX_PATTERN_LENGTH, MIN_JSON_VALUE_CHARS, MULTI_AGENT_GRAPH_RUN_NAME, ManualSummarizationSkippedError, MemorySaver, ModelEndHandler, MultiAgentGraph, OPENAI_RESPONSES_ACTIVE_REASONING_ID_KEY, OPENAI_RESPONSES_REPLAY_POSITIONS_KEY, ORIGINAL_CONTENT_MAX_CHARS, PREDECESSOR_HANDOFF_CUE, PREEMPT_BOUNDARY_HOOK_TIMEOUT_MS, PRESSURE_THRESHOLD_MASKING, PROVIDER_MESSAGE_PROVENANCE_LIMITS, PROVIDER_MESSAGE_PROVENANCE_VERSION, PROVIDER_TEXT_PROTECTION_VERSION, ProgrammaticToolCallingDefinition, ProgrammaticToolCallingDescription, ProgrammaticToolCallingName, ProgrammaticToolCallingSchema, PromptTemplate, ProviderMessageProjectionInvariantError, ProviderTextProtectionError, Providers, REASONING_LABEL_RUN_NAME, REMOVE_ALL_MESSAGES, REPLY_PRIMER_TOKENS, ReadFileToolDefinition, ReadFileToolDescription, ReadFileToolName, ReadFileToolSchema, Run, Runnable, RunnableCallable, RunnableLambda, RunnableSequence, SDK_STREAM_DISPATCH, STANDARD_GRAPH_RUN_NAME, STATEFUL_BASH_NOTE, STATEFUL_ENV_NOTE, SUBAGENT_CONTEXT_VERSION, SUBAGENT_HOST_ARG_LIMITS, SessionManager, SkillToolDefinition, SkillToolDescription, SkillToolName, SkillToolSchema, StandardGraph, StatefulBashExecutionToolDescription, StatefulCodeExecutionToolDescription, StepTypes, StreamLimitExceededError, StructuredTool, SubagentExecutor, SubagentHostArgumentError, SubagentResolutionError, SubagentToolDefinition, SubagentToolDescription, SubagentToolName, SubagentToolSchema, SystemMessage, TMP_SCRATCH_OUTPUT_REMINDER, TOOL_APPROVAL_EXECUTION_SCOPE_CAPABLE, TOOL_APPROVAL_EXECUTION_SCOPE_CONFIG_KEY, TOOL_INPUT_ELISION_NOTE, TestChatStreamHandler, TestLLMStreamHandler, TitleMethod, TokenEncoderManager, Tool, ToolCallTypes, ToolEndHandler, ToolMessage, ToolNode, ToolSearchToolDefinition, ToolSearchToolDescription, ToolSearchToolName, ToolSearchToolSchema, UnsafeTokenMeasurementError, WebSearchToolDefinition, WebSearchToolDescription, WebSearchToolName, WebSearchToolSchema, _createBashProgramForTests, _resetLocalEngineWarningsForTests, _resetRipgrepCacheForTests, _resetSyntaxCheckProbeCacheForTests, _resetUnrecognizedTriggerWarnings, addBedrockCacheControl, addBedrockTailCacheControl, addCacheControl, addCacheControlToStablePrefixMessages, addCodeApiExecutionProfileHeader, addTailCacheControl, appendCodeSessionFileSummary, appendFailedExecutionFileReminder, appendInstructionlessHandoffCue, appendPredecessorHandoffCue, appendProviderMessageProvenance, appendTmpScratchReminder, applyContextPruning, applyEdit, applyFadingCaps, applyOutcome, applyPreToolUseHooksForBridge, apportionTokenCounts, askUserQuestion, askUserQuestions, attemptInvoke, bashAstFindingsToErrors, booleanQuestion, buildAnthropicCacheControl, buildBashExecutionToolDescription, buildBashExecutionToolSchema, buildBedrockCachePoint, buildChildInputs, buildCodeApiEndpoint, buildCodeApiExecutionErrorMessage, buildCodeApiHttpErrorMessage, buildCodeExecutionToolDescription, buildCodeExecutionToolSchema, buildSandboxRuntimeConfig, buildSubagentHostArgProperties, buildSubagentToolParams, buildSummarizationInstruction, buildSummaryCarrierText, calculateMaxToolCallInputChars, calculateMaxToolResultChars, calculateMaxTotalToolOutputSize, calculateTotalTokens, canSealPreempt, canonicalizeServerName, checkValidNumber, choiceQuestion, clampCalibrationRatio, classifyAttachment, clientExecTimeoutMs, clientFsTimeoutMs, cloneMessage, coalesceAdjacentUserTurns, commandAvailabilityEnvCacheKey, compactSyntheticProviderContextMessage, compareGitHubCommits, composeAbortSignals, composeEventHandlers, computeAdaptivePieceSize, constructorChainHasLcName, convertInjectedMessages, convertMessagesToContent, countNestedGroups, countrySchema, createAgentSession, createBashExecutionTool, createBashProgrammaticToolCallingSchema, createBashProgrammaticToolCallingTool, createCloudflareBashExecutionTool, createCloudflareBashProgrammaticToolCallingTool, createCloudflareBridgeRuntime, createCloudflareCodeExecutionTool, createCloudflareCodingToolBundle, createCloudflareCodingTools, createCloudflareExecutionTool, createCloudflareExecutionWorld, createCloudflareLocalExecutionConfig, createCloudflareProgrammaticToolCallingTool, createCloudflareWorkspaceFS, createCodeExecutionTool, createCompileCheckTool, createCompileCheckToolDefinition, createContentAggregator, createDecisionModel, createEventActorExecutor, createFadingTier, createFakeStreamingLLM, createGraph, createHandlers, createHttpDecisionModel, createLocalBashExecutionTool, createLocalBashProgrammaticToolCallingTool, createLocalCodeExecutionTool, createLocalCodingToolBundle, createLocalCodingToolDefinitions, createLocalCodingToolRegistry, createLocalCodingTools, createLocalEditFileTool, createLocalFileCheckpointer, createLocalGlobSearchTool, createLocalGrepSearchTool, createLocalListDirectoryTool, createLocalProgrammaticToolCallingTool, createLocalReadFileTool, createLocalWriteFileTool, createMetadataAggregator, createProgrammaticToolCallingSchema, createProgrammaticToolCallingTool, createPruneMessages, createRemoveAllMessage, createRunHandlers, createSchemaOnlyTool, createSchemaOnlyTools, createSearchTool, createStructuredChatDecisionModel, createSubagentToolDefinition, createSystemOneReranker, createTokenCounter, createToolErrorOwnership, createToolPolicyHook, createToolSearch, createTransport, createWebSearchReranker, createWorkspacePolicyHook, dateSchema, decisionPreset, decisionProviderNames, decodeFile, defaultOmitOptions, deriveMessages, deserializeMessage, dispatchesChatModelStream, dropIncompleteToolStreamContent, emptyOutputMessage, encodeFile, encodingForModel, encodingOfTokenCounter, enforceOriginalContentCap, ensureThinkingBlockInMessages, escapeRegexSpecialChars, estimateAnthropicImageTokens, estimateDocumentBlockTokens, estimateImageBlockTokens, estimateOpenAIImageTokens, estimateTimedMediaBlockTokens, execWithClientTimeout, executeCloudflareBash, executeCloudflareCode, executeHooks, executeLocalBash, executeLocalBashWithArgs, executeLocalCode, executeParallelSearches, executeTools, extractErrorMessage, extractImageDimensions, extractMcpServerName, extractTextFromContent, extractToolDiscoveries, extractUsedBashToolNames, extractUsedToolNames, fadingBudgetTokens, fadingRungForBudget, fadingRungForExchangeChars, fadingRungForResultChars, fetchSessionFiles, filterBashToolsByUsage, filterGraphSubagentResult, filterSubagentResult, filterToolsByUsage, findLastIndex, flattenLegacyContent, foldToolBlocksForToollessAgent, formatAgentMessages, formatAnthropicArtifactContent, formatAnthropicMessage, formatArtifactPayload, formatCloudflareOutput, formatCompletedResponse, formatContentStrings, formatFromLangChain, formatLangChainMessages, formatMediaMessage, formatMessage, formatServerListing, formatSkillCatalog, getAssistantTextPhase, getAvailableMcpServers, getBaseToolName, getBufferString, getChatModelClass, getChunkContent, getCloudflareWorkspaceRoot, getCodeBaseURL, getContextOverflowInfo, getConverseOverrideMessage, getDeferredToolsListing, getExecutionWorld, getLocalCwd, getLocalSessionId, getMaxOutputTokensKey, getMessageCreationContentMetadata, getMessageId, getMessagesWithinTokenLimit, getProviderMessageProvenance, getProviderSourceMessageIds, getReadRoots, getSpawn, getSubagentHostArgumentFailureMessage, getSubagentResolutionFailureMessage, getTokenCountForMessage, getWorkspaceFS, getWorkspaceRoots, getWriteRoots, handleServerToolResult, handleToolCallChunks, handleToolCalls, hasBijectiveProviderContentPartMapping, hasNestedQuantifier, hasNestedQuantifiers, hasNonEmptyTextContent, hasToolSearchInCurrentTurn, hasUnsafeStructuredSerialization, imageAttachmentContent, imagesSchema, initializeModel, inspectProviderMessageProjection, inspectProviderMessageProvenance, inspectProviderSourceMessageIds, interrupt, isAIMessage, isAnthropicLike, isAskUserQuestionsInterrupt, isBaseMessage, isBooleanAnswer, isChoiceAnswer, isContextOverflowError, isDangerousPattern, isDecisionObject, isFadingTier, isFromAnyMcpServer, isFromMcpServer, isGoogleLike, isGraphSubagentConfig, isInformativeFadingTier, isIntentLabelProperty, isInterrupted, isLegacyConvertible, isLegacyFadingTier, isLibreChatOpenAIModel, isLikelyContextOverflowError, isOpenAILike, isPresent, isProgrammaticRunnerAutoBound, isProgrammaticRunnerResolvedDirectly, isReasoningContentBlock, isScoreAnswer, isSyntheticProviderContextMessage, isThinkingEnabled, isToolMessage, isZodSchema, joinKeys, labelContentByAgent, locateEdit, makeIsDeferred, makeRequest, mapChatMessagesToStoredMessages, mapStoredMessagesToChatMessages, markTokenCounterCacheCompatible, maskConsumedToolResults, matchesQuery, maxFadingRung, mergeAggregatedHookResults, mergeDecisionSettings, messagesStateReducer, modifyDeltaProperties, newsSchema, nodeExecutionWorld, normalizeBashToolResultsForReplay, normalizeCodeApiRequestError, normalizeSearchResultData, normalizeServerFilter, normalizeSubagentConfigEntries, normalizeSubagentConfigs, normalizeThinkTags, normalizeToBashIdentifier, normalizeToPythonIdentifier, outcomeFieldsFromResult, parseBooleanEnv, parseEnvelope, partitionAndMarkAnthropicToolCache, performLocalSearch, preFlightTruncateToolCallInputs, preFlightTruncateToolResults, prepareBashProgrammaticCode, prepareProviderRequest, probeLocalCommandAvailability, projectAgentContextUsage, projectAnthropicArtifactContent, projectArtifactPayload, projectCacheControlledToolOutputsToText, projectComputerCallOutputsToText, projectOpenAIChatToolMessageContent, projectOpenAIResponsesToolMessageContent, projectOpenAIToolMessageContent, projectOpenRouterToolMessageContent, projectSingleTextToolOutputsToText, projectStructuredToolOutputsToText, projectToolCallInputs, projectToolMessagesForProvider, projectToolStreamContentForProvider, querySchema, readAnswer, readDecisionUsage, readIntent, readOutcomeFields, readTokenMetadataProperty, registerProvider, removePredecessorHandoffCue, repairOrphanedToolMessages, resetIfNotEmpty, resolveBedrockPromptCacheTtl, resolveCloudflareSandbox, resolveCodeApiAuthHeaders, resolveContextPruningSettings, resolveFadingCaps, resolveFadingTier, resolveFetchProxyAgent, resolveIntraTurnRetainTokens, resolveLocalExecutionConfig, resolveLocalExecutionTools, resolveLocalImplementationNames, resolveLocalToolRegistry, resolveLocalToolsForBinding, resolvePromptCacheTtl, resolveProviderMessageProjectionInvariantMode, resolveSearchOutcome, resolveServerFilters, resolveStreamDelay, resolveStreamLimits, resolveSubagentConfigEntries, resolveSubagentConfigs, resolveSubagentHostArgs, resolveToolOutcome, resolveWorkspacePath, resolveWorkspacePathSafe, runBashAstChecks, runPlainExecution, runPostEditSyntaxCheck, sanitizeOrphanToolBlocks, sanitizeRegex, scoreQuestion, seedFadingTier, selectRuntimeSessionHint, separateSummarizationParameters, serializeMessage, serializeToolCallInput, setCommandAvailabilityCacheEntry, setFreshProviderMessageProvenance, setInvalidProviderMessageProvenance, setProviderMessageProvenance, shellQuote, shiftIndexTokenCountMap, shouldBypassProxy, shouldTriggerSummarization, sleep, sliceWithoutSplittingSurrogates, smoothStream, spawnLocalProcess, splitAssistantTextContentByPhase, splitAtRecencyBoundary, stampSyntheticProviderMessage, strictAlternationProviders, stripAnthropicCacheControl, stripBedrockCacheControl, stripCodeSessionFileSummary, stripIntent, summarizeEvent, supportsBedrockToolCache, syncBudgetDerivedFields, toJsonSchema, toWireQuestion, tool, toolResultTypes, toolsCondition, truncateLocalOutput, truncateToolInput, truncateToolResultContent, tryFallbackProviders, unescapeObject, unwrapToolResponse, validateBashCommand, validateCloudflareBashCommand, validateDecisionQuestions, videosSchema, withClientTimeout, withInstructionlessHandoffCue, withIntent, withMessageRole, withoutIntent, wrapPythonForPlainExecution };
+diff --git a/node_modules/@librechat/agents/dist/esm/stream.mjs b/node_modules/@librechat/agents/dist/esm/stream.mjs
+index eeb20ad..94209f3 100644
+--- a/node_modules/@librechat/agents/dist/esm/stream.mjs
++++ b/node_modules/@librechat/agents/dist/esm/stream.mjs
+@@ -22,6 +22,10 @@ import { TOOL_OUTPUT_REF_PATTERN } from "./tools/toolOutputReferences.mjs";
+ import { formatToolErrorContent } from "./tools/toolErrorContent.mjs";
+ //#region src/stream.ts
+ const LOCAL_CODING_BUNDLE_NAME_SET = new Set(LOCAL_CODING_BUNDLE_NAMES);
++function normalizeThinkTags(content) {
++	if (typeof content !== "string" || !content.includes("thinking>")) return content;
++	return content.replace(/<thinking>/g, "<think>").replace(/<\/thinking>/g, "</think>");
++}
+ function parseThinkingContent(content) {
+ 	if (!content.includes("<think>")) return {
+ 		text: content,
+@@ -688,11 +692,11 @@ var ChatModelStreamHandler = class {
+ 		if (runScopeInvalidated()) return;
+ 		throwIfRunBreakerTripped();
+ 		const agentContext = graph.getAgentContext(metadata);
+-		const content = getChunkContent({
++		const content = normalizeThinkTags(getChunkContent({
+ 			chunk,
+ 			reasoningKey: agentContext.reasoningKey,
+ 			provider: agentContext.provider
+-		});
++		}));
+ 		const skipHandling = await handleServerToolResult({
+ 			graph,
+ 			content,
+@@ -926,6 +930,7 @@ hasToolCallChunks: ${hasToolCallChunks}
+ 		})) }, metadata);
+ 	}
+ 	handleReasoning(chunk, agentContext) {
++		const text = normalizeThinkTags(chunk.content);
+ 		let reasoning_content = chunk.additional_kwargs?.[agentContext.reasoningKey];
+ 		if (Array.isArray(chunk.content) && (chunk.content[0]?.type === "thinking" || chunk.content[0]?.type === "reasoning" || chunk.content[0]?.type === "reasoning_content" || chunk.content[0]?.type === "redacted_thinking")) reasoning_content = "valid";
+ 		else if ((agentContext.provider === "openAI" || agentContext.provider === "azureOpenAI") && reasoning_content != null && typeof reasoning_content !== "string" && reasoning_content.summary?.[0]?.text != null && reasoning_content.summary[0].text) reasoning_content = "valid";
+@@ -938,18 +943,18 @@ hasToolCallChunks: ${hasToolCallChunks}
+ 			agentContext.currentTokenType = "text";
+ 			agentContext.tokenTypeSwitch = "content";
+ 			agentContext.reasoningTransitionCount++;
+-		} else if (chunk.content != null && typeof chunk.content === "string" && chunk.content.includes("<think>") && chunk.content.includes("</think>")) {
++		} else if (text != null && typeof text === "string" && text.includes("<think>") && text.includes("</think>")) {
+ 			agentContext.currentTokenType = "think_and_text";
+ 			agentContext.tokenTypeSwitch = "content";
+-		} else if (chunk.content != null && typeof chunk.content === "string" && chunk.content.includes("<think>")) {
++		} else if (text != null && typeof text === "string" && text.includes("<think>")) {
+ 			agentContext.currentTokenType = "think";
+ 			agentContext.tokenTypeSwitch = "content";
+ 		} else if (agentContext.lastToken != null && agentContext.lastToken.includes("</think>")) {
+ 			agentContext.currentTokenType = "text";
+ 			agentContext.tokenTypeSwitch = "content";
+ 		}
+-		if (typeof chunk.content !== "string") return;
+-		agentContext.lastToken = chunk.content;
++		if (typeof text !== "string") return;
++		agentContext.lastToken = text;
+ 	}
+ };
+ function createContentAggregator() {
+@@ -1307,6 +1312,6 @@ function createContentAggregator() {
+ 	};
+ }
+ //#endregion
+-export { ChatModelStreamHandler, SDK_STREAM_DISPATCH, createContentAggregator, dispatchesChatModelStream, getChunkContent };
++export { ChatModelStreamHandler, SDK_STREAM_DISPATCH, createContentAggregator, dispatchesChatModelStream, getChunkContent, normalizeThinkTags };
+ 
+ //# sourceMappingURL=stream.mjs.map
+\ No newline at end of file
 diff --git a/node_modules/@librechat/agents/dist/types/langfuseMask.d.ts b/node_modules/@librechat/agents/dist/types/langfuseMask.d.ts
 new file mode 100644
 index 0000000..13dab4f
@@ -345,6 +1015,45 @@ index 0000000..13dab4f
 + * exported as it was.
 + */
 +export declare function maskLangfuseSpan(span: ReadableSpan, mask: MaskFunction): Promise<void>;
+diff --git a/node_modules/@librechat/agents/dist/types/llm/bedrock/thinkTags.d.ts b/node_modules/@librechat/agents/dist/types/llm/bedrock/thinkTags.d.ts
+new file mode 100644
+index 0000000..c52a5b2
+--- /dev/null
++++ b/node_modules/@librechat/agents/dist/types/llm/bedrock/thinkTags.d.ts
+@@ -0,0 +1,15 @@
++export type ThinkTagSegment = {
++    text: string;
++    /** A complete `<thinking>` or `</thinking>` tag, to be emitted as one unsplit piece. */
++    tag: boolean;
++};
++export interface ThinkTagJoiner {
++    /**
++     * The streamed text to emit now, with every complete tag as a segment of its own. A trailing
++     * fragment that could still become a tag is held back for the next call.
++     */
++    push(text: string): ThinkTagSegment[];
++    /** Releases the held fragment: before any other stream event, and at the end of the stream. */
++    flush(): string;
++}
++export declare function createThinkTagJoiner(): ThinkTagJoiner;
+diff --git a/node_modules/@librechat/agents/dist/types/stream.d.ts b/node_modules/@librechat/agents/dist/types/stream.d.ts
+index b9de02b..b92c6d3 100644
+--- a/node_modules/@librechat/agents/dist/types/stream.d.ts
++++ b/node_modules/@librechat/agents/dist/types/stream.d.ts
+@@ -2,6 +2,13 @@ import type { AIMessageChunk } from '@langchain/core/messages';
+ import type { AgentContext } from '@/agents/AgentContext';
+ import type { StandardGraph } from '@/graphs';
+ import type * as t from '@/types';
++/**
++ * Amazon Nova models on Bedrock write their reasoning inline as `<thinking>...</thinking>`
++ * (notably before a tool call) rather than in a reasoning field. Read those tags as the
++ * `<think>` tags other reasoning models emit, so the reasoning streams as a `think` part instead
++ * of showing up in the answer text.
++ */
++export declare function normalizeThinkTags<T>(content: T): T;
+ export declare function getChunkContent({ chunk, provider, reasoningKey, }: {
+     chunk?: Partial<AIMessageChunk>;
+     provider?: t.ProviderName;
 diff --git a/node_modules/@librechat/agents/dist/types/types/graph.d.ts b/node_modules/@librechat/agents/dist/types/types/graph.d.ts
 index d62332d..b1ee798 100644
 --- a/node_modules/@librechat/agents/dist/types/types/graph.d.ts

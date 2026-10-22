@@ -61,6 +61,14 @@ export interface SettingsContextValue {
   replyTabBadgeAllowed: boolean;
   replyNotificationsAllowed: boolean;
   replyNotificationSoundAllowed: boolean;
+  /** Whether the deployment offers conversation forking (`interface.forking`). */
+  forkingEnabled: boolean;
+  /** Whether the deployment lets users upload a profile picture (`interface.avatarUpload`). */
+  avatarUploadEnabled: boolean;
+  /** Whether users can import conversations from a file (`interface.conversationImport`). */
+  conversationImportEnabled: boolean;
+  /** Whether shared links are on: allowed by the server, and the role may create them. */
+  sharedLinksEnabled: boolean;
 }
 
 export interface SettingEntry {

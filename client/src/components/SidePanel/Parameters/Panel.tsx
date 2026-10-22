@@ -14,7 +14,13 @@ import {
   resolveDropParamsUIKeys,
 } from 'librechat-data-provider';
 import type { TPreset } from 'librechat-data-provider';
-import { groupParameters, countModified, hasControl, isWideParameter } from './groups';
+import {
+  hasControl,
+  countModified,
+  isWideParameter,
+  groupParameters,
+  withoutHiddenSections,
+} from './groups';
 import { useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
 import { useChatContext, useLiveAnnouncer } from '~/Providers';
 import { SaveAsPresetDialog } from '~/components/Endpoints';
@@ -169,18 +175,24 @@ export default function Parameters() {
   /** Region choices come from the deployment, so they are filled in before grouping,
    *  and a control left with nothing to render is dropped there too: a section is
    *  built only from controls that show something. */
+  const hiddenSections = startupConfig?.interface?.hiddenParameterSections;
   const sections = useMemo(
     () =>
-      groupParameters(
-        visibleParameters
-          .map((setting) =>
-            setting.key === 'region' && bedrockRegions.length > 0
-              ? { ...setting, options: bedrockRegions }
-              : setting,
-          )
-          .filter((setting) => componentMapping[setting.component] != null && hasControl(setting)),
+      withoutHiddenSections(
+        groupParameters(
+          visibleParameters
+            .map((setting) =>
+              setting.key === 'region' && bedrockRegions.length > 0
+                ? { ...setting, options: bedrockRegions }
+                : setting,
+            )
+            .filter(
+              (setting) => componentMapping[setting.component] != null && hasControl(setting),
+            ),
+        ),
+        hiddenSections,
       ),
-    [visibleParameters, bedrockRegions],
+    [visibleParameters, bedrockRegions, hiddenSections],
   );
 
   const openDialog = useCallback(() => {

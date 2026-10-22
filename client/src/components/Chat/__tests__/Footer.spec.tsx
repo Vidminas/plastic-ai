@@ -39,6 +39,21 @@ describe('Footer', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
+  test.each([
+    ['row', true],
+    ['stack', false],
+  ] as const)('lays out footer parts in a %s', (footerLayout, separated) => {
+    const { container } = render(
+      <Footer
+        startupConfig={{ customFooter: 'First part | Second part', interface: { footerLayout } }}
+      />,
+    );
+    const bar = screen.getByText('First part').closest('div');
+    expect(bar?.classList.contains('flex-col')).toBe(!separated);
+    expect(screen.getByText('Second part')).toBeInTheDocument();
+    expect(container.querySelectorAll('.border-r-\\[1px\\]')).toHaveLength(separated ? 1 : 0);
+  });
+
   test('keeps privacy policy and terms of service links in the same tab', () => {
     render(
       <Footer

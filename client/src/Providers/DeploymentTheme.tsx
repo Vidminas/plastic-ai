@@ -14,6 +14,7 @@ import { QueryKeys, MutationKeys, isBundledThemeName } from 'librechat-data-prov
 import {
   ThemeProvider,
   clickHouseTheme,
+  journeyTheme,
   libreChatTheme,
   fromLegacyTheme,
   validateThemeDefinition,
@@ -44,6 +45,7 @@ type DeploymentThemeValue = TInterfaceConfig['theme'];
 const bundledThemes: Readonly<Record<BundledThemeName, ThemeDefinition>> = {
   librechat: libreChatTheme,
   clickhouse: clickHouseTheme,
+  journey: journeyTheme,
 };
 
 /**

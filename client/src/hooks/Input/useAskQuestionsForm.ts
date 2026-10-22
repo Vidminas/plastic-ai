@@ -15,9 +15,45 @@ interface AskQuestionsFormState {
   step: number;
   text: Record<string, string>;
   selected: Record<string, string[]>;
+  /** Questions the user skipped. Each is sent as declined unless answered after all. */
+  skipped?: Record<string, boolean>;
 }
 
-const EMPTY_FORM: AskQuestionsFormState = { step: 0, text: {}, selected: {} };
+// const EMPTY_FORM: AskQuestionsFormState = { step: 0, text: {}, selected: {} };
+const EMPTY_FORM: AskQuestionsFormState = { step: 0, text: {}, selected: {}, skipped: {} };
+
+/** The question's own answer, or the declined notice when it was skipped and left unanswered. */
+function resolveAnswer(
+  state: AskQuestionsFormState,
+  question: Agents.AskUserQuestionBatchItem,
+): string | undefined {
+  const text = ownValue(state.text, question.id)?.trim() ?? '';
+  const selected = ownValue(state.selected, question.id) ?? [];
+  const values = question.multiSelect === true ? [...selected] : [];
+  if (text.length > 0) {
+    values.push(text);
+  } else if (question.multiSelect !== true && selected[0] != null) {
+    values.push(selected[0]);
+  }
+  if (values.length > 0) {
+    return values.join(', ');
+  }
+  return ownValue(state.skipped ?? {}, question.id) === true ? ASK_USER_DECLINED_ANSWER : undefined;
+}
+
+function resolveAnswers(
+  state: AskQuestionsFormState,
+  questions: Agents.AskUserQuestionBatchItem[],
+): Record<string, string> {
+  const resolved = Object.create(null) as Record<string, string>;
+  for (const question of questions) {
+    const answer = resolveAnswer(state, question);
+    if (answer != null) {
+      resolved[question.id] = answer;
+    }
+  }
+  return resolved;
+}
 
 /** Keyed by action id, so the composer popover and the chat card share one form. */
 const askQuestionsFormFamily = atomFamily((_actionId: string) =>
@@ -86,23 +122,7 @@ export default function useAskQuestionsForm(
     [questions.length, setState],
   );
 
-  const answers = useMemo(() => {
-    const resolved = Object.create(null) as Record<string, string>;
-    for (const question of questions) {
-      const text = ownValue(state.text, question.id)?.trim() ?? '';
-      const selected = ownValue(state.selected, question.id) ?? [];
-      const values = question.multiSelect === true ? [...selected] : [];
-      if (text.length > 0) {
-        values.push(text);
-      } else if (question.multiSelect !== true && selected[0] != null) {
-        values.push(selected[0]);
-      }
-      if (values.length > 0) {
-        resolved[question.id] = values.join(', ');
-      }
-    }
-    return resolved;
-  }, [questions, state.text, state.selected]);
+  const answers = useMemo(() => resolveAnswers(state, questions), [questions, state]);
 
   const canSubmit =
     !locked && questions.every((question) => (ownValue(answers, question.id)?.length ?? 0) > 0);
@@ -115,16 +135,45 @@ export default function useAskQuestionsForm(
     return true;
   }, [actionId, answers, canSubmit, resetState, submitAskAnswer]);
 
+  // const skip = useCallback(() => {
+  //   if (locked) {
+  //     return false;
+  //   }
+  //   const declined = Object.fromEntries(
+  //     questions.map((question) => [question.id, ASK_USER_DECLINED_ANSWER]),
+  //   );
+  //   submitAskAnswer(actionId, declined, { onSuccess: resetState });
+  //   return true;
+  // }, [actionId, locked, questions, resetState, submitAskAnswer]);
+  /**
+   * Skips the question on screen only: it is sent as declined, and the rest keep their
+   * answers. Moves on to the next question still open, or sends the batch once every question
+   * is answered or skipped. Answering a skipped question takes it back.
+   */
   const skip = useCallback(() => {
-    if (locked) {
+    const current = questions[Math.min(state.step, Math.max(questions.length - 1, 0))];
+    if (locked || current == null) {
       return false;
     }
-    const declined = Object.fromEntries(
-      questions.map((question) => [question.id, ASK_USER_DECLINED_ANSWER]),
+    const next: AskQuestionsFormState = {
+      ...state,
+      text: { ...state.text, [current.id]: '' },
+      selected: { ...state.selected, [current.id]: [] },
+      skipped: { ...state.skipped, [current.id]: true },
+    };
+    const resolved = resolveAnswers(next, questions);
+    const open = questions.findIndex((question) => !Object.hasOwn(resolved, question.id));
+    if (open < 0) {
+      setState(next);
+      submitAskAnswer(actionId, resolved, { onSuccess: resetState });
+      return true;
+    }
+    const after = questions.findIndex(
+      (question, index) => index > next.step && !Object.hasOwn(resolved, question.id),
     );
-    submitAskAnswer(actionId, declined, { onSuccess: resetState });
+    setState({ ...next, step: after >= 0 ? after : open });
     return true;
-  }, [actionId, locked, questions, resetState, submitAskAnswer]);
+  }, [actionId, locked, questions, resetState, setState, state, submitAskAnswer]);
 
   return {
     state,

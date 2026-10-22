@@ -6,8 +6,8 @@ import { GitFork, InfoIcon } from 'lucide-react';
 import { ForkOptions } from 'librechat-data-provider';
 import { GitCommit, GitBranchPlus, ListTree } from 'lucide-react';
 import { Button, Label, Checkbox, useToastContext } from '@librechat/client';
+import { useForkConvoMutation, useGetStartupConfig } from '~/data-provider';
 import { TranslationKeys, useLocalize, useNavigateToConvo } from '~/hooks';
-import { useForkConvoMutation } from '~/data-provider';
 import { hoverButtonClasses } from './styles';
 import store from '~/store';
 
@@ -215,6 +215,7 @@ function Fork({
 }) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
+  const { data: startupConfig } = useGetStartupConfig();
   const [remember, setRemember] = useState(false);
   const { navigateToConvo } = useNavigateToConvo();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -263,7 +264,10 @@ function Fork({
   });
 
   const conversationId = _convoId ?? '';
-  if (!forkingSupported || !conversationId || !messageId) {
+  /** `interface.forking: false` turns forking off for the deployment; the route refuses it too. */
+  const forkingEnabled = startupConfig?.interface?.forking !== false;
+  // if (!forkingSupported || !conversationId || !messageId) {
+  if (!forkingEnabled || !forkingSupported || !conversationId || !messageId) {
     return null;
   }
 

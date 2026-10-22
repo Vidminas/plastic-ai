@@ -30,6 +30,10 @@ const settingsContext: SettingsContextValue = {
   replyTabBadgeAllowed: true,
   replyNotificationsAllowed: true,
   replyNotificationSoundAllowed: true,
+  forkingEnabled: true,
+  avatarUploadEnabled: true,
+  conversationImportEnabled: true,
+  sharedLinksEnabled: true,
 };
 
 const policyProviders = ['local', 'ldap', null, undefined];
@@ -156,6 +160,48 @@ describe('settings registry', () => {
 
     it('hides the setting when stateful code sessions are unavailable', () => {
       expect(entry?.show?.({ ...settingsContext, hasStatefulCodeSessions: false })).toBe(false);
+    });
+  });
+
+  describe('data controls visibility', () => {
+    const entry = (id: string) => registry.find((setting) => setting.id === id);
+
+    it('offers revoking all keys only where users can enter their own', () => {
+      expect(
+        entry('revokeKeys')?.show?.({ ...settingsContext, hasUserProvidedEndpoints: true }),
+      ).toBe(true);
+      expect(
+        entry('revokeKeys')?.show?.({ ...settingsContext, hasUserProvidedEndpoints: false }),
+      ).toBe(false);
+    });
+
+    it('hides shared links while sharing is off', () => {
+      expect(entry('sharedLinks')?.show?.(settingsContext)).toBe(true);
+      expect(entry('sharedLinks')?.show?.({ ...settingsContext, sharedLinksEnabled: false })).toBe(
+        false,
+      );
+    });
+
+    it('hides conversation import when the deployment turns it off', () => {
+      expect(entry('importConversations')?.show?.(settingsContext)).toBe(true);
+      expect(
+        entry('importConversations')?.show?.({
+          ...settingsContext,
+          conversationImportEnabled: false,
+        }),
+      ).toBe(false);
+    });
+  });
+
+  describe('profile picture visibility', () => {
+    const entry = registry.find((setting) => setting.id === 'avatar');
+
+    it('shows the profile picture upload by default', () => {
+      expect(entry?.show?.(settingsContext)).toBe(true);
+    });
+
+    it('hides it when the deployment turns profile picture uploads off', () => {
+      expect(entry?.show?.({ ...settingsContext, avatarUploadEnabled: false })).toBe(false);
     });
   });
 

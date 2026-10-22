@@ -261,7 +261,12 @@ interface ThinkingProps {
 function Thinking({ index, disabled, hasAddedConversation }: ThinkingProps) {
   const { conversation } = useChatContext();
   const { data: startupConfig } = useGetStartupConfig();
-  const parametersEnabled = startupConfig?.interface?.parameters;
+  // const parametersEnabled = startupConfig?.interface?.parameters;
+  /* `interface.composerReasoning: false` leaves reasoning to the Parameters panel. */
+  const parametersEnabled =
+    startupConfig?.interface?.composerReasoning === false
+      ? false
+      : startupConfig?.interface?.parameters;
   const modelSpec = getModelSpec({ specName: conversation?.spec, startupConfig });
   const blockedReasoningKeys = useMemo(() => {
     if (startupConfig?.modelSpecs?.enforce !== true || modelSpec?.preset == null) {

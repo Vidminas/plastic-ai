@@ -275,24 +275,77 @@ export const AskUserQuestionToolDefinition: AskUserQuestionToolDefinitionShape =
   },
 };
 
+/** The option values a question offered: the model wrote them, so they hold nothing personal. */
+type OptionValues = ReadonlySet<string>;
+
+const optionValues = (question: { options?: { value: string }[] }): OptionValues =>
+  new Set((question.options ?? []).map((option) => option.value));
+
 /**
- * Masks every string in a human's answers, leaving keys and structure alone, so an answer
- * reaches the model through its tool result with the same masking a typed message gets.
+ * Whether an answer is only the question's own option values: one value, or several joined by
+ * ", " for a multi-select. Such an answer is passed through unmasked, because a guardrail reads
+ * slug-like values (`just_starting`) as usernames, and a masked value matches no option. The
+ * whole-answer check comes first because a single value may itself contain ", ".
  */
-async function maskAnswers<T>(value: T, maskText: MaskText): Promise<T> {
+const isOptionAnswer = (answer: string, values: OptionValues): boolean =>
+  values.has(answer) || answer.split(', ').every((part) => values.has(part));
+
+/** Masks every string in a value, leaving keys and structure alone. */
+async function maskStrings<T>(value: T, maskText: MaskText): Promise<T> {
   if (typeof value === 'string') {
     return (await maskText(value)) as T;
   }
   if (Array.isArray(value)) {
-    return (await Promise.all(value.map((item) => maskAnswers(item, maskText)))) as T;
+    return (await Promise.all(value.map((item) => maskStrings(item, maskText)))) as T;
   }
   if (value != null && typeof value === 'object') {
     const entries = await Promise.all(
-      Object.entries(value).map(async ([key, item]) => [key, await maskAnswers(item, maskText)]),
+      Object.entries(value).map(async ([key, item]) => [key, await maskStrings(item, maskText)]),
     );
     return Object.fromEntries(entries) as T;
   }
   return value;
+}
+
+const maskAnswer = (answer: unknown, values: OptionValues, maskText: MaskText): Promise<unknown> =>
+  typeof answer === 'string' && isOptionAnswer(answer, values)
+    ? Promise.resolve(answer)
+    : maskStrings(answer, maskText);
+
+/**
+ * Masks every string in a human's answers, leaving keys and structure alone, so an answer
+ * reaches the model through its tool result with the same masking a typed message gets. The
+ * one exception is an answer that is only the question's chosen option values, which is the
+ * model's own text and passes through as it is.
+ */
+async function maskAnswers(
+  resolution: unknown,
+  questions: readonly { id?: string; options?: { value: string }[] }[],
+  maskText: MaskText,
+): Promise<unknown> {
+  if (resolution == null || typeof resolution !== 'object' || Array.isArray(resolution)) {
+    return maskStrings(resolution, maskText);
+  }
+  const byId = new Map(questions.map((question) => [question.id, optionValues(question)]));
+  const maskEntry = async (key: string, item: unknown): Promise<unknown> => {
+    if (key === 'answer') {
+      return maskAnswer(item, optionValues(questions[0] ?? {}), maskText);
+    }
+    if (key !== 'answers' || item == null || typeof item !== 'object' || Array.isArray(item)) {
+      return maskStrings(item, maskText);
+    }
+    const entries = await Promise.all(
+      Object.entries(item).map(async ([id, value]) => [
+        id,
+        await maskAnswer(value, byId.get(id) ?? new Set(), maskText),
+      ]),
+    );
+    return Object.fromEntries(entries);
+  };
+  const entries = await Promise.all(
+    Object.entries(resolution).map(async ([key, item]) => [key, await maskEntry(key, item)]),
+  );
+  return Object.fromEntries(entries);
 }
 
 /**
@@ -313,16 +366,20 @@ async function maskAnswers<T>(value: T, maskText: MaskText): Promise<T> {
  * from the top on the resume pass, and sibling tools in the same batch re-execute —
  * which is why the description forbids parallel calls.
  *
- * With `maskText`, each answer is masked before it becomes the ToolMessage: tool results
- * are never evaluated by a guardrail attached to the model call, and the answer is text the
- * human typed, like a message.
+ * With `maskText`, each typed answer is masked before it becomes the ToolMessage: tool
+ * results are never evaluated by a guardrail attached to the model call, and the answer is
+ * text the human typed, like a message. A chosen option's value is the model's own text and
+ * is passed through as it is.
  */
 export function createAskUserQuestionTool(
   validationErrorsByToolCallId?: Map<string, ToolInputValidationError>,
   { maskText }: { maskText?: MaskText } = {},
 ): DynamicStructuredTool<typeof askUserQuestionToolSchema> {
-  const toToolResult = async (resolution: unknown): Promise<string> =>
-    JSON.stringify(maskText ? await maskAnswers(resolution, maskText) : resolution);
+  const toToolResult = async (
+    resolution: unknown,
+    questions: readonly { id?: string; options?: { value: string }[] }[],
+  ): Promise<string> =>
+    JSON.stringify(maskText ? await maskAnswers(resolution, questions, maskText) : resolution);
 
   /** Kept out of the provider-facing definition. A graph rebuilt during a
    * rolling deploy can still rerun checkpointed legacy `{ question, ... }`
@@ -330,7 +387,7 @@ export function createAskUserQuestionTool(
   const legacyAskTool = tool(
     async (input, config?: { toolCall?: { id?: string } }) => {
       const resolution = askUserQuestion(input, { toolCallId: config?.toolCall?.id });
-      return toToolResult(resolution);
+      return toToolResult(resolution, [input]);
     },
     {
       name: ASK_USER_QUESTION_TOOL_NAME,
@@ -341,7 +398,7 @@ export function createAskUserQuestionTool(
   const askTool = tool(
     async (input: AskUserQuestionToolInput, config?: { toolCall?: { id?: string } }) => {
       const resolution = askUserQuestions(input, { toolCallId: config?.toolCall?.id });
-      return toToolResult(resolution);
+      return toToolResult(resolution, input.questions);
     },
     {
       name: ASK_USER_QUESTION_TOOL_NAME,

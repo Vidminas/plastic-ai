@@ -6,9 +6,11 @@ import store from '~/store';
 import Fork from '../Fork';
 
 const mockMutate = jest.fn();
+let mockStartupConfig: { interface?: { forking?: boolean } } | undefined;
 
 jest.mock('~/data-provider', () => ({
   useForkConvoMutation: () => ({ mutate: mockMutate }),
+  useGetStartupConfig: () => ({ data: mockStartupConfig }),
 }));
 
 jest.mock('~/hooks', () => ({
@@ -24,6 +26,18 @@ jest.mock('@librechat/client', () => ({
 describe('Fork', () => {
   beforeEach(() => {
     mockMutate.mockClear();
+    mockStartupConfig = undefined;
+  });
+
+  it('renders nothing when the deployment turns forking off', () => {
+    mockStartupConfig = { interface: { forking: false } };
+    const { container } = render(
+      <RecoilRoot>
+        <Fork messageId="assistant-1" conversationId="convo-1" forkingSupported />
+      </RecoilRoot>,
+    );
+
+    expect(container).toBeEmptyDOMElement();
   });
 
   /** The row holding this button does not re-render when the tail moves, so the

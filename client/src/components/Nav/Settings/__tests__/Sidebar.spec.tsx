@@ -28,6 +28,10 @@ const ctx: SettingsContextValue = {
   replyTabBadgeAllowed: true,
   replyNotificationsAllowed: true,
   replyNotificationSoundAllowed: true,
+  forkingEnabled: true,
+  avatarUploadEnabled: true,
+  conversationImportEnabled: true,
+  sharedLinksEnabled: true,
 };
 
 function setup(extra: Partial<SettingsContextValue> = {}, query = '') {

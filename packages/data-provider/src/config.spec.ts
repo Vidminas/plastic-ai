@@ -497,7 +497,7 @@ describe('safeguardingSchema', () => {
     expect(parsed.block.PROMPT_ATTACK).toBe('MEDIUM');
     expect(parsed.block.HATE).toBe('HIGH');
     expect(parsed).toMatchObject({ topics: {}, words: 'flag', onError: 'refuse' });
-    expect(parsed.signposting).toBeUndefined();
+    expect(parsed.crisis).toBeUndefined();
     expect(parsed.alerts).toBeUndefined();
   });
 
@@ -507,9 +507,63 @@ describe('safeguardingSchema', () => {
       safeguardingSchema.safeParse({ guardrail, topics: { bullying: 'withhold' } }).success,
     ).toBe(false);
     expect(
-      safeguardingSchema.safeParse({ guardrail, signposting: [{ name: 'Childline', url: 'x' }] })
-        .success,
+      safeguardingSchema.safeParse({
+        guardrail,
+        crisis: {
+          reasons: ['self-harm'],
+          message: 'Talk to someone:',
+          signposting: [{ name: 'Childline', url: 'x' }],
+        },
+      }).success,
     ).toBe(false);
+    /** Every notice sets its message and names its services, even when it has none. */
+    expect(
+      safeguardingSchema.safeParse({
+        guardrail,
+        conduct: { reasons: ['PROMPT_ATTACK'], message: 'Try something else.' },
+      }).success,
+    ).toBe(false);
+    expect(
+      safeguardingSchema.safeParse({
+        guardrail,
+        conduct: { reasons: ['PROMPT_ATTACK'], signposting: [] },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('takes a notice per kind of reason, each reason in one notice only', () => {
+    const parsed = safeguardingSchema.parse({
+      guardrail,
+      crisis: {
+        reasons: ['self-harm'],
+        message: 'Talk to someone:',
+        signposting: [{ name: 'Childline', phone: '0800 1111' }],
+      },
+      nonUrgent: { reasons: ['bullying'], message: 'm', signposting: [] },
+      unsuitable: { reasons: ['SEXUAL'], message: 'm', signposting: [] },
+      conduct: { reasons: ['PROMPT_ATTACK'], message: 'm', signposting: [] },
+    });
+    expect(parsed.crisis?.signposting).toEqual([{ name: 'Childline', phone: '0800 1111' }]);
+    expect(parsed.conduct).toEqual({ reasons: ['PROMPT_ATTACK'], message: 'm', signposting: [] });
+
+    const twice = safeguardingSchema.safeParse({
+      guardrail,
+      nonUrgent: { reasons: ['bullying'], message: 'm', signposting: [] },
+      unsuitable: { reasons: ['bullying'], message: 'm', signposting: [] },
+    });
+    expect(twice.success).toBe(false);
+    expect(twice.error?.issues[0]).toMatchObject({
+      path: ['unsuitable', 'reasons'],
+      message: '"bullying" is already listed in nonUrgent.reasons',
+    });
+  });
+
+  it('keeps the services a config written before the notices lists', () => {
+    const parsed = safeguardingSchema.parse({
+      guardrail,
+      signposting: [{ name: 'Childline', phone: '0800 1111' }],
+    });
+    expect(parsed.signposting).toEqual([{ name: 'Childline', phone: '0800 1111' }]);
   });
 
   it('is optional in configSchema', () => {
@@ -517,6 +571,18 @@ describe('safeguardingSchema', () => {
     expect(configSchema.safeParse({ version: '1.0', safeguarding: { guardrail } }).success).toBe(
       true,
     );
+  });
+});
+
+describe('interfaceSchema.hiddenParameterSections', () => {
+  it('takes the Parameters panel section ids', () => {
+    expect(interfaceSchema.parse({ hiddenParameterSections: ['limits'] })).toMatchObject({
+      hiddenParameterSections: ['limits'],
+    });
+  });
+
+  it('refuses an id the panel does not have, rather than hide nothing', () => {
+    expect(interfaceSchema.safeParse({ hiddenParameterSections: ['limit'] }).success).toBe(false);
   });
 });
 

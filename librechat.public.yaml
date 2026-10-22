@@ -5,6 +5,9 @@ cache: true
 fileStrategy: "s3"
 
 interface:
+  # The learning journey palette: LibreChat's light mode warmed to match the learning journey
+  # page. Dark mode keeps the stock dark palette.
+  theme: journey
   customWelcome: 'Welcome to LibreChat! Enjoy your experience.'
   # Deleting a chat or file removes it from the app, but not from the interaction
   # logs and traces the study keeps; the delete dialogs say so.
@@ -43,6 +46,10 @@ interface:
 
   modelSelect: true
   parameters: true
+  # Participants keep the token and context limits the deployment sets.
+  hiddenParameterSections: ['limits']
+  # Reasoning is set in the Parameters panel only, not from the composer.
+  composerReasoning: false
   presets: false
   prompts:
     use: false
@@ -50,7 +57,14 @@ interface:
     share: false
     public: false
   bookmarks: false
-  multiConvo: true
+  multiConvo: false
+  forking: false
+  # Participants keep the default avatar: no profile picture uploads.
+  avatarUpload: false
+  # Chats start here: no importing conversations from a JSON file.
+  conversationImport: false
+  # The footer's reminders sit one per line, which fits a narrow pane.
+  footerLayout: stack
   # File search runs through agents, so they are on here as in the sandbox.
   # Skill imports take .zip/.skill archives and files of any type, which the
   # upload policy does not allow, so users cannot create skills.
@@ -160,8 +174,7 @@ piiMasking:
 # A detection at a `flag` level is logged for the safeguarding team (HyperDX,
 # and a `safeguarding` score on the Langfuse trace) and the content goes on. At a
 # `block` level the content is blocked: the participant is told why and
-# shown the support services (openingHours.support, unless `signposting` lists
-# others), and the Designated Safeguarding Leads are emailed through
+# pointed to support suited to the reason (the notices below), and the Designated Safeguarding Leads are emailed through
 # alerts.topicArn. Levels are the lowest guardrail confidence (LOW, MEDIUM,
 # HIGH) that counts; OFF never does. Terraform reads `block` and `topics`
 # from this file to set the chat guardrail's blocking strengths, so tune them
@@ -196,6 +209,63 @@ safeguarding:
   onError: refuse
   alerts:
     topicArn: '${SAFEGUARDING_ALERT_TOPIC_ARN}'
+  # Which notice blocked content gets, by its reasons. Each reason picks the
+  # notice that lists it, and the most serious of them is shown, in this order:
+  # crisis, nonUrgent, unsuitable, conduct. A reason none lists (such as the
+  # model's own safety filter, MODEL_FILTER, which a notice may list) gets the
+  # crisis notice. Each notice sets the
+  # message shown under why the content was blocked, and lists the services it
+  # points to in full (`signposting: []` for none); nothing is filled in from
+  # openingHours.support or the app's own text.
+  #
+  # Where the participant may be at risk: the crisis services, with 999.
+  crisis:
+    reasons: [self-harm, suicidal-ideation, acute-distress]
+    message: "If something is worrying you, you can talk to someone. These services are free and confidential:"
+    signposting:
+      - name: "In an emergency"
+        description: "If you or someone else is in danger right now, call 999."
+        phone: "999"
+      - name: "Childline"
+        description: "Free, private and confidential support for anyone under 19, about anything."
+        phone: "0800 1111"
+        url: "https://www.childline.org.uk"
+      - name: "Shout"
+        description: "Free, confidential support by text message, any time."
+        text: "Text SHOUT to 85258"
+        url: "https://giveusashout.org"
+      - name: "Samaritans"
+        description: "Someone to talk to, any time, whatever you are going through."
+        phone: "116 123"
+        url: "https://www.samaritans.org"
+  # Bullying, insults and hate are no emergency, so these point to an adult the
+  # participant trusts and Childline, not to 999.
+  nonUrgent:
+    reasons: [bullying, INSULTS, HATE]
+    message: "If someone is treating you badly, or something here has upset you, it can help to talk to an adult you trust, such as a parent, carer or teacher. You can also get free, confidential support from:"
+    signposting:
+      - name: "Childline"
+        description: "Free, private and confidential support for anyone under 19, including about bullying."
+        phone: "0800 1111"
+        url: "https://www.childline.org.uk"
+  # Sexual content and violence aren't suitable here, but may be about
+  # something that happened to the participant, so these point to an adult
+  # they trust and Childline.
+  unsuitable:
+    reasons: [SEXUAL, VIOLENCE]
+    message: "If it's about something you've seen or been through, it can help to talk to an adult you trust, such as a parent, carer or teacher. You can also get free, confidential support from:"
+    signposting:
+      - name: "Childline"
+        description: "Free, private and confidential support for anyone under 19, about anything."
+        phone: "0800 1111"
+        url: "https://www.childline.org.uk"
+  # Prompt attacks and requests for harmful or illegal activity are about how
+  # the assistant is used, not the participant's wellbeing, so these steer back
+  # to learning and list no services.
+  conduct:
+    reasons: [PROMPT_ATTACK, MISCONDUCT]
+    message: "The assistant is here to help with your learning. Try asking it about something else."
+    signposting: []
 
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.
