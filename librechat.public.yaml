@@ -331,9 +331,22 @@ endpoints:
     logProviderErrors: true
 
   bedrock:
+    # Bedrock sometimes answers "Bedrock is unable to process your request"
+    # (ServiceUnavailableException) when the model is busy. Each request is tried
+    # up to 5 times, with exponential backoff and jitter, and a streamed reply
+    # that fails before any of it arrives is sent again the same way.
+    retry:
+      maxAttempts: 5
+      # When Sonnet 5.5 still fails after its tries, the reply goes to Sonnet 5,
+      # in the same EU pool, with the same tries.
+      fallbacks:
+        'eu.anthropic.claude-sonnet-5-5': 'eu.anthropic.claude-sonnet-5'
+    # Sonnet 5 stays listed for the fallback and for conversations started on it.
     models:
+      - 'eu.anthropic.claude-sonnet-5-5'
       - 'eu.anthropic.claude-sonnet-5'
     inferenceProfiles:
+      'eu.anthropic.claude-sonnet-5-5': 'arn:aws:bedrock:eu-west-2:575062583775:inference-profile/eu.anthropic.claude-sonnet-5-5'
       'eu.anthropic.claude-sonnet-5': 'arn:aws:bedrock:eu-west-2:575062583775:inference-profile/eu.anthropic.claude-sonnet-5'
     # The stack's chat guardrail (terraform/guardrail.tf) checks only what the
     # model writes; its prompt checks are off, since the app screens and masks
@@ -353,9 +366,10 @@ endpoints:
 
 modelSpecs:
   list:
+    # The name stays the one conversations already saved, so they keep finding it.
     - name: 'bedrock-claude-sonnet-5'
-      label: 'Claude Sonnet 5 (Bedrock)'
-      description: 'Anthropic Claude Sonnet 5 via AWS Bedrock (eu-west-2, EU geo profile)'
+      label: 'Claude Sonnet 5.5 (Bedrock)'
+      description: 'Anthropic Claude Sonnet 5.5 via AWS Bedrock (eu-west-2, EU geo profile), with Claude Sonnet 5 as a fallback'
       preset:
         endpoint: 'bedrock'
-        model: 'eu.anthropic.claude-sonnet-5'
+        model: 'eu.anthropic.claude-sonnet-5-5'
