@@ -10,6 +10,7 @@ import {
   removeNullishValues,
 } from 'librechat-data-provider';
 import type { BedrockRuntimeClientConfig } from '@aws-sdk/client-bedrock-runtime';
+import type { TBedrockRetry } from 'librechat-data-provider';
 import type {
   InitializeResultBase,
   BedrockCredentials,
@@ -17,9 +18,25 @@ import type {
   InferenceProfileConfig,
   ProviderInitializeParams,
 } from '~/types';
+import type { FallbackRequest } from './retry';
+import { backoff, retryBedrockReplies } from './retry';
 import { getHttpsProxyAgent } from '~/utils/proxy';
 import { resolveEndpointRuntime } from '~/types';
 import { checkUserKeyExpiry } from '~/utils';
+
+/** The parts of a model's request settings that depend on the model, for a fallback. */
+function fallbackRequestOf(config: Record<string, unknown>): FallbackRequest {
+  const number = (key: string) => (typeof config[key] === 'number' ? config[key] : undefined);
+  return {
+    additionalModelRequestFields:
+      config.additionalModelRequestFields as FallbackRequest['additionalModelRequestFields'],
+    inferenceConfig: {
+      maxTokens: number('maxTokens'),
+      temperature: number('temperature'),
+      topP: number('topP'),
+    },
+  };
+}
 
 const BEDROCK_CREDENTIALS_ERROR = 'Bedrock credentials not provided. Please provide them again.';
 
@@ -116,6 +133,7 @@ export async function initializeBedrock(
     | ({
         guardrailConfig?: GuardrailConfiguration;
         inferenceProfiles?: InferenceProfileConfig;
+        retry?: TBedrockRetry;
       } & Record<string, unknown>)
     | undefined;
 
@@ -223,14 +241,26 @@ export async function initializeBedrock(
 
   const configOptions: Record<string, unknown> = {};
 
-  const llmConfig = bedrockOutputParser(
-    bedrockInputParser.parse(
-      removeNullishValues({
-        ...requestOptions,
-        ...(model_parameters ?? {}),
-      }),
-    ),
-  ) as InitializeResultBase['llmConfig'] & {
+  /** The request settings for a model, from the request and the conversation's parameters. */
+  const parseLLMConfig = (overrides: Record<string, unknown> = {}) =>
+    bedrockOutputParser(
+      bedrockInputParser.parse(
+        removeNullishValues({
+          ...requestOptions,
+          ...(model_parameters ?? {}),
+          ...overrides,
+        }),
+      ),
+    );
+  // const llmConfig = bedrockOutputParser(
+  //   bedrockInputParser.parse(
+  //     removeNullishValues({
+  //       ...requestOptions,
+  //       ...(model_parameters ?? {}),
+  //     }),
+  //   ),
+  // ) as InitializeResultBase['llmConfig'] & {
+  const llmConfig = parseLLMConfig() as InitializeResultBase['llmConfig'] & {
     model?: string;
     region?: string;
     client?: BedrockRuntimeClient;
@@ -274,7 +304,12 @@ export async function initializeBedrock(
   const bedrockEndpoint = configuredBaseURL || reverseProxyEndpoint;
   const bedrockRegion = typeof llmConfig.region === 'string' ? llmConfig.region : undefined;
   const proxyAgent = getHttpsProxyAgent(getBedrockProxyTarget(bedrockRegion, bedrockEndpoint));
-  if (proxyAgent || hasBearerToken || configuredBaseURL) {
+  /** `endpoints.bedrock.retry` needs a client of the app's own, to restart failed streams. */
+  const retry = bedrockConfig?.retry;
+  /** Only `retry` asks for the app's own client, so it should act as ChatBedrockConverse's. */
+  const retryOnly = !proxyAgent && !hasBearerToken && !configuredBaseURL;
+  // if (proxyAgent || hasBearerToken || configuredBaseURL) {
+  if (proxyAgent || hasBearerToken || configuredBaseURL || retry != null) {
     const credentialProvider =
       !hasCompleteCredentials && !hasBearerToken && BEDROCK_AWS_PROFILE
         ? fromNodeProviderChain({ profile: BEDROCK_AWS_PROFILE })
@@ -286,13 +321,26 @@ export async function initializeBedrock(
     // the AWS SDK's default credential provider chain is used (instance profiles,
     // AWS profiles, environment variables, etc.)
     const customClientConfig: BedrockRuntimeClientConfig = {
-      region: (llmConfig.region as string) ?? BEDROCK_AWS_DEFAULT_REGION,
+      // region: (llmConfig.region as string) ?? BEDROCK_AWS_DEFAULT_REGION,
+      region:
+        (llmConfig.region as string) ??
+        BEDROCK_AWS_DEFAULT_REGION ??
+        (retryOnly ? process.env.AWS_DEFAULT_REGION : undefined),
     };
+
+    if (retry != null) {
+      customClientConfig.maxAttempts = retry.maxAttempts;
+    }
 
     if (hasBearerToken && bearerToken) {
       customClientConfig.token = { token: bearerToken };
       customClientConfig.authSchemePreference = ['httpBearerAuth'];
     } else if (hasCompleteCredentials) {
+      customClientConfig.credentials = credentials as {
+        accessKeyId: string;
+        secretAccessKey: string;
+      };
+    } else if (retryOnly && credentials) {
       customClientConfig.credentials = credentials as {
         accessKeyId: string;
         secretAccessKey: string;
@@ -313,6 +361,19 @@ export async function initializeBedrock(
     }
 
     const customClient = new BedrockRuntimeClient(customClientConfig);
+    if (retry != null) {
+      const configured = model == null ? undefined : retry.fallbacks?.[model];
+      const fallback = configured == null ? undefined : extractEnvVariable(configured);
+      const fallbackProfile =
+        fallback == null ? undefined : bedrockConfig?.inferenceProfiles?.[fallback];
+      const fallbackConfig = fallback == null ? undefined : parseLLMConfig({ model: fallback });
+      retryBedrockReplies(customClient, {
+        maxAttempts: retry.maxAttempts,
+        delay: backoff(retry.baseDelayMs, retry.maxDelayMs),
+        fallbackModelId: fallbackProfile != null ? extractEnvVariable(fallbackProfile) : fallback,
+        fallbackRequest: fallbackConfig == null ? undefined : fallbackRequestOf(fallbackConfig),
+      });
+    }
 
     llmConfig.client = customClient;
   } else {

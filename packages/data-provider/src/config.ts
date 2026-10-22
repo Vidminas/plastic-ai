@@ -838,12 +838,40 @@ export const bedrockGuardrailConfigSchema = z.object({
   streamProcessingMode: z.enum(['sync', 'async']).optional(),
 });
 
+/**
+ * Retries for when Bedrock is busy or fails on its side (`ServiceUnavailableException`,
+ * throttling, internal and model stream errors). Unset, the AWS SDK's default of 3 attempts
+ * applies, streamed replies are not restarted, and there is no fallback.
+ */
+export const bedrockRetrySchema = z.object({
+  /**
+   * Tries per request, counting the first. It sets the AWS SDK's attempts, which back off
+   * exponentially with jitter, and restarts a streamed reply that fails before any content
+   * arrives the same way.
+   */
+  maxAttempts: z.number().int().min(1).max(10),
+  /** The longest first wait before a streamed reply is sent again, in ms; it doubles after. Default 500. */
+  baseDelayMs: z.number().int().positive().optional(),
+  /** The cap on that wait, in ms. Default 8000. */
+  maxDelayMs: z.number().int().positive().optional(),
+  /**
+   * A model to send a reply to when its own model still fails once the tries are spent, by
+   * model name (both as in `models`; `inferenceProfiles` applies to each). The fallback gets
+   * the same tries, and its own thinking, effort and token settings. The reply is still
+   * recorded, and charged, as the model asked for; a warning is logged for each switch.
+   */
+  fallbacks: z.record(z.string().min(1), z.string().min(1)).optional(),
+});
+
+export type TBedrockRetry = z.infer<typeof bedrockRetrySchema>;
+
 export const bedrockEndpointSchema = baseEndpointSchema.merge(
   z.object({
     availableRegions: z.array(z.string()).optional(),
     models: z.array(z.string()).optional(),
     guardrailConfig: bedrockGuardrailConfigSchema.optional(),
     inferenceProfiles: z.record(z.string(), z.string()).optional(),
+    retry: bedrockRetrySchema.optional(),
   }),
 );
 

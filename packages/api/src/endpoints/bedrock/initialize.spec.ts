@@ -8,6 +8,7 @@ import {
 import type { BaseInitializeParams, BedrockLLMConfigResult } from '~/types';
 import { initializeBedrock } from './initialize';
 import { checkUserKeyExpiry } from '~/utils';
+import * as retryModule from './retry';
 
 jest.mock('https-proxy-agent', () => ({
   HttpsProxyAgent: jest.fn().mockImplementation((proxy) => ({ proxy })),
@@ -28,6 +29,8 @@ jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
   BedrockRuntimeClient: jest.fn().mockImplementation((config) => ({
     ...config,
     _isBedrockClient: true,
+    middlewareStack: { add: jest.fn() },
+    send: jest.fn(),
   })),
 }));
 
@@ -485,6 +488,115 @@ describe('initializeBedrock', () => {
       const client = result.llmConfig.client as unknown as Record<string, unknown>;
       const credentials = client.credentials as { config?: Record<string, string> };
       expect(credentials.config).toEqual({ profile: 'dev-profile' });
+    });
+  });
+
+  describe('Retry Configuration', () => {
+    it('builds its own client with the configured attempts and restarts failed streams', async () => {
+      const params = createMockParams({
+        config: { endpoints: { [EModelEndpoint.bedrock]: { retry: { maxAttempts: 5 } } } },
+      });
+      const result = (await initializeBedrock(params)) as BedrockLLMConfigResult;
+
+      expect(result.llmConfig.client).toHaveProperty('_isBedrockClient', true);
+      expect(result.llmConfig.client).toHaveProperty('maxAttempts', 5);
+      expect(result.llmConfig.client).toHaveProperty('credentials', {
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+      });
+      expect(result.llmConfig.client?.middlewareStack.add).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ step: 'initialize', name: 'librechatBedrockReplyRetry' }),
+      );
+      expect(result.llmConfig).not.toHaveProperty('credentials');
+    });
+
+    it("sends a model's fallback to its inference profile, and nothing for other models", async () => {
+      const spy = jest.spyOn(retryModule, 'retryBedrockReplies');
+      const bedrock = {
+        retry: { maxAttempts: 4, fallbacks: { 'eu.sonnet-5-5': 'eu.sonnet-5' } },
+        inferenceProfiles: {
+          'eu.sonnet-5': 'arn:aws:bedrock:eu-west-2:1:inference-profile/eu.sonnet-5',
+        },
+      };
+      const config = { endpoints: { [EModelEndpoint.bedrock]: bedrock } };
+
+      await initializeBedrock(
+        createMockParams({ config, model_parameters: { model: 'eu.sonnet-5-5' } }),
+      );
+      expect(spy).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          maxAttempts: 4,
+          fallbackModelId: 'arn:aws:bedrock:eu-west-2:1:inference-profile/eu.sonnet-5',
+        }),
+      );
+
+      await initializeBedrock(
+        createMockParams({ config, model_parameters: { model: 'eu.sonnet-5' } }),
+      );
+      expect(spy).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ maxAttempts: 4, fallbackModelId: undefined }),
+      );
+      spy.mockRestore();
+    });
+
+    it('gives the fallback the settings worked out for its own model', async () => {
+      const spy = jest.spyOn(retryModule, 'retryBedrockReplies');
+      const primary = 'eu.anthropic.claude-sonnet-5-5';
+      const fallback = 'eu.anthropic.claude-sonnet-5';
+      const model_parameters = { model: primary, thinking: false, maxTokens: 64000 };
+      const config = {
+        endpoints: {
+          [EModelEndpoint.bedrock]: {
+            retry: { maxAttempts: 2, fallbacks: { [primary]: fallback } },
+          },
+        },
+      };
+      await initializeBedrock(createMockParams({ config, model_parameters }));
+      const own = (await initializeBedrock(
+        createMockParams({ model_parameters: { ...model_parameters, model: fallback } }),
+      )) as BedrockLLMConfigResult;
+      const options = spy.mock.lastCall?.[1];
+      expect(options?.fallbackModelId).toBe(fallback);
+      expect(options?.fallbackRequest?.additionalModelRequestFields).toEqual(
+        own.llmConfig.additionalModelRequestFields,
+      );
+      expect(options?.fallbackRequest?.inferenceConfig?.maxTokens).toBe(own.llmConfig.maxTokens);
+      spy.mockRestore();
+    });
+
+    it('expands an environment variable in a fallback model name', async () => {
+      process.env.FALLBACK_MODEL = 'eu.sonnet-5';
+      const spy = jest.spyOn(retryModule, 'retryBedrockReplies');
+      const bedrock = {
+        retry: { maxAttempts: 2, fallbacks: { 'eu.sonnet-5-5': '${FALLBACK_MODEL}' } },
+      };
+      await initializeBedrock(
+        createMockParams({
+          config: { endpoints: { [EModelEndpoint.bedrock]: bedrock } },
+          model_parameters: { model: 'eu.sonnet-5-5' },
+        }),
+      );
+      expect(spy.mock.lastCall?.[1]?.fallbackModelId).toBe('eu.sonnet-5');
+      spy.mockRestore();
+    });
+
+    it("takes AWS_DEFAULT_REGION, as ChatBedrockConverse's own client does", async () => {
+      delete process.env.BEDROCK_AWS_DEFAULT_REGION;
+      process.env.AWS_DEFAULT_REGION = 'eu-west-1';
+      const result = (await initializeBedrock(
+        createMockParams({
+          config: { endpoints: { [EModelEndpoint.bedrock]: { retry: { maxAttempts: 2 } } } },
+        }),
+      )) as BedrockLLMConfigResult;
+      expect(result.llmConfig.client).toHaveProperty('region', 'eu-west-1');
+    });
+
+    it('leaves the client to ChatBedrockConverse without retry configured', async () => {
+      const result = (await initializeBedrock(createMockParams())) as BedrockLLMConfigResult;
+      expect(result.llmConfig).not.toHaveProperty('client');
     });
   });
 

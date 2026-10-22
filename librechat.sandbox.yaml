@@ -334,6 +334,12 @@ endpoints:
   # models there. These are the models it does serve on demand in eu-west-2, so
   # requests stay in London; each was checked with streaming and tool use.
   bedrock:
+    # Bedrock sometimes answers "Bedrock is unable to process your request"
+    # (ServiceUnavailableException) when the model is busy. Each request is tried
+    # up to 5 times, with exponential backoff and jitter, and a streamed reply
+    # that fails before any of it arrives is sent again the same way.
+    retry:
+      maxAttempts: 5
     models:
       - 'amazon.nova-lite-v1:0'
       - 'openai.gpt-oss-120b-1:0'

@@ -1257,6 +1257,18 @@ endpoints:
   #     "us.anthropic.claude-sonnet-4-6": "${BEDROCK_INFERENCE_PROFILE_CLAUDE_SONNET}"
   #     "anthropic.claude-3-7-sonnet-20250219-v1:0": "arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/abc123"
   #
+  #   # Retries when Bedrock is busy or fails on its side (ServiceUnavailableException,
+  #   # throttling, internal and model stream errors), counting the first try. Sets the AWS
+  #   # SDK's attempts per request (exponential backoff with jitter) and sends a streamed reply
+  #   # again when it fails before any content arrives. Unset: the SDK's 3 attempts, and no
+  #   # stream restarts.
+  #   retry:
+  #     maxAttempts: 5
+  #     # A model to send a reply to when its own model still fails after its tries, by model
+  #     # name (inferenceProfiles applies to both). The reply is recorded as the model asked for.
+  #     fallbacks:
+  #       "anthropic.claude-3-7-sonnet-20250219-v1:0": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  #
   #   # Guardrail Configuration
   #   guardrailConfig:
   #     guardrailIdentifier: "your-guardrail-id"

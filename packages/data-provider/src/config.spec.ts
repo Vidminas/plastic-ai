@@ -587,6 +587,24 @@ describe('interfaceSchema.hiddenParameterSections', () => {
 });
 
 describe('bedrockEndpointSchema', () => {
+  it('takes a retry attempt count from 1 to 10', () => {
+    const parse = (retry: unknown) =>
+      configSchema.safeParse({ version: '1.0', endpoints: { bedrock: { retry } } });
+    const parsed = parse({ maxAttempts: 5 });
+    expect(parsed.success && parsed.data.endpoints?.bedrock?.retry).toEqual({ maxAttempts: 5 });
+    expect(parse({ maxAttempts: 0 }).success).toBe(false);
+    expect(parse({ maxAttempts: 11 }).success).toBe(false);
+  });
+
+  it('takes fallback models by model name', () => {
+    const fallbacks = { 'eu.anthropic.claude-sonnet-5-5': 'eu.anthropic.claude-sonnet-5' };
+    const parsed = configSchema.safeParse({
+      version: '1.0',
+      endpoints: { bedrock: { retry: { maxAttempts: 5, fallbacks } } },
+    });
+    expect(parsed.success && parsed.data.endpoints?.bedrock?.retry?.fallbacks).toEqual(fallbacks);
+  });
+
   it('preserves guardrailConfig from configSchema parsing', () => {
     const guardrailConfig = {
       guardrailIdentifier: '${BEDROCK_GUARDRAIL_ID}',
