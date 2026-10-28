@@ -30,6 +30,7 @@ import ApprovalProvider from './Messages/Content/ApprovalContext';
 import ConversationStarters from './Input/ConversationStarters';
 import { pendingApprovalActionFamily } from './approval/state';
 import ProjectBadge from '~/components/Projects/ProjectBadge';
+import { useLinkedMessage } from '~/components/Agency/links';
 import { composerLiftFamily } from './Input/Composer/state';
 import { OwnerTextProvider } from './Messages/PrivateText';
 import { useGetMessagesByConvoId } from '~/data-provider';
@@ -133,6 +134,8 @@ function ChatView({
   // refetch is in flight, and resume must not build from (or race) it.
   useResumeOnLoad(conversationId, chatHelpers.getMessages, index, !isLoading && !isFetching);
 
+  /** Opens the conversation at the message a recap link names. */
+  useLinkedMessage(!isLoading && messagesTree != null);
   const goalCardAsking = useGoalCardAsking();
 
   // Show a server-owned queued follow-up as the next user turn as soon as its

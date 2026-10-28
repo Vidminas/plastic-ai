@@ -267,6 +267,16 @@ safeguarding:
     message: "The assistant is here to help with your learning. Try asking it about something else."
     signposting: []
 
+# Learner agency (forethought, performance, reflection). Long-term intentions
+# open from their own sidebar item and never reach a model; a conversation's
+# goal goes into its context. Goal checks have the model offer options through
+# ask_user_question, so every model spec below enables that tool.
+agency:
+  intentions: true
+  conversationGoal: true
+  goalChecks: true
+  recap: true
+
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.
 speech:
@@ -370,6 +380,7 @@ modelSpecs:
     - name: 'bedrock-claude-sonnet-5'
       label: 'Claude Sonnet 5.5 (Bedrock)'
       description: 'Anthropic Claude Sonnet 5.5 via AWS Bedrock (eu-west-2, EU geo profile), with Claude Sonnet 5 as a fallback'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'eu.anthropic.claude-sonnet-5-5'

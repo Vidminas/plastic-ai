@@ -9,6 +9,7 @@ jest.mock('~/components/Agency/Goal', () => ({
   GoalBanner: () => null,
   useGoalCardAsking: () => false,
 }));
+jest.mock('~/components/Agency/links', () => ({ useLinkedMessage: jest.fn() }));
 
 jest.mock('react-router-dom', () => ({
   useParams: () => ({ conversationId: 'child-thread' }),

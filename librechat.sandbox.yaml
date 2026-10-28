@@ -267,6 +267,16 @@ safeguarding:
     message: "The assistant is here to help with your learning. Try asking it about something else."
     signposting: []
 
+# Learner agency (forethought, performance, reflection). Long-term intentions
+# open from their own sidebar item and never reach a model; a conversation's
+# goal goes into its context. Goal checks have the model offer options through
+# ask_user_question, so every model spec below enables that tool.
+agency:
+  intentions: true
+  conversationGoal: true
+  goalChecks: true
+  recap: true
+
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.
 speech:
@@ -370,6 +380,7 @@ modelSpecs:
     - name: 'bedrock-nova-lite'
       label: 'Nova Lite (Bedrock)'
       description: 'Amazon Nova Lite v1 via AWS Bedrock (eu-west-2, on-demand)'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'amazon.nova-lite-v1:0'
@@ -381,18 +392,21 @@ modelSpecs:
     - name: 'bedrock-gpt-oss-120b'
       label: 'gpt-oss-120b (Bedrock)'
       description: 'OpenAI open-weight 120B model via AWS Bedrock (eu-west-2, on-demand)'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'openai.gpt-oss-120b-1:0'
     - name: 'bedrock-qwen3-235b'
       label: 'Qwen3 235B (Bedrock)'
       description: 'Qwen3 235B A22B 2507 via AWS Bedrock (eu-west-2, on-demand)'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'qwen.qwen3-235b-a22b-2507-v1:0'
     - name: 'bedrock-kimi-k2-5'
       label: 'Kimi K2.5 (Bedrock)'
       description: 'Moonshot AI Kimi K2.5 via AWS Bedrock (eu-west-2, on-demand)'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'moonshotai.kimi-k2.5'
@@ -400,18 +414,21 @@ modelSpecs:
     - name: 'bedrock-deepseek-v3-2'
       label: 'DeepSeek V3.2 (Bedrock)'
       description: 'DeepSeek V3.2 via AWS Bedrock (eu-west-2, on-demand)'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'deepseek.v3.2'
     - name: 'bedrock-devstral-2'
       label: 'Devstral 2 (Bedrock)'
       description: 'Mistral AI Devstral 2 123B, tuned for coding, via AWS Bedrock (eu-west-2, on-demand)'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'mistral.devstral-2-123b'
     - name: 'bedrock-glm-5'
       label: 'GLM-5 (Bedrock)'
       description: 'Z.ai GLM-5 via AWS Bedrock (eu-west-2, on-demand)'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'zai.glm-5'
@@ -419,6 +436,7 @@ modelSpecs:
     - name: 'bedrock-nemotron-super-3'
       label: 'Nemotron Super 3 (Bedrock)'
       description: 'NVIDIA Nemotron Super 3 120B via AWS Bedrock (eu-west-2, on-demand)'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'nvidia.nemotron-super-3-120b'

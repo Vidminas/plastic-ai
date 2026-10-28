@@ -47,6 +47,11 @@ const loadInsightsView = () =>
     Component: m.default,
   }));
 
+const loadAgencyRecap = () =>
+  importWithRecovery(() => import('~/components/Agency/Recap')).then((m) => ({
+    Component: m.default,
+  }));
+
 const loadProjectsView = () =>
   importWithRecovery(() => import('~/components/Projects')).then((m) => ({
     Component: m.ProjectsView,
@@ -167,6 +172,10 @@ export const router = createBrowserRouter(
                 {
                   path: 'insights',
                   lazy: loadInsightsView,
+                },
+                {
+                  path: 'agency',
+                  lazy: loadAgencyRecap,
                 },
                 {
                   path: 'skills/new',
