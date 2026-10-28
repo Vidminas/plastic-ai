@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ZodError } from 'zod';
 import type { TEndpointsConfig, TModelsConfig, TConfig } from './types';
-import type { TAgencyConfig } from './agency';
+import type { TAgencyStartupConfig } from './agency';
 import {
   MAX_SUBAGENTS,
   MAX_SUBAGENTS_CEILING,
@@ -3222,8 +3222,8 @@ export type TStartupConfig = {
   /** `safeguarding.signposting` (or `openingHours.support`): the services shown with blocked
    *  content when no crisis notice is configured. */
   safeguardingSupport?: TSupportService[];
-  /** `agency`: which learner-agency features are on. */
-  agency?: TAgencyConfig;
+  /** `agency`: which learner-agency features are on, with the classifier's topics only. */
+  agency?: TAgencyStartupConfig;
   /** Conversation-owned code-environment decision protocol supported by the API.
    * Clients must not emit selection-less decisions unless this is advertised. */
   codeEnvironmentDecisionVersion?: typeof CODE_ENVIRONMENT_DECISION_VERSION;

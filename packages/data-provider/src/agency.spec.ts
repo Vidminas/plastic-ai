@@ -1,5 +1,6 @@
 import {
   agencySchema,
+  AGENCY_CLASSIFIER_PROMPT_MAX,
   AGENCY_TEXT_MAX,
   agencyGoalSchema,
   agencyIntentionsSchema,
@@ -47,7 +48,27 @@ describe('agencyIntentionsSchema', () => {
   });
 });
 
-describe('agencySchema goalSuggestions', () => {
+describe('agencySchema classifier prompts', () => {
+  const classifier = { endpoint: 'bedrock', model: 'm' };
+
+  it('takes a topic prompt, and does not need one', () => {
+    expect(agencySchema.parse({ classifier }).classifier?.prompts).toBeUndefined();
+    expect(
+      agencySchema.parse({ classifier: { ...classifier, prompts: { topics: ' Pick one ' } } })
+        .classifier?.prompts,
+    ).toEqual({ topics: 'Pick one' });
+  });
+
+  it('refuses an empty or oversized prompt', () => {
+    for (const topics of ['  ', 'x'.repeat(AGENCY_CLASSIFIER_PROMPT_MAX + 1)]) {
+      expect(
+        agencySchema.safeParse({ classifier: { ...classifier, prompts: { topics } } }).success,
+      ).toBe(false);
+    }
+  });
+});
+
+describe('agencySchema goalSuggestions and classifier', () => {
   const suggestion = { id: 'exams', title: 'Prepare for exams', icon: 'book' };
 
   it('takes suggestions with unique ids and known icons', () => {
@@ -62,6 +83,42 @@ describe('agencySchema goalSuggestions', () => {
     ).toBe(false);
     expect(
       agencySchema.safeParse({ goalSuggestions: [{ ...suggestion, id: 'Exams!' }] }).success,
+    ).toBe(false);
+  });
+
+  it('takes a classifier with topics, keeping other and unclassified reserved', () => {
+    const classifier = { endpoint: 'bedrock', model: 'amazon.nova-lite-v1:0' };
+    expect(agencySchema.parse({ classifier }).classifier?.topics).toEqual([]);
+    expect(
+      agencySchema.safeParse({
+        classifier: { ...classifier, topics: [{ id: 'other', label: 'x' }] },
+      }).success,
+    ).toBe(false);
+    expect(
+      agencySchema.safeParse({
+        classifier: {
+          ...classifier,
+          topics: [
+            { id: 'maths', label: 'Maths' },
+            { id: 'maths', label: 'Numbers' },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('agencyReflectionSchema', () => {
+  it('fills skipped questions with empty answers', () => {
+    expect(agencyReflectionSchema.parse({ answers: { working_on: ' My essay ' } })).toEqual({
+      answers: { working_on: 'My essay', decision: '', reason: '', outcome: '', happy: '' },
+    });
+  });
+
+  it('refuses a reflection with no answers, or an unknown question', () => {
+    expect(agencyReflectionSchema.safeParse({ answers: { reason: '  ' } }).success).toBe(false);
+    expect(
+      agencyReflectionSchema.safeParse({ answers: { working_on: 'x', mood: 'ok' } }).success,
     ).toBe(false);
   });
 });
@@ -80,20 +137,5 @@ describe('agencyGoalSchema', () => {
     expect(agencyGoalSchema.safeParse({ text: 'x', suggestionId: 'Not An Id' }).success).toBe(
       false,
     );
-  });
-});
-
-describe('agencyReflectionSchema', () => {
-  it('fills skipped questions with empty answers', () => {
-    expect(agencyReflectionSchema.parse({ answers: { working_on: ' My essay ' } })).toEqual({
-      answers: { working_on: 'My essay', decision: '', reason: '', outcome: '', happy: '' },
-    });
-  });
-
-  it('refuses a reflection with no answers, or an unknown question', () => {
-    expect(agencyReflectionSchema.safeParse({ answers: { reason: '  ' } }).success).toBe(false);
-    expect(
-      agencyReflectionSchema.safeParse({ answers: { working_on: 'x', mood: 'ok' } }).success,
-    ).toBe(false);
   });
 });

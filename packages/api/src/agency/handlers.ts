@@ -10,6 +10,7 @@ import type {
   TAgencyRecap,
   TAgencyConfig,
   TConversationGoal,
+  TAgencyStartupConfig,
   TAgencyIntentions,
   TAgencyReflection,
   TSafeguardingErrorInfo,
@@ -50,6 +51,11 @@ export interface AgencyHandlerDeps {
   /** Resolves when the user owns the conversation; null when there is no such conversation. */
   getConvo(userId: UserId, conversationId: string): Promise<unknown>;
   record: AgencyEventRecorder;
+  /**
+   * Called after a conversation's goal changes, in the background, so the classifier can label
+   * its topic again. Never awaited by the response.
+   */
+  onConversationGoalChanged?(req: Request, userId: UserId, conversationId: string): void;
 }
 
 type AgencyRequest = Request & {
@@ -196,7 +202,11 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
       if (suggestionId != null && suggestionOf(req, suggestionId) == null) {
         return res.status(400).json({ message: 'Unknown suggestion' });
       }
-      if ((await deps.getConvo(userId, conversationId)) == null) {
+      const [convo, previous] = await Promise.all([
+        deps.getConvo(userId, conversationId),
+        deps.getConversationGoal(userId, conversationId),
+      ]);
+      if (convo == null) {
         return res.status(404).json(NOT_FOUND);
       }
       const screened = await screenLearnerText(req, { text }, { source: 'goal', conversationId });
@@ -209,7 +219,11 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
         screened.fields.text,
         suggestionId,
       );
-      deps.record.event({ userId, conversationId, type: 'goal_updated' });
+      /** Saving the same words again is no change: nothing recorded, and no paid relabel. */
+      if (goal.text !== previous?.text) {
+        deps.record.event({ userId, conversationId, type: 'goal_updated' });
+        deps.onConversationGoalChanged?.(req, userId, conversationId);
+      }
       return res.json({ goal });
     }),
 
@@ -296,4 +310,10 @@ export function suggestionOf(
   id: string,
 ): { id: string; title: string } | undefined {
   return req.config?.agency?.goalSuggestions?.find((suggestion) => suggestion.id === id);
+}
+
+/** `agency` for the startup config: the classifier's topics, never its endpoint or model. */
+export function agencyStartupConfig(agency: TAgencyConfig): TAgencyStartupConfig {
+  const { classifier, ...rest } = agency;
+  return classifier != null ? { ...rest, classifier: { topics: classifier.topics } } : rest;
 }

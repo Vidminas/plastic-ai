@@ -1,5 +1,5 @@
+import { agencyStartupConfig, createAgencyHandlers } from '../handlers';
 import { screenForSafeguarding } from '~/safeguarding/service';
-import { createAgencyHandlers } from '../handlers';
 
 /** Stands in for the PII guardrail: digits are the "identifiers" it masks. */
 jest.mock('~/guardrails/stored', () => ({
@@ -39,6 +39,7 @@ const makeDeps = () => ({
     createdAt: 'a',
     updatedAt: 'b',
   })),
+  onConversationGoalChanged: jest.fn(),
   record: { event: jest.fn() },
 });
 
@@ -237,6 +238,20 @@ describe('createAgencyHandlers', () => {
     });
   });
 
+  it('saves the same goal again without recording a change or a relabel', async () => {
+    const deps = makeDeps();
+    deps.getConversationGoal.mockResolvedValue({ text: 'same goal' });
+    const res = makeRes();
+    await createAgencyHandlers(deps).putGoal(
+      makeReq({ params: { conversationId: 'c1' }, body: { text: 'same goal' } }) as never,
+      res as never,
+    );
+    expect(deps.setConversationGoal).toHaveBeenCalled();
+    expect(res.body).toEqual({ goal: { text: 'same goal' } });
+    expect(deps.record.event).not.toHaveBeenCalled();
+    expect(deps.onConversationGoalChanged).not.toHaveBeenCalled();
+  });
+
   it('accepts only the events the browser reports', async () => {
     const deps = makeDeps();
     const handlers = createAgencyHandlers(deps);
@@ -275,6 +290,7 @@ describe('createAgencyHandlers', () => {
     });
     await handlers.putGoal(req as never, makeRes() as never);
     expect(deps.setConversationGoal).toHaveBeenCalledWith('u1', 'c1', 'Revise algebra', 'exams');
+    expect(deps.onConversationGoalChanged).toHaveBeenCalledWith(req, 'u1', 'c1');
 
     const unknown = makeRes();
     await handlers.putGoal(
@@ -383,5 +399,18 @@ describe('createAgencyHandlers', () => {
       );
       expect(bad.statusCode).toBe(400);
     });
+  });
+});
+
+describe('agencyStartupConfig', () => {
+  it("sends the classifier's topics, not its endpoint or model", () => {
+    const topics = [{ id: 'maths', label: 'Maths' }];
+    expect(
+      agencyStartupConfig({
+        ...allOn,
+        classifier: { endpoint: 'bedrock', model: 'secret-model', topics },
+      } as never),
+    ).toEqual({ ...allOn, classifier: { topics } });
+    expect(agencyStartupConfig(allOn as never)).toEqual(allOn);
   });
 });

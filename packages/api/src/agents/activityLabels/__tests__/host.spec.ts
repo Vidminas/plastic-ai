@@ -272,6 +272,26 @@ describe('resolveActivityLabelModel model precedence', () => {
     );
   });
 
+  it('runs an explicit model on the agent endpoint, whatever activityEndpoint says', async () => {
+    await resolveActivityLabelModel({
+      req: {
+        config: appConfig({
+          openAI: { activityModel: 'label-model', activityEndpoint: 'anthropic' },
+        }),
+      } as unknown as ServerRequest,
+      agent: { endpoint: 'openAI', model_parameters: { model: 'run-model' } },
+      ids: {},
+      db,
+      explicitModel: 'classifier-model',
+    });
+    expect(mockGetOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: 'openAI',
+        model_parameters: { model: 'classifier-model' },
+      }),
+    );
+  });
+
   it('prefers an explicit activityModel over everything', async () => {
     await resolve({ activityLabel: true, activityModel: 'label-model', titleModel: 'haiku' });
     expect(mockGetOptions).toHaveBeenCalledWith(

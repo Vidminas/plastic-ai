@@ -66,6 +66,40 @@ export const goalSuggestionSchema = z.object({
 export type TGoalSuggestion = z.infer<typeof goalSuggestionSchema>;
 
 /**
+ * What the background classifier labels each learner message as: the kind of support asked
+ * for. Fixed, so the client can name each one in the learner's language.
+ */
+export const AGENCY_SUPPORT_TYPES = [
+  'explanation',
+  'hint',
+  'quiz',
+  'ideas',
+  'feedback',
+  'answer',
+  'other',
+] as const;
+export type AgencySupportType = (typeof AGENCY_SUPPORT_TYPES)[number];
+
+/** The topic every conversation can fall back to, whatever the configured topics are. */
+export const AGENCY_OTHER_TOPIC = 'other';
+/** A conversation the classifier has not labelled (yet). */
+export const AGENCY_UNCLASSIFIED_TOPIC = 'unclassified';
+
+/** Longest a classifier prompt written in librechat.yaml may be, in characters. */
+export const AGENCY_CLASSIFIER_PROMPT_MAX = 4000;
+
+/** Most topics a study can configure: the recap gives each a colour of its own. */
+export const AGENCY_TOPICS_MAX = 7;
+
+const agencyTopicSchema = z.object({
+  id: configIdSchema.refine((id) => id !== AGENCY_OTHER_TOPIC && id !== AGENCY_UNCLASSIFIED_TOPIC, {
+    message: `"${AGENCY_OTHER_TOPIC}" and "${AGENCY_UNCLASSIFIED_TOPIC}" are reserved`,
+  }),
+  label: z.string().trim().min(1).max(80),
+});
+export type TAgencyTopic = z.infer<typeof agencyTopicSchema>;
+
+/**
  * `agency` in librechat.yaml: features that support a learner's agency over their own
  * learning. Every switch defaults to off, so without the block nothing changes.
  */
@@ -97,8 +131,43 @@ export const agencySchema = z.object({
     .max(12)
     .superRefine(uniqueIds('goalSuggestions'))
     .optional(),
+  /**
+   * A small model that labels, in the background, the kind of support each learner message asks
+   * for and each conversation's general topic, for the recap. Only the labels are kept. Unset,
+   * nothing is labelled and the recap leaves out support types and topics.
+   */
+  classifier: z
+    .object({
+      endpoint: z.string().min(1),
+      model: z.string().min(1),
+      /**
+       * The study's general topics; `other` is always added. At most seven, one per colour the
+       * recap can tell apart.
+       */
+      topics: z
+        .array(agencyTopicSchema)
+        .max(AGENCY_TOPICS_MAX)
+        .default([])
+        .superRefine(uniqueIds('topics')),
+      /**
+       * The question the classifier is asked about the topic, in place of its default, followed by
+       * the list of topics. The rules around it (the conversation is data, the reply's shape) stay
+       * fixed.
+       */
+      prompts: z
+        .object({
+          topics: z.string().trim().min(1).max(AGENCY_CLASSIFIER_PROMPT_MAX).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 export type TAgencyConfig = z.infer<typeof agencySchema>;
+
+/** `agency` as the browser receives it: the classifier's topics, not its endpoint or model. */
+export type TAgencyStartupConfig = Omit<TAgencyConfig, 'classifier'> & {
+  classifier?: { topics: TAgencyTopic[] };
+};
 
 export const agencyIntentionsSchema = z.object({
   goals: agencyTextSchema.default(''),
@@ -197,6 +266,8 @@ export const AGENCY_EVENT_TYPES = [
   'goal_check_offered',
   'goal_check_resolved',
   'recap_viewed',
+  'support_classified',
+  'topic_classified',
   'reflection_saved',
   'reflection_updated',
 ] as const;

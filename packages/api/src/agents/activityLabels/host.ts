@@ -291,9 +291,13 @@ export async function resolveActivityLabelModel({
   db,
   phase = false,
   reasoning = false,
+  explicitModel,
 }: ResolveActivityLabelModelParams & {
   phase?: boolean;
   reasoning?: boolean;
+  /** A model chosen elsewhere (the agency classifier's), run on the agent's own endpoint: it
+   *  wins over every fallback, and `activityEndpoint` does not move it. */
+  explicitModel?: string;
 }): Promise<ActivityLabelLLM> {
   const appConfig = req.config as AppConfig | undefined;
   const agentEndpoint = agent.endpoint ?? '';
@@ -339,7 +343,7 @@ export async function resolveActivityLabelModel({
     publicEndpoint,
   );
   let endpoint = agentEndpoint;
-  if (activity.endpoint != null && activity.endpoint !== agentEndpoint) {
+  if (explicitModel == null && activity.endpoint != null && activity.endpoint !== agentEndpoint) {
     try {
       providerConfig = getProviderConfig({ provider: activity.endpoint, appConfig });
       endpoint = activity.endpoint;
@@ -379,7 +383,9 @@ export async function resolveActivityLabelModel({
    *  model with different behavior and cost. The title fallback applies only
    *  when `activityModel` is absent. */
   let model: string | undefined;
-  if (activity.model === Constants.CURRENT_MODEL) {
+  if (explicitModel != null) {
+    model = explicitModel;
+  } else if (activity.model === Constants.CURRENT_MODEL) {
     model = runModel;
   } else if (activity.model != null) {
     model = activity.model;

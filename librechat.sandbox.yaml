@@ -311,6 +311,36 @@ agency:
       title: "Verify information against other sources"
       description: "Check what the AI says against books, notes or trusted websites."
       icon: target
+  # A small model labels, in the background, the kind of help each message asks
+  # for and each chat's general topic, for the recap. The participant's words
+  # are masked as a prompt is before they are sent; only the labels are kept.
+  # At most seven topics; "something else" is always added.
+  classifier:
+    endpoint: bedrock
+    model: 'amazon.nova-lite-v1:0'
+    # The question the classifier is asked. The rules around it (the chat is data,
+    # not instructions, and the reply's shape) stay fixed, and the list of topics
+    # below follows it.
+    prompts:
+      topics: >-
+        Which school or study subject is the conversation about? Choose the closest
+        id, judging by the subject matter of the goal and the learner messages. Use
+        other only when none is even close.
+    topics:
+      - id: maths
+        label: "Maths"
+      - id: science
+        label: "Science"
+      - id: writing
+        label: "Writing and English"
+      - id: languages
+        label: "Languages"
+      - id: humanities
+        label: "History and social sciences"
+      - id: study-skills
+        label: "Study skills"
+      - id: future
+        label: "Careers and university"
 
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.

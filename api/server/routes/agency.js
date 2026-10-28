@@ -1,6 +1,7 @@
 const express = require('express');
 const { createAgencyHandlers, createAgencyEventRecorder } = require('@librechat/api');
 const { requireJwtAuth, configMiddleware } = require('~/server/middleware');
+const { getAgencyClassifier } = require('~/server/services/agencyClassifier');
 const db = require('~/models');
 
 const router = express.Router();
@@ -15,6 +16,9 @@ const handlers = createAgencyHandlers({
   createAgencyReflection: db.createAgencyReflection,
   updateAgencyReflection: db.updateAgencyReflection,
   record: createAgencyEventRecorder({ recordAgencyEvent: db.recordAgencyEvent }),
+  onConversationGoalChanged: (req, userId, conversationId) => {
+    void getAgencyClassifier().classifyTopic(req, userId, conversationId);
+  },
 });
 
 router.use(requireJwtAuth, configMiddleware);
