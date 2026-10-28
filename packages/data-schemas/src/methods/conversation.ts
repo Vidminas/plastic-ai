@@ -52,6 +52,7 @@ import { isAgentFadingTier, isAgentFadingTierEntries } from '~/utils/fading';
 import { isCompactionSemanticIndexProjection } from '~/types/compaction';
 import { withoutMeiliIndexing } from '~/models/plugins/mongoMeili';
 import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
+import { deleteConversationSentPrompts } from './sentPrompt';
 import { isValidObjectIdString } from '~/utils/objectId';
 import { deleteAgencyConversationData } from './agency';
 import { decrementTagCounts } from './conversationTag';
@@ -4059,7 +4060,10 @@ export function createConversationMethods(
         acknowledged &&= result.acknowledged;
         deletedCount += result.deletedCount;
         await reconcileDeletedWave(wave, result.deletedCount);
-        await deleteAgencyConversationData(mongoose, user, waveIds);
+        await Promise.all([
+          deleteAgencyConversationData(mongoose, user, waveIds),
+          deleteConversationSentPrompts(mongoose, user, waveIds),
+        ]);
         for (const conversation of wave) {
           seen.add(conversation.conversationId);
           deletedConversations.push(conversation);

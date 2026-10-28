@@ -44,6 +44,7 @@ export async function loadDefaultInterface({
     mcpServers: interfaceConfig?.mcpServers ?? defaults.mcpServers,
     customWelcome: interfaceConfig?.customWelcome ?? defaults.customWelcome,
     composerReasoning: interfaceConfig?.composerReasoning,
+    sentPrompt: interfaceConfig?.sentPrompt,
     footerLayout: interfaceConfig?.footerLayout,
     deletionLogNotice: interfaceConfig?.deletionLogNotice,
     autoSubmitFromUrl: interfaceConfig?.autoSubmitFromUrl ?? defaults.autoSubmitFromUrl,

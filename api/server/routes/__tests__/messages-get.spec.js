@@ -54,6 +54,7 @@ jest.mock('@librechat/api', () => {
     maskUserText: jest.fn(async (_config, text) => text),
     prepareToolCallPreviews: jest.fn(() => (messages) => Promise.resolve(messages)),
     createToolCallPartHandler: jest.fn(() => (_req, res) => res.status(404).end()),
+    createSentPromptHandler: jest.fn(() => (_req, res) => res.status(404).end()),
     rejectToolCallPreviewWrites: (_req, _res, next) => next(),
     withMessageToolCallPreviews: (_req, message) => message,
     /** The real helper, without loading the rest of the package this suite mocks around. */

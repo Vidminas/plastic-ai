@@ -76,6 +76,10 @@ export const messages = (params: q.MessagesListParams) => {
 
 export const messagesArtifacts = (messageId: string) => `${messagesRoot}/artifact/${messageId}`;
 
+/** What a user's message sent the model (`interface.sentPrompt`). */
+export const messageSentPrompt = (conversationId: string, messageId: string) =>
+  `${messagesRoot}/${encodeURIComponent(conversationId)}/${encodeURIComponent(messageId)}/sent-prompt`;
+
 /** One tool-call part of a stored message, in full. */
 export const messageToolCallPart = ({
   conversationId,

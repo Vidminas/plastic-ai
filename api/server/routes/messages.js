@@ -28,6 +28,7 @@ const {
   isContentFilterError,
   withoutTraceRefs,
   createPrivateTextView,
+  createSentPromptHandler,
   stripPrivateMessageFields,
   applyForcedRetention,
   prepareToolCallPreviews,
@@ -68,6 +69,7 @@ const filterFeedbackContent = createContentFilter({
   extract: (req) => extractFeedbackContent(req.body),
 });
 const toolCallPreviewDeps = { getAppConfig };
+const readSentPrompt = createSentPromptHandler({ getSentPrompt: db.getSentPrompt });
 const readToolCallPart = createToolCallPartHandler({
   getMessages: db.getMessages,
   validate: (req) => createMessageRequestValidation(req, { activeJobMessageRead: true }),
@@ -629,6 +631,12 @@ router.get('/:conversationId/:messageId', validateMessageReq, async (req, res) =
 });
 
 router.get('/:conversationId/:messageId/parts/:partIndex', readToolCallPart);
+router.get(
+  '/:conversationId/:messageId/sent-prompt',
+  validateMessageReq,
+  configMiddleware,
+  readSentPrompt,
+);
 
 router.put('/:conversationId/:messageId', messageMutationMiddleware, async (req, res) => {
   try {

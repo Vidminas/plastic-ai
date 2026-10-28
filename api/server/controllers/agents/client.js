@@ -213,6 +213,7 @@ const {
   withAgencyContext,
   resolveAgencyContext,
   createAgencyEventRecorder,
+  sentPromptCallbacks,
 } = require('@librechat/api');
 const {
   Run,
@@ -5102,6 +5103,15 @@ class AgentClient extends BaseClient {
             modelBoundCallback,
             createAgentMemoryCallback(this.attachmentMemoryContext ?? {}),
             terminalRunError.modelCallback,
+            ...sentPromptCallbacks({
+              config: this.options.req.config,
+              user: this.options.req.user?.id,
+              conversationId: this.conversationId,
+              /** An edited or continued turn has no new user message to keep it with. */
+              messageId: this.continued ? null : this.parentMessageId,
+              isTemporary: this.options.req.body?.isTemporary === true,
+              saveSentPrompt: db.saveSentPrompt,
+            }),
           ],
           // This controller implements the full HITL pause/resume lifecycle (handleRunInterrupt
           // persists the pending action; the /resume route rebuilds + continues the run), so it

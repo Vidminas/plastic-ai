@@ -19,6 +19,7 @@ import { ErrorSourceProvider } from '~/components/Messages/Content/Error/source'
 import Elapsed, { shouldShowElapsed } from '~/components/Chat/Messages/Elapsed';
 import { getHeaderHoverLabel } from '~/components/Chat/Messages/ui/HeaderLabel';
 import ContentParts from '~/components/Chat/Messages/Content/ContentParts';
+import { SentPromptPanel } from '~/components/Chat/Messages/SentPrompt';
 import { PrivateText } from '~/components/Chat/Messages/PrivateText';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
 import HoverButtons from '~/components/Chat/Messages/HoverButtons';
@@ -262,6 +263,7 @@ const ContentRender = memo(function ContentRender({
         msg.finish_reason === Constants.TOOL_CALL_LIMIT_FINISH_REASON && (
           <ToolCallLimitNotice message={msg} />
         )}
+      <SentPromptPanel message={msg} />
     </MessageRow>
   );
 }, areContentRenderPropsEqual);

@@ -80,6 +80,7 @@ export enum QueryKeys {
   agencyRecap = 'agencyRecap',
   agencyReflections = 'agencyReflections',
   agencyPrompt = 'agencyPrompt',
+  sentPrompt = 'sentPrompt',
   principalSearch = 'principalSearch',
   accessRoles = 'accessRoles',
   resourcePermissions = 'resourcePermissions',

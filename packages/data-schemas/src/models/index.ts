@@ -25,6 +25,7 @@ import { createAgentApiKeyModel } from './agentApiKey';
 import { createTransactionModel } from './transaction';
 import { createPromptGroupModel } from './promptGroup';
 import { createSystemGrantModel } from './systemGrant';
+import { createSentPromptModel } from './sentPrompt';
 import { createPluginAuthModel } from './pluginAuth';
 import { createSharedLinkModel } from './sharedLink';
 import { createAccessRoleModel } from './accessRole';
@@ -99,6 +100,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
   AgencyReflection: ReturnType<typeof createAgencyReflectionModel>;
   AgencyPrompt: ReturnType<typeof createAgencyPromptModel>;
   AgencyPromptRevision: ReturnType<typeof createAgencyPromptRevisionModel>;
+  SentPrompt: ReturnType<typeof createSentPromptModel>;
   ToolFavorite: ReturnType<typeof createToolFavoriteModel>;
   AccessRole: ReturnType<typeof createAccessRoleModel>;
   AclEntry: ReturnType<typeof createAclEntryModel>;
@@ -156,6 +158,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
     AgencyReflection: createAgencyReflectionModel(mongoose),
     AgencyPrompt: createAgencyPromptModel(mongoose),
     AgencyPromptRevision: createAgencyPromptRevisionModel(mongoose),
+    SentPrompt: createSentPromptModel(mongoose),
     ToolFavorite: createToolFavoriteModel(mongoose),
     AccessRole: createAccessRoleModel(mongoose),
     AclEntry: createAclEntryModel(mongoose),

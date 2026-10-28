@@ -20,6 +20,7 @@ import type { TInsightsAccessResponse, TInsightsParams, TInsightsResponse } from
 import type { ScheduleMCPConsentView, ConfirmScheduleMCPConsent } from './types/scheduleConsent';
 import type { TAgencyPrompt, TAgencyPromptSaved, TAgencyPromptResponse } from './agencyPrompt';
 import type { TFileConfig } from './file-config';
+import type { TSentPrompt } from './sentPrompt';
 import type * as tl from './types/tools';
 import type * as t from './types';
 import { TOOL_CALL_PREVIEWS_PARAM, TOOL_CALL_PREVIEWS_VERSION } from './previews';
@@ -1846,6 +1847,13 @@ export const updateAgencyReflection = (
   reflection: TAgencyReflectionInput,
 ): Promise<{ reflection: TAgencyReflection }> => {
   return request.patch(endpoints.agencyReflection(reflectionId), reflection);
+};
+
+export const getSentPrompt = (
+  conversationId: string,
+  messageId: string,
+): Promise<{ sentPrompt: TSentPrompt }> => {
+  return request.get(endpoints.messageSentPrompt(conversationId, messageId));
 };
 
 export const getAgencyPrompt = (): Promise<TAgencyPromptResponse> => {

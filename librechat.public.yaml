@@ -50,6 +50,11 @@ interface:
   hiddenParameterSections: ['limits']
   # Reasoning is set in the Parameters panel only, not from the composer.
   composerReasoning: false
+  # A "Show what was sent" action on each message a participant sends: everything
+  # the model got on that turn (instructions, hidden instructions, memory and file
+  # context, the message as sent). Kept per message, already masked, and deleted
+  # with the conversation or the account.
+  sentPrompt: true
   presets: false
   prompts:
     use: false

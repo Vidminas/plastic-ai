@@ -37,6 +37,7 @@ export { default as agencyEventSchema } from './agencyEvent';
 export { default as agencyReflectionSchema } from './agencyReflection';
 export { default as agencyPromptSchema } from './agencyPrompt';
 export { default as agencyPromptRevisionSchema } from './agencyPromptRevision';
+export { default as sentPromptSchema } from './sentPrompt';
 export { default as toolFavoriteSchema } from './favorite';
 export { default as groupSchema } from './group';
 export { default as systemGrantSchema } from './systemGrant';

@@ -2726,6 +2726,12 @@ export const interfaceSchema = z
     /** The reasoning control in the composer footer. Enabled by default; when off, reasoning
      * is set only in the Parameters panel. */
     composerReasoning: z.boolean().optional(),
+    /**
+     * A "Show what was sent" action on the user's own messages: everything the model got on that
+     * turn (the system content, the message as sent, how many earlier messages went with it and
+     * the tools offered), kept from the turn's first model call. Off by default.
+     */
+    sentPrompt: z.boolean().optional(),
     multiConvo: z.boolean().optional(),
     bookmarks: z.boolean().optional(),
     memories: z.boolean().optional(),
