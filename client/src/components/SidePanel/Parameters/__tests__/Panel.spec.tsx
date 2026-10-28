@@ -8,6 +8,11 @@ import AnnouncerContext from '~/Providers/AnnouncerContext';
 import { ChatContext } from '~/Providers';
 import Parameters from '../Panel';
 
+jest.mock('../AgencyPrompt', () => ({
+  __esModule: true,
+  default: () => <div data-testid="prompt-template" />,
+}));
+
 const saved = { thinking: false, thinkingBudget: 4096, temperature: 0.7, topP: 0.9, topK: 40 };
 
 function setup(
@@ -123,5 +128,30 @@ describe.each([
       topP: 0.9,
       topK: 40,
     });
+  });
+});
+
+describe('prompt template', () => {
+  it('sits directly after the system prompt, with conversation goals on', async () => {
+    const { container } = setup(EModelEndpoint.bedrock, 'global.anthropic.claude-opus-5', {
+      interface: { parameters: true } as TStartupConfig['interface'],
+      agency: { conversationGoal: true } as TStartupConfig['agency'],
+    });
+    const template = await screen.findByTestId('prompt-template');
+    const systemPrompt = container.querySelector('[id$="-dynamic-textarea"]');
+    expect(systemPrompt).not.toBeNull();
+    expect(systemPrompt?.closest('div.col-span-2')?.nextElementSibling).toBe(template);
+  });
+
+  it('is not shown without conversation goals, or with identity hidden', async () => {
+    setup(EModelEndpoint.bedrock, 'global.anthropic.claude-opus-5', {
+      interface: {
+        parameters: true,
+        hiddenParameterSections: ['identity'],
+      } as TStartupConfig['interface'],
+      agency: { conversationGoal: true } as TStartupConfig['agency'],
+    });
+    await screen.findAllByRole('heading');
+    expect(screen.queryByTestId('prompt-template')).toBeNull();
   });
 });

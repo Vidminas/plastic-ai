@@ -4,12 +4,15 @@ import { QueryKeys, MutationKeys, dataService } from 'librechat-data-provider';
 import type {
   RecapRange,
   TAgencyRecap,
+  TAgencyPrompt,
   TConversationGoal,
   TAgencyIntentions,
   TAgencyReflection,
   TClientAgencyEvent,
   TAgencyIntentionsInput,
   TAgencyReflectionInput,
+  TAgencyPromptSaved,
+  TAgencyPromptResponse,
 } from 'librechat-data-provider';
 import type {
   UseQueryOptions,
@@ -167,4 +170,55 @@ export const useUpdateAgencyReflectionMutation = (
 /** Reports an engagement only the browser sees; a failure is not the learner's concern. */
 export const recordAgencyEvent = (event: TClientAgencyEvent): void => {
   dataService.recordAgencyEvent(event).catch(() => undefined);
+};
+
+export const useAgencyPromptQuery = (
+  config?: UseQueryOptions<TAgencyPromptResponse>,
+): QueryObserverResult<TAgencyPromptResponse> =>
+  useQuery<TAgencyPromptResponse>([QueryKeys.agencyPrompt], () => dataService.getAgencyPrompt(), {
+    refetchOnWindowFocus: false,
+    ...config,
+  });
+
+/** Keeps the cached instructions in step with what the server saved. */
+const usePromptSaved = () => {
+  const queryClient = useQueryClient();
+  return (prompt: TAgencyPrompt) =>
+    queryClient.setQueryData<TAgencyPromptResponse>([QueryKeys.agencyPrompt], (previous) =>
+      previous ? { ...previous, prompt } : previous,
+    );
+};
+
+export const useUpdateAgencyPromptMutation = (
+  options?: UseMutationOptions<TAgencyPromptSaved, Error, string>,
+) => {
+  const saved = usePromptSaved();
+  return useMutation<TAgencyPromptSaved, Error, string>(
+    [MutationKeys.updateAgencyPrompt],
+    (template) => dataService.updateAgencyPrompt(template),
+    {
+      ...options,
+      onSuccess: (data, ...rest) => {
+        saved(data.prompt);
+        options?.onSuccess?.(data, ...rest);
+      },
+    },
+  );
+};
+
+export const useResetAgencyPromptMutation = (
+  options?: UseMutationOptions<{ prompt: TAgencyPrompt }, Error, void>,
+) => {
+  const saved = usePromptSaved();
+  return useMutation<{ prompt: TAgencyPrompt }, Error, void>(
+    [MutationKeys.resetAgencyPrompt],
+    () => dataService.resetAgencyPrompt(),
+    {
+      ...options,
+      onSuccess: (data, ...rest) => {
+        saved(data.prompt);
+        options?.onSuccess?.(data, ...rest);
+      },
+    },
+  );
 };

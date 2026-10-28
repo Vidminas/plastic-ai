@@ -26,6 +26,7 @@ import { useChatContext, useLiveAnnouncer } from '~/Providers';
 import { SaveAsPresetDialog } from '~/components/Endpoints';
 import { useSetIndexOptions, useLocalize } from '~/hooks';
 import { componentMapping } from './components';
+import AgencyPrompt from './AgencyPrompt';
 import { logger, cn } from '~/utils';
 
 export default function Parameters() {
@@ -203,6 +204,15 @@ export default function Parameters() {
     setIsDialogOpen(true);
   }, [conversation]);
 
+  /** The learner's prompt template, with conversation goals, unless identity is hidden. */
+  const showsPromptTemplate =
+    startupConfig?.agency?.conversationGoal === true &&
+    hiddenSections?.includes('identity') !== true;
+  /** The system prompt field it sits under, when this model has one. */
+  const promptTemplateAfter = sections
+    .flatMap((section) => section.settings.map(({ key }) => key))
+    .find((key) => key === 'promptPrefix' || key === 'system');
+
   if (!parameters) {
     return null;
   }
@@ -260,27 +270,37 @@ export default function Parameters() {
                  *  wrap differently still lines their inputs up. Applied here rather
                  *  than in the shared controls, which the preset editors reuse. */
                 return (
-                  <div
-                    key={key}
-                    className={cn(
-                      '*:h-full',
-                      isWideParameter(setting) ? 'col-span-2' : 'col-span-1',
-                    )}
-                  >
-                    <Component
-                      settingKey={key}
-                      defaultValue={defaultValue}
-                      {...rest}
-                      setOption={setOption}
-                      conversation={conversation}
-                    />
-                  </div>
+                  <React.Fragment key={key}>
+                    <div
+                      className={cn(
+                        '*:h-full',
+                        isWideParameter(setting) ? 'col-span-2' : 'col-span-1',
+                      )}
+                    >
+                      <Component
+                        settingKey={key}
+                        defaultValue={defaultValue}
+                        {...rest}
+                        setOption={setOption}
+                        conversation={conversation}
+                      />
+                    </div>
+                    {/* The prompt template follows the system prompt it is sent after. */}
+                    {showsPromptTemplate && key === promptTemplateAfter && <AgencyPrompt />}
+                  </React.Fragment>
                 );
               })}
             </div>
           </section>
         );
       })}
+      {/* The prompt template applies to every chat, so a model without a system prompt
+          field still shows it, after its parameters. */}
+      {showsPromptTemplate && promptTemplateAfter == null && (
+        <div className="grid grid-cols-2 pt-4">
+          <AgencyPrompt />
+        </div>
+      )}
       {/* The two share a row while their labels fit, stack when a translation is too
           long for the panel, and a label longer than the panel itself wraps. */}
       <div className="mt-5 flex flex-wrap gap-2">
