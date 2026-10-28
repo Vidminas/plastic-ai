@@ -1,5 +1,8 @@
+import { logger } from '@librechat/data-schemas';
+import { DEFAULT_AGENCY_PROMPT } from 'librechat-data-provider';
 import { agencyStartupConfig, createAgencyHandlers } from '../handlers';
 import { screenForSafeguarding } from '~/safeguarding/service';
+import { maskUserText } from '~/guardrails/stored';
 
 /** Stands in for the PII guardrail: digits are the "identifiers" it masks. */
 jest.mock('~/guardrails/stored', () => ({
@@ -14,7 +17,6 @@ jest.mock('~/safeguarding/service', () => ({
 const allOn = {
   intentions: true,
   conversationGoal: true,
-  goalChecks: true,
   recap: true,
   reflections: true,
   goalSuggestions: [{ id: 'exams', title: 'Prepare for exams', icon: 'book' }],
@@ -39,6 +41,13 @@ const makeDeps = () => ({
     createdAt: 'a',
     updatedAt: 'b',
   })),
+  getAgencyPrompt: jest.fn().mockResolvedValue(null),
+  setAgencyPrompt: jest.fn().mockImplementation(async (_u, template) => ({
+    template,
+    updatedAt: 'a',
+  })),
+  deleteAgencyPrompt: jest.fn().mockResolvedValue(undefined),
+  addAgencyPromptRevision: jest.fn().mockResolvedValue('rev1'),
   onConversationGoalChanged: jest.fn(),
   record: { event: jest.fn() },
 });
@@ -402,6 +411,153 @@ describe('createAgencyHandlers', () => {
     });
   });
 
+  describe('hidden instructions', () => {
+    const put = async (deps: ReturnType<typeof makeDeps>, template: unknown) => {
+      const res = makeRes();
+      await createAgencyHandlers(deps).putPrompt(
+        makeReq({ body: { template } }) as never,
+        res as never,
+      );
+      return res;
+    };
+
+    it('answers 404 without conversation goals', async () => {
+      for (const config of [{}, { agency: { ...allOn, conversationGoal: false } }]) {
+        const res = makeRes();
+        await createAgencyHandlers(makeDeps()).getPrompt(
+          makeReq({ config }) as never,
+          res as never,
+        );
+        expect(res.statusCode).toBe(404);
+      }
+    });
+
+    it('logs a change only once the template is saved', async () => {
+      const deps = makeDeps();
+      deps.setAgencyPrompt.mockRejectedValueOnce(new Error('db down'));
+      const res = await put(deps, 'Be brief.');
+      expect(res.statusCode).toBe(500);
+      expect(deps.addAgencyPromptRevision).not.toHaveBeenCalled();
+    });
+
+    it('sends the default alongside the learner’s own, which is null until they write one', async () => {
+      const res = makeRes();
+      await createAgencyHandlers(makeDeps()).getPrompt(makeReq() as never, res as never);
+      expect(res.body).toEqual({ prompt: { template: null }, default: DEFAULT_AGENCY_PROMPT });
+    });
+
+    it('offers the configured instructions as the default, and saves them as a reset', async () => {
+      const promptTemplate = 'Study coach.';
+      const config = { agency: { ...allOn, promptTemplate } };
+      const res = makeRes();
+      const deps = makeDeps();
+      await createAgencyHandlers(deps).getPrompt(makeReq({ config }) as never, res as never);
+      expect(res.body).toEqual({ prompt: { template: null }, default: promptTemplate });
+
+      const saved = makeRes();
+      await createAgencyHandlers(deps).putPrompt(
+        makeReq({ config, body: { template: ` ${promptTemplate} ` } }) as never,
+        saved as never,
+      );
+      expect(saved.body).toEqual({ prompt: { template: null }, masked: false });
+      expect(deps.setAgencyPrompt).not.toHaveBeenCalled();
+    });
+
+    it('stores a broken template nowhere, and says what is wrong with it', async () => {
+      const deps = makeDeps();
+      const res = await put(deps, 'Be brief.\n{{#goal}}Aim at {{goal}}');
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toEqual({
+        code: 'invalid_template',
+        errors: [{ code: 'unclosed_section', tag: '{{#goal}}', line: 2, column: 1 }],
+      });
+      expect(deps.setAgencyPrompt).not.toHaveBeenCalled();
+      expect(deps.addAgencyPromptRevision).not.toHaveBeenCalled();
+      expect((await put(deps, 42)).statusCode).toBe(400);
+    });
+
+    it('stores only the masked text, in the template and its log, and logs no text', async () => {
+      const deps = makeDeps();
+      const info = jest.spyOn(logger, 'info').mockImplementation(() => logger);
+      const res = await put(deps, 'Call me on 07700900123. {{#goal}}{{goal}}{{/goal}}');
+      const masked = 'Call me on ###########. {{#goal}}{{goal}}{{/goal}}';
+      expect(deps.setAgencyPrompt).toHaveBeenCalledWith('u1', masked);
+      expect(deps.addAgencyPromptRevision).toHaveBeenCalledWith('u1', masked);
+      expect(deps.record.event).toHaveBeenCalledWith({
+        userId: 'u1',
+        type: 'prompt_customised',
+        detail: 'rev1',
+      });
+      expect(res.body).toEqual({ prompt: { template: masked, updatedAt: 'a' }, masked: true });
+      expect(info).toHaveBeenCalledWith('[agency] Hidden instructions changed', {
+        userId: 'u1',
+        revisionId: 'rev1',
+        length: masked.length,
+        masked: true,
+      });
+      expect(JSON.stringify(info.mock.calls)).not.toContain('Call me');
+      info.mockRestore();
+    });
+
+    it('saves an empty template as is, without masking or screening it', async () => {
+      const deps = makeDeps();
+      jest.mocked(maskUserText).mockClear();
+      const res = await put(deps, '  ');
+      expect(res.statusCode).toBe(200);
+      expect(deps.setAgencyPrompt).toHaveBeenCalledWith('u1', '');
+      expect(deps.addAgencyPromptRevision).toHaveBeenCalledWith('u1', '');
+      expect(maskUserText).not.toHaveBeenCalled();
+      expect(res.body).toEqual({ prompt: { template: '', updatedAt: 'a' }, masked: false });
+    });
+
+    it('stores nothing when the text cannot be masked', async () => {
+      const deps = makeDeps();
+      jest.mocked(maskUserText).mockRejectedValueOnce(new Error('guardrail down'));
+      const res = await put(deps, 'Be brief.');
+      expect(res.statusCode).toBe(503);
+      expect(deps.setAgencyPrompt).not.toHaveBeenCalled();
+      expect(deps.addAgencyPromptRevision).not.toHaveBeenCalled();
+    });
+
+    it('refuses instructions safeguarding blocks', async () => {
+      const deps = makeDeps();
+      const info = { source: 'instructions', reasons: [{ type: 'topic', name: 'self-harm' }] };
+      (screenForSafeguarding as jest.Mock).mockResolvedValueOnce({ ok: false, info });
+      const res = makeRes();
+      await createAgencyHandlers(deps).putPrompt(
+        makeReq({
+          config: { agency: allOn, safeguarding: {} },
+          body: { template: 'Be brief.' },
+        }) as never,
+        res as never,
+      );
+      expect(res.statusCode).toBe(422);
+      expect(res.body).toEqual({ type: 'safeguarding', info });
+      expect(deps.setAgencyPrompt).not.toHaveBeenCalled();
+      expect(screenForSafeguarding).toHaveBeenCalledWith(
+        expect.objectContaining({ event: expect.objectContaining({ source: 'instructions' }) }),
+      );
+    });
+
+    it('treats the default itself, and a reset, as going back to the default, logged as resets', async () => {
+      const deps = makeDeps();
+      const res = await put(deps, DEFAULT_AGENCY_PROMPT);
+      expect(res.body).toEqual({ prompt: { template: null }, masked: false });
+      expect(deps.setAgencyPrompt).not.toHaveBeenCalled();
+
+      const reset = makeRes();
+      await createAgencyHandlers(deps).deletePrompt(makeReq() as never, reset as never);
+      expect(reset.body).toEqual({ prompt: { template: null } });
+      expect(deps.deleteAgencyPrompt).toHaveBeenCalledTimes(2);
+      expect(deps.addAgencyPromptRevision).toHaveBeenNthCalledWith(2, 'u1', null);
+      expect(deps.record.event).toHaveBeenCalledWith({
+        userId: 'u1',
+        type: 'prompt_reset',
+        detail: 'rev1',
+      });
+    });
+  });
+
   it('passes the range to the recap, refusing an unknown range', async () => {
     const deps = makeDeps();
     const handlers = createAgencyHandlers(deps);
@@ -426,6 +582,7 @@ describe('agencyStartupConfig', () => {
       agencyStartupConfig({
         ...allOn,
         classifier: { endpoint: 'bedrock', model: 'secret-model', topics },
+        promptTemplate: 'Study coach.',
       } as never),
     ).toEqual({ ...allOn, classifier: { topics } });
     expect(agencyStartupConfig(allOn as never)).toEqual(allOn);

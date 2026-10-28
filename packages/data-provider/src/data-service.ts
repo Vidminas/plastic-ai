@@ -18,6 +18,7 @@ import type {
 } from './types/traces';
 import type { TInsightsAccessResponse, TInsightsParams, TInsightsResponse } from './types/insights';
 import type { ScheduleMCPConsentView, ConfirmScheduleMCPConsent } from './types/scheduleConsent';
+import type { TAgencyPrompt, TAgencyPromptSaved, TAgencyPromptResponse } from './agencyPrompt';
 import type { TFileConfig } from './file-config';
 import type * as tl from './types/tools';
 import type * as t from './types';
@@ -1845,6 +1846,18 @@ export const updateAgencyReflection = (
   reflection: TAgencyReflectionInput,
 ): Promise<{ reflection: TAgencyReflection }> => {
   return request.patch(endpoints.agencyReflection(reflectionId), reflection);
+};
+
+export const getAgencyPrompt = (): Promise<TAgencyPromptResponse> => {
+  return request.get(endpoints.agencyPrompt());
+};
+
+export const updateAgencyPrompt = (template: string): Promise<TAgencyPromptSaved> => {
+  return request.put(endpoints.agencyPrompt(), { template });
+};
+
+export const resetAgencyPrompt = (): Promise<{ prompt: TAgencyPrompt }> => {
+  return request.delete(endpoints.agencyPrompt());
 };
 
 export const recordAgencyEvent = (event: TClientAgencyEvent): Promise<void> => {

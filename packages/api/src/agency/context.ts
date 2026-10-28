@@ -1,52 +1,16 @@
 import { logger } from '@librechat/data-schemas';
-import { AGENCY_QUESTION_IDS, agencyGoalSchema } from 'librechat-data-provider';
-import type { TAgencyConfig, TConversationGoal } from 'librechat-data-provider';
+import { agencyGoalSchema, defaultAgencyPrompt, renderAgencyPrompt } from 'librechat-data-provider';
+import type { TAgencyPrompt, TConversationGoal } from 'librechat-data-provider';
 import type { AppConfig } from '@librechat/data-schemas';
 import type { AgencyEventRecorder } from './events';
+import { getSafeErrorMetadata } from '~/utils/errors';
 import { maskUserText } from '~/guardrails/stored';
 import { suggestionOf } from './handlers';
 
-const { clarify, goalCheck } = AGENCY_QUESTION_IDS;
-
-/**
- * The system-tail block for a turn: the conversation's goal, and with `goalChecks`, when to
- * offer the learner options through `ask_user_question` rather than answer. Null when there is
- * nothing to add.
- */
-export function buildGoalContext({
-  goal,
-  goalChecks,
-}: {
-  goal: string | null;
-  goalChecks: boolean;
-}): string | null {
-  const lines: string[] = [];
-  if (goal) {
-    lines.push(
-      "The learner set this goal for the conversation. Keep your help aimed at it, in service of the learner's own thinking:",
-      `<conversation_goal>\n${goal}\n</conversation_goal>`,
-    );
-  }
-  if (goalChecks) {
-    lines.push(
-      `If a request is unclear or could reasonably mean quite different things, do not guess: call ask_user_question with one question whose id is "${clarify}" and 2 to 4 distinct options, then answer what the learner chooses.`,
-    );
-    if (goal) {
-      lines.push(
-        `If a request works against the goal above, or drifts well away from it, first check with the learner: call ask_user_question with one question whose id is "${goalCheck}", briefly saying how the request differs from the goal, with exactly these option values: "continue" (carry on with this request), "refocus" (go back to the goal), and "goal_changed" (the learner's goal has changed). Then follow their choice.`,
-      );
-    }
-    lines.push(
-      'Otherwise just answer. Do not end replies with unprompted lists of follow-up suggestions.',
-    );
-  }
-  return lines.length === 0 ? null : lines.join('\n\n');
-}
-
 /**
  * `context` with the agency block after it, as the run's shared context. A resumed run rebuilds
- * its context from attachments only, so the goal and the goal-check instructions are added back
- * here, read afresh so a goal changed while the run was paused is the one the model sees.
+ * its context from attachments only, so the hidden instructions are added back here, read
+ * afresh so a goal or template changed while the run was paused is the one the model sees.
  */
 export function withAgencyContext(context: string | undefined, agency: string | null): string {
   return [context, agency].filter((part): part is string => !!part).join('\n\n');
@@ -66,50 +30,77 @@ export interface AgencyContextDeps {
     text: string,
     suggestionId?: string | null,
   ): Promise<TConversationGoal>;
+  /** The learner's own hidden instructions; null when the default applies. */
+  getAgencyPrompt(userId: string): Promise<TAgencyPrompt | null>;
   record: AgencyEventRecorder;
 }
 
-const isOn = (agency: TAgencyConfig | undefined): agency is TAgencyConfig =>
-  agency != null && (agency.conversationGoal || agency.goalChecks);
+/** The learner's own template, or the default when they have none or it cannot be read. */
+async function templateFor(
+  req: GoalRequest,
+  userId: string | undefined,
+  deps: AgencyContextDeps,
+): Promise<string> {
+  const fallback = defaultAgencyPrompt(req.config?.agency);
+  if (!userId) {
+    return fallback;
+  }
+  try {
+    return (await deps.getAgencyPrompt(userId))?.template ?? fallback;
+  } catch (error) {
+    logger.warn('[agency] Could not read the hidden instructions', getSafeErrorMetadata(error));
+    return fallback;
+  }
+}
+
+/** The conversation's goal, saving the one a new conversation's first message sets. */
+async function goalFor(
+  req: GoalRequest,
+  userId: string,
+  conversationId: string,
+  deps: AgencyContextDeps,
+): Promise<string | null> {
+  let goal: string | null = null;
+  try {
+    goal = (await deps.getConversationGoal(userId, conversationId))?.text ?? null;
+    const submitted = agencyGoalSchema.safeParse({ text: req.body?.goal });
+    if (goal == null && submitted.success) {
+      goal = await maskUserText(req.config ?? {}, submitted.data.text);
+      const requested = req.body?.goalSuggestionId;
+      const suggestionId =
+        typeof requested === 'string' && suggestionOf(req, requested) != null
+          ? requested
+          : undefined;
+      await deps.setConversationGoal(userId, conversationId, goal, suggestionId);
+      deps.record.event({ userId, conversationId, type: 'goal_set', detail: goal });
+    }
+  } catch (error) {
+    logger.warn('[agency] Could not resolve the conversation goal', getSafeErrorMetadata(error));
+  }
+  return goal;
+}
 
 /**
- * The agency context for this turn of `conversationId`. The goal a learner sets on a new
- * conversation arrives with its first message (`body.goal`), already screened by the
- * safeguarding check with that message; it is masked and saved once, and read back on later
- * turns. The suggested goal it started from (`body.goalSuggestionId`) is kept with it when
- * `agency.goalSuggestions` has it. A failure to read or save the goal is logged and the turn
- * goes on without it.
+ * The hidden instructions for this turn of `conversationId`, with `agency.conversationGoal`:
+ * the learner's own template, or `agency.promptTemplate`, with the conversation's goal. The goal
+ * a learner sets on a new conversation arrives with its first message (`body.goal`), already
+ * screened by the safeguarding check with that message; it is masked and saved once, and read
+ * back on later turns. The suggested goal it started from (`body.goalSuggestionId`) is kept with
+ * it when `agency.goalSuggestions` has it. The template and the goal are read together; a
+ * failure to read either is logged and the turn goes on with the default or without the goal.
  */
 export async function resolveAgencyContext(
   req: GoalRequest,
   conversationId: string | undefined,
   deps: AgencyContextDeps,
 ): Promise<string | null> {
-  const agency = req.config?.agency;
-  if (!isOn(agency)) {
+  if (req.config?.agency?.conversationGoal !== true) {
     return null;
   }
   const userId = req.user?.id;
-  let goal: string | null = null;
-  if (agency.conversationGoal && userId && conversationId) {
-    try {
-      goal = (await deps.getConversationGoal(userId, conversationId))?.text ?? null;
-      const submitted = agencyGoalSchema.safeParse({ text: req.body?.goal });
-      if (goal == null && submitted.success) {
-        goal = await maskUserText(req.config ?? {}, submitted.data.text);
-        const requested = req.body?.goalSuggestionId;
-        const suggestionId =
-          typeof requested === 'string' && suggestionOf(req, requested) != null
-            ? requested
-            : undefined;
-        await deps.setConversationGoal(userId, conversationId, goal, suggestionId);
-        deps.record.event({ userId, conversationId, type: 'goal_set', detail: goal });
-      }
-    } catch (error) {
-      logger.warn('[agency] Could not resolve the conversation goal', {
-        error: (error as Error)?.message,
-      });
-    }
-  }
-  return buildGoalContext({ goal, goalChecks: agency.goalChecks });
+  const [template, goal] = await Promise.all([
+    templateFor(req, userId, deps),
+    userId && conversationId ? goalFor(req, userId, conversationId, deps) : null,
+  ]);
+  return renderAgencyPrompt(template, { goal });
 }

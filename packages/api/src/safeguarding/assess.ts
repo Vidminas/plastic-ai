@@ -14,7 +14,8 @@ export type SafeguardingSource =
   | 'response'
   | 'goal'
   | 'intentions'
-  | 'reflection';
+  | 'reflection'
+  | 'instructions';
 
 export type SafeguardingSeverity = 'none' | 'flag' | 'block';
 

@@ -1,42 +1,18 @@
-import { buildGoalContext, withAgencyContext, resolveAgencyContext } from '../context';
+import { DEFAULT_AGENCY_PROMPT } from 'librechat-data-provider';
+import { withAgencyContext, resolveAgencyContext } from '../context';
 
 const agency = {
   intentions: false,
   conversationGoal: true,
-  goalChecks: true,
   recap: false,
   reflections: false,
 };
 
-const deps = (stored: string | null = null) => ({
+const deps = (stored: string | null = null, template: string | null = null) => ({
   getConversationGoal: jest.fn().mockResolvedValue(stored == null ? null : { text: stored }),
   setConversationGoal: jest.fn().mockImplementation(async (_u, _c, text) => ({ text })),
+  getAgencyPrompt: jest.fn().mockResolvedValue(template == null ? null : { template }),
   record: { event: jest.fn() },
-});
-
-describe('buildGoalContext', () => {
-  it('adds nothing without a goal or goal checks', () => {
-    expect(buildGoalContext({ goal: null, goalChecks: false })).toBeNull();
-  });
-
-  it('states the goal alone when goal checks are off', () => {
-    const text = buildGoalContext({ goal: 'learn regression', goalChecks: false });
-    expect(text).toContain('<conversation_goal>\nlearn regression\n</conversation_goal>');
-    expect(text).not.toContain('ask_user_question');
-  });
-
-  it('asks for clarifying options, but no goal check, when there is no goal', () => {
-    const text = buildGoalContext({ goal: null, goalChecks: true });
-    expect(text).toContain('"clarify"');
-    expect(text).not.toContain('"goal_check"');
-  });
-
-  it('adds the goal check with fixed option values when there is a goal', () => {
-    const text = buildGoalContext({ goal: 'essay plan', goalChecks: true });
-    for (const value of ['"goal_check"', '"continue"', '"refocus"', '"goal_changed"']) {
-      expect(text).toContain(value);
-    }
-  });
 });
 
 describe('resolveAgencyContext', () => {
@@ -95,6 +71,86 @@ describe('resolveAgencyContext', () => {
     const text = await resolveAgencyContext(req('another'), 'c1', d);
     expect(d.setConversationGoal).not.toHaveBeenCalled();
     expect(text).toContain('stored goal');
+  });
+
+  it('adds nothing, and reads nothing, without conversationGoal', async () => {
+    const d = deps('stored');
+    const text = await resolveAgencyContext(
+      { config: { agency: { ...agency, conversationGoal: false } }, user: { id: 'u1' } },
+      'c1',
+      d,
+    );
+    expect(text).toBeNull();
+    expect(d.getConversationGoal).not.toHaveBeenCalled();
+    expect(d.getAgencyPrompt).not.toHaveBeenCalled();
+  });
+
+  it('adds the default instructions to a turn without a goal', async () => {
+    const text = await resolveAgencyContext(req(), 'c1', deps());
+    expect(text).toContain('"clarify"');
+    expect(text).toContain('follow-up suggestions');
+    expect(text).not.toContain('<conversation_goal>');
+  });
+
+  it("uses the learner's own template, with the goal", async () => {
+    const d = deps('essay plan', 'Be brief.{{#goal}} Aim at: {{goal}}{{/goal}}');
+    await expect(resolveAgencyContext(req(), 'c1', d)).resolves.toBe(
+      'Be brief. Aim at: essay plan',
+    );
+  });
+
+  it('adds nothing when the learner emptied the template', async () => {
+    await expect(resolveAgencyContext(req(), 'c1', deps('g', ''))).resolves.toBeNull();
+  });
+
+  it('is null when the template leaves nothing for this turn', async () => {
+    const d = deps(null, '{{#goal}}{{goal}}{{/goal}}');
+    await expect(resolveAgencyContext(req(), 'c1', d)).resolves.toBeNull();
+  });
+
+  it('falls back to the default when the template cannot be read', async () => {
+    const d = deps('g');
+    d.getAgencyPrompt.mockRejectedValue(new Error('db down'));
+    const text = await resolveAgencyContext(req(), 'c1', d);
+    expect(text).toContain('"goal_check"');
+    expect(DEFAULT_AGENCY_PROMPT).toContain('{{#goal}}');
+  });
+
+  it('starts from the configured instructions, unless the learner has their own', async () => {
+    const promptTemplate = 'Study coach.{{#goal}} Goal: {{goal}}{{/goal}}';
+    const configured = {
+      config: { agency: { ...agency, promptTemplate } },
+      user: { id: 'u1' },
+      body: {},
+    };
+    const d = deps('Essay');
+    await expect(resolveAgencyContext(configured, 'c1', d)).resolves.toBe(
+      'Study coach. Goal: Essay',
+    );
+    d.getAgencyPrompt.mockRejectedValue(new Error('db down'));
+    await expect(resolveAgencyContext(configured, 'c1', d)).resolves.toBe(
+      'Study coach. Goal: Essay',
+    );
+    d.getAgencyPrompt.mockResolvedValue({ template: 'Mine.' });
+    await expect(resolveAgencyContext(configured, 'c1', d)).resolves.toBe('Mine.');
+  });
+
+  it('reads the template and the goal together', async () => {
+    const d = deps();
+    let resolveGoal: (value: null) => void = () => undefined;
+    d.getConversationGoal.mockReturnValue(new Promise((resolve) => (resolveGoal = resolve)));
+    const pending = resolveAgencyContext(req(), 'c1', d);
+    await Promise.resolve();
+    expect(d.getAgencyPrompt).toHaveBeenCalledWith('u1');
+    expect(d.getConversationGoal).toHaveBeenCalledWith('u1', 'c1');
+    resolveGoal(null);
+    await pending;
+  });
+
+  it('keeps a new goal in this turn even when saving it fails', async () => {
+    const d = deps();
+    d.setConversationGoal.mockRejectedValue(new Error('db down'));
+    await expect(resolveAgencyContext(req('revise'), 'c1', d)).resolves.toContain('revise');
   });
 
   it('goes on without the goal when it cannot be read', async () => {

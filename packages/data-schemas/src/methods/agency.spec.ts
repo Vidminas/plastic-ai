@@ -44,6 +44,8 @@ beforeEach(async () => {
       'AgencyGoal',
       'AgencyEvent',
       'AgencyReflection',
+      'AgencyPrompt',
+      'AgencyPromptRevision',
       'Conversation',
       'Message',
     ].map((name) => mongoose.models[name].deleteMany({})),
@@ -84,16 +86,6 @@ describe('conversation goals', () => {
     });
     await expect(methods.getConversationGoal(otherUserId, 'c1')).resolves.toBeNull();
   });
-
-  it('deletes the goals of the named conversations only', async () => {
-    await methods.setConversationGoal(userId, 'c1', 'one');
-    await methods.setConversationGoal(userId, 'c2', 'two');
-    await methods.setConversationGoal(otherUserId, 'c1', 'theirs');
-
-    await expect(methods.deleteConversationGoals(userId, ['c1'])).resolves.toBe(1);
-    await expect(methods.getConversationGoal(userId, 'c2')).resolves.not.toBeNull();
-    await expect(methods.getConversationGoal(otherUserId, 'c1')).resolves.not.toBeNull();
-  });
 });
 
 describe('deleteAgencyData', () => {
@@ -109,6 +101,46 @@ describe('deleteAgencyData', () => {
     await expect(methods.getConversationGoal(userId, 'c1')).resolves.toBeNull();
     await expect(methods.getConversationGoal(otherUserId, 'c1')).resolves.not.toBeNull();
     await expect(mongoose.models.AgencyEvent.countDocuments({ userId })).resolves.toBe(0);
+  });
+});
+
+describe('hidden instructions', () => {
+  it('keeps one template per learner, replaced on each save, until deleted', async () => {
+    await expect(methods.getAgencyPrompt(userId)).resolves.toBeNull();
+    await methods.setAgencyPrompt(userId, 'First');
+    const saved = await methods.setAgencyPrompt(userId, 'Second');
+    await methods.setAgencyPrompt(otherUserId, 'Theirs');
+    expect(saved.template).toBe('Second');
+    expect(saved.updatedAt).toEqual(expect.any(String));
+    await expect(mongoose.models.AgencyPrompt.countDocuments({ userId })).resolves.toBe(1);
+
+    await methods.deleteAgencyPrompt(userId);
+    await expect(methods.getAgencyPrompt(userId)).resolves.toBeNull();
+    await expect(methods.getAgencyPrompt(otherUserId)).resolves.toMatchObject({
+      template: 'Theirs',
+    });
+  });
+
+  it('logs every change in order, a reset as null', async () => {
+    const first = await methods.addAgencyPromptRevision(userId, 'First');
+    const reset = await methods.addAgencyPromptRevision(userId, null);
+    expect(first).not.toBe(reset);
+    const log = await mongoose.models.AgencyPromptRevision.find({ userId })
+      .sort({ createdAt: 1, _id: 1 })
+      .lean();
+    expect(log.map(({ template }) => template)).toEqual(['First', null]);
+  });
+
+  it('deletes the template and its log with the rest of the agency data', async () => {
+    await methods.setAgencyPrompt(userId, 'Mine');
+    await methods.addAgencyPromptRevision(userId, 'Mine');
+    await methods.addAgencyPromptRevision(otherUserId, 'Theirs');
+    await methods.deleteAgencyData(userId);
+    await expect(methods.getAgencyPrompt(userId)).resolves.toBeNull();
+    await expect(mongoose.models.AgencyPromptRevision.countDocuments({ userId })).resolves.toBe(0);
+    await expect(
+      mongoose.models.AgencyPromptRevision.countDocuments({ userId: otherUserId }),
+    ).resolves.toBe(1);
   });
 });
 

@@ -269,12 +269,32 @@ safeguarding:
 
 # Learner agency (forethought, performance, reflection). Long-term intentions
 # open from their own sidebar item and never reach a model; a conversation's
-# goal goes into its context. Goal checks have the model offer options through
-# ask_user_question, so every model spec below enables that tool.
+# goal goes into its context. With conversationGoal, every turn carries a prompt
+# template, which participants can read and change in the Parameters panel, below
+# the system prompt (masked and screened like a goal, and every change kept; empty
+# sends their messages on their own). By default it has the model offer options
+# through ask_user_question, so every model spec below enables that tool.
 agency:
   intentions: true
   conversationGoal: true
-  goalChecks: true
+  # The hidden instructions, for participants who haven't written their own (they
+  # can read and change them in the Parameters panel, and go back to these). A
+  # template: {{goal}} is the conversation's goal, and {{#goal}}...{{/goal}} is left
+  # out of a chat without one. A broken template stops the config loading. Options
+  # go through ask_user_question: keep the ids clarify and goal_check and the option
+  # values continue, refocus and goal_changed, which the app records.
+  promptTemplate: |-
+    {{#goal}}The learner set this goal for the conversation. Keep your help aimed at it, in service of the learner's own thinking:
+
+    <conversation_goal>
+    {{goal}}
+    </conversation_goal>
+
+    {{/goal}}If a request is unclear or could reasonably mean quite different things, do not guess: call ask_user_question with one question whose id is "clarify" and 2 to 4 distinct options, then answer what the learner chooses.{{#goal}}
+
+    If a request works against the goal above, or drifts well away from it, first check with the learner: call ask_user_question with one question whose id is "goal_check", briefly saying how the request differs from the goal, with exactly these option values: "continue" (carry on with this request), "refocus" (go back to the goal), and "goal_changed" (the learner's goal has changed). Then follow their choice.{{/goal}}
+
+    Otherwise just answer. Do not end replies with unprompted lists of follow-up suggestions.
   recap: true
   # A "Reflect" button in the sidebar: fixed questions about one moment the
   # participant decided how to use the AI, saved with the time, to review and

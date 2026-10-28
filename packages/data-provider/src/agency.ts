@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AGENCY_PROMPT_MAX, checkAgencyPrompt } from './agencyPrompt';
 
 /**
  * The four parts of the AE-AI questionnaire, as factors a learner rates for importance:
@@ -106,13 +107,28 @@ export type TAgencyTopic = z.infer<typeof agencyTopicSchema>;
 export const agencySchema = z.object({
   /** A sidebar dialog for long-term goals, intended use, commitments and AE-AI factor ratings. */
   intentions: z.boolean().default(false),
-  /** A skippable goal card on new conversations; the goal goes into the model's context. */
+  /**
+   * A skippable goal card on new conversations, and the hidden instructions every turn carries
+   * (`promptTemplate`, or the learner's own), with the goal in them.
+   */
   conversationGoal: z.boolean().default(false),
   /**
-   * Instruct the model to offer options (`ask_user_question`) when a request is unclear or
-   * drifts from the conversation goal. Needs the tool enabled on the model specs.
+   * The template of the hidden instructions, for learners who have not written their own. Unset,
+   * `DEFAULT_AGENCY_PROMPT`; empty, their messages go on their own.
    */
-  goalChecks: z.boolean().default(false),
+  promptTemplate: z
+    .string()
+    .trim()
+    .max(AGENCY_PROMPT_MAX)
+    .superRefine((template, ctx) => {
+      const check = checkAgencyPrompt(template);
+      if (!check.ok) {
+        for (const { code, line, tag } of check.errors) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${code} at line ${line}: ${tag}` });
+        }
+      }
+    })
+    .optional(),
   /** The agency recap page and its sidebar link. */
   recap: z.boolean().default(false),
   /**
@@ -164,8 +180,11 @@ export const agencySchema = z.object({
 });
 export type TAgencyConfig = z.infer<typeof agencySchema>;
 
-/** `agency` as the browser receives it: the classifier's topics, not its endpoint or model. */
-export type TAgencyStartupConfig = Omit<TAgencyConfig, 'classifier'> & {
+/**
+ * `agency` as the browser receives it: the classifier's topics, not its endpoint or model, and not
+ * the hidden instructions, which the Parameters panel reads when it opens.
+ */
+export type TAgencyStartupConfig = Omit<TAgencyConfig, 'classifier' | 'promptTemplate'> & {
   classifier?: { topics: TAgencyTopic[] };
 };
 
@@ -254,12 +273,6 @@ export type GoalCheckOutcome = (typeof GOAL_CHECK_OUTCOMES)[number];
 export const isGoalCheckOutcome = (value: string | undefined): value is GoalCheckOutcome =>
   (GOAL_CHECK_OUTCOMES as readonly string[]).includes(value ?? '');
 
-/** `ask_user_question` ids the goal-check instructions tell the model to use. */
-export const AGENCY_QUESTION_IDS = {
-  clarify: 'clarify',
-  goalCheck: 'goal_check',
-} as const;
-
 export const AGENCY_EVENT_TYPES = [
   'intentions_updated',
   'goal_set',
@@ -274,6 +287,8 @@ export const AGENCY_EVENT_TYPES = [
   'topic_classified',
   'reflection_saved',
   'reflection_updated',
+  'prompt_customised',
+  'prompt_reset',
 ] as const;
 export type AgencyEventType = (typeof AGENCY_EVENT_TYPES)[number];
 

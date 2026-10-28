@@ -2,12 +2,16 @@ import type { Model } from 'mongoose';
 import type {
   IAgencyGoal,
   IAgencyEvent,
+  IAgencyPrompt,
   IAgencyIntentions,
   IAgencyReflection,
+  IAgencyPromptRevision,
 } from '~/types/agency';
 import { applyTenantIsolation } from '~/models/plugins/tenantIsolation';
+import agencyPromptRevisionSchema from '~/schema/agencyPromptRevision';
 import agencyIntentionsSchema from '~/schema/agencyIntentions';
 import agencyReflectionSchema from '~/schema/agencyReflection';
+import agencyPromptSchema from '~/schema/agencyPrompt';
 import agencyEventSchema from '~/schema/agencyEvent';
 import agencyGoalSchema from '~/schema/agencyGoal';
 
@@ -40,5 +44,23 @@ export function createAgencyReflectionModel(
   return (
     mongoose.models.AgencyReflection ||
     mongoose.model<IAgencyReflection>('AgencyReflection', agencyReflectionSchema)
+  );
+}
+
+export function createAgencyPromptModel(mongoose: typeof import('mongoose')): Model<IAgencyPrompt> {
+  applyTenantIsolation(agencyPromptSchema);
+  return (
+    mongoose.models.AgencyPrompt ||
+    mongoose.model<IAgencyPrompt>('AgencyPrompt', agencyPromptSchema)
+  );
+}
+
+export function createAgencyPromptRevisionModel(
+  mongoose: typeof import('mongoose'),
+): Model<IAgencyPromptRevision> {
+  applyTenantIsolation(agencyPromptRevisionSchema);
+  return (
+    mongoose.models.AgencyPromptRevision ||
+    mongoose.model<IAgencyPromptRevision>('AgencyPromptRevision', agencyPromptRevisionSchema)
   );
 }

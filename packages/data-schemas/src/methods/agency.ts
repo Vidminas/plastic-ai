@@ -4,6 +4,7 @@ import type {
   RecapRange,
   TAgencyRecap,
   AgencyFactor,
+  TAgencyPrompt,
   TConversationGoal,
   TAgencyIntentions,
   TAgencyReflection,
@@ -12,6 +13,7 @@ import type {
 import type {
   IAgencyGoal,
   IAgencyEvent,
+  IAgencyPrompt,
   IAgencyIntentions,
   IAgencyReflection,
   RecordAgencyEventParams,
@@ -48,8 +50,6 @@ export interface AgencyMethods {
     text: string,
     suggestionId?: string | null,
   ): Promise<TConversationGoal>;
-  /** Deletes the goals of these conversations, or of every conversation when omitted. */
-  deleteConversationGoals(userId: UserId, conversationIds?: string[]): Promise<number>;
   /** The learner's reflections, newest first. */
   listAgencyReflections(userId: UserId): Promise<TAgencyReflection[]>;
   createAgencyReflection(
@@ -67,9 +67,23 @@ export interface AgencyMethods {
   recordAgencyEvent(params: RecordAgencyEventParams): Promise<void>;
   /** What the period's chats were for, and the goal journey, for one conversation or all. */
   getAgencyRecap(userId: UserId, options?: AgencyRecapOptions): Promise<TAgencyRecap>;
-  /** Deletes the user's intentions, goals, reflections and engagement events. */
+  /** The learner's own hidden instructions, or null when the default applies. */
+  getAgencyPrompt(userId: UserId): Promise<TAgencyPrompt | null>;
+  setAgencyPrompt(userId: UserId, template: string): Promise<TAgencyPrompt>;
+  deleteAgencyPrompt(userId: UserId): Promise<void>;
+  /** Adds one change to the log of the learner's hidden instructions; null is a reset. */
+  addAgencyPromptRevision(userId: UserId, template: string | null): Promise<string>;
+  /**
+   * Deletes the user's intentions, goals, reflections, hidden instructions and their log, and
+   * engagement events.
+   */
   deleteAgencyData(userId: UserId): Promise<void>;
 }
+
+const toPrompt = (doc: IAgencyPrompt): TAgencyPrompt => ({
+  template: doc.template,
+  ...(doc.updatedAt ? { updatedAt: doc.updatedAt.toISOString() } : {}),
+});
 
 const toIntentions = (doc: IAgencyIntentions): TAgencyIntentions => ({
   goals: doc.goals ?? '',
@@ -102,7 +116,7 @@ const RECAP_REFLECTIONS_SHOWN = 3;
 
 /** The engagement events the goal journey is made of. */
 const JOURNEY_FILTER = {
-  $or: [{ type: { $in: ['goal_set', 'goal_updated', 'goal_check_resolved', 'reflection_saved'] } }],
+  type: { $in: ['goal_set', 'goal_updated', 'goal_check_resolved', 'reflection_saved'] },
 };
 
 /**
@@ -129,6 +143,8 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
   const goalModel = () => mongoose.models.AgencyGoal;
   const eventModel = () => mongoose.models.AgencyEvent;
   const reflectionModel = () => mongoose.models.AgencyReflection;
+  const promptModel = () => mongoose.models.AgencyPrompt;
+  const promptRevisionModel = () => mongoose.models.AgencyPromptRevision;
 
   async function getAgencyIntentions(userId: UserId): Promise<TAgencyIntentions | null> {
     const doc = await intentionsModel().findOne({ userId }).lean<IAgencyIntentions>();
@@ -220,16 +236,6 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
       .sort({ createdAt: -1 })
       .lean<IAgencyEvent>();
     return doc?.detail ?? null;
-  }
-
-  async function deleteConversationGoals(
-    userId: UserId,
-    conversationIds?: string[],
-  ): Promise<number> {
-    const filter =
-      conversationIds == null ? { userId } : { userId, conversationId: { $in: conversationIds } };
-    const { deletedCount } = await goalModel().deleteMany(filter);
-    return deletedCount ?? 0;
   }
 
   async function recordAgencyEvent(params: RecordAgencyEventParams): Promise<void> {
@@ -339,12 +345,39 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
     };
   }
 
+  async function getAgencyPrompt(userId: UserId): Promise<TAgencyPrompt | null> {
+    const doc = await promptModel().findOne({ userId }).lean<IAgencyPrompt>();
+    return doc ? toPrompt(doc) : null;
+  }
+
+  async function setAgencyPrompt(userId: UserId, template: string): Promise<TAgencyPrompt> {
+    const doc = await promptModel()
+      .findOneAndUpdate(
+        { userId },
+        { $set: { template, userId } },
+        { upsert: true, new: true, runValidators: true },
+      )
+      .lean<IAgencyPrompt>();
+    return toPrompt(doc as IAgencyPrompt);
+  }
+
+  async function deleteAgencyPrompt(userId: UserId): Promise<void> {
+    await promptModel().deleteOne({ userId });
+  }
+
+  async function addAgencyPromptRevision(userId: UserId, template: string | null): Promise<string> {
+    const doc = await promptRevisionModel().create({ userId, template });
+    return String(doc._id);
+  }
+
   async function deleteAgencyData(userId: UserId): Promise<void> {
     await Promise.all([
       intentionsModel().deleteMany({ userId }),
       goalModel().deleteMany({ userId }),
       eventModel().deleteMany({ userId }),
       reflectionModel().deleteMany({ userId }),
+      promptModel().deleteMany({ userId }),
+      promptRevisionModel().deleteMany({ userId }),
     ]);
   }
 
@@ -353,13 +386,16 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
     setAgencyIntentions,
     getConversationGoal,
     setConversationGoal,
-    deleteConversationGoals,
     listAgencyReflections,
     createAgencyReflection,
     updateAgencyReflection,
     getConversationTopic,
     recordAgencyEvent,
     getAgencyRecap,
+    getAgencyPrompt,
+    setAgencyPrompt,
+    deleteAgencyPrompt,
+    addAgencyPromptRevision,
     deleteAgencyData,
   };
 }

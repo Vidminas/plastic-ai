@@ -656,6 +656,7 @@ export const agencyRecap = (params: { conversationId?: string; range?: string } 
 export const agencyReflections = () => `${agency()}/reflections`;
 export const agencyReflection = (reflectionId: string) =>
   `${agency()}/reflections/${encodeURIComponent(reflectionId)}`;
+export const agencyPrompt = () => `${agency()}/prompt`;
 
 export const searchPrincipals = (params: q.PrincipalSearchParams) => {
   const { q: query, limit, types } = params;

@@ -15,6 +15,10 @@ const handlers = createAgencyHandlers({
   listAgencyReflections: db.listAgencyReflections,
   createAgencyReflection: db.createAgencyReflection,
   updateAgencyReflection: db.updateAgencyReflection,
+  getAgencyPrompt: db.getAgencyPrompt,
+  setAgencyPrompt: db.setAgencyPrompt,
+  deleteAgencyPrompt: db.deleteAgencyPrompt,
+  addAgencyPromptRevision: db.addAgencyPromptRevision,
   record: createAgencyEventRecorder({ recordAgencyEvent: db.recordAgencyEvent }),
   onConversationGoalChanged: (req, userId, conversationId) => {
     void getAgencyClassifier().classifyTopic(req, userId, conversationId);
@@ -31,5 +35,8 @@ router.get('/recap', handlers.getRecap);
 router.get('/reflections', handlers.getReflections);
 router.post('/reflections', handlers.postReflection);
 router.patch('/reflections/:reflectionId', handlers.patchReflection);
+router.get('/prompt', handlers.getPrompt);
+router.put('/prompt', handlers.putPrompt);
+router.delete('/prompt', handlers.deletePrompt);
 
 module.exports = router;

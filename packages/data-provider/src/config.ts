@@ -4033,9 +4033,18 @@ export type TSafeguardingReason = {
 export type TSafeguardingErrorInfo = {
   /**
    * What was blocked: the participant's own message or file, the model's response, or what
-   * they wrote as a conversation goal or their long-term intentions (`agency`).
+   * they wrote as a conversation goal, their long-term intentions or their hidden instructions
+   * (`agency`).
    */
-  source: 'prompt' | 'answer' | 'upload' | 'response' | 'goal' | 'intentions' | 'reflection';
+  source:
+    | 'prompt'
+    | 'answer'
+    | 'upload'
+    | 'response'
+    | 'goal'
+    | 'intentions'
+    | 'reflection'
+    | 'instructions';
   reasons: TSafeguardingReason[];
   /** The guardrail could not be reached, so the content was refused unscreened. */
   unavailable?: boolean;

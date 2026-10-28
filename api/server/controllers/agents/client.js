@@ -257,10 +257,11 @@ const BaseClient = require('~/app/clients/BaseClient');
 const { getMCPManager } = require('~/config');
 const db = require('~/models');
 
-/** Reads and saves conversation goals for the agency context (`agency` in librechat.yaml). */
+/** Reads the hidden instructions and conversation goals for the agency context (`agency`). */
 const agencyContextDeps = {
   getConversationGoal: db.getConversationGoal,
   setConversationGoal: db.setConversationGoal,
+  getAgencyPrompt: db.getAgencyPrompt,
   record: createAgencyEventRecorder({ recordAgencyEvent: db.recordAgencyEvent }),
 };
 
@@ -2972,7 +2973,7 @@ class AgentClient extends BaseClient {
       sharedRunContextParts.push(this.augmentedPrompt);
     }
 
-    /** The learner's conversation goal and when to offer options (`agency`) */
+    /** The learner's hidden instructions, with the conversation goal (`agency`) */
     const agencyContext = await agencyContextPromise;
     if (agencyContext) {
       sharedRunContextParts.push(agencyContext);

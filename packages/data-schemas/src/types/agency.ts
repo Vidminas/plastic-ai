@@ -37,6 +37,23 @@ export interface IAgencyReflection extends Document {
   tenantId?: string;
 }
 
+/** A learner's own hidden instructions. */
+export interface IAgencyPrompt extends Document {
+  userId: Types.ObjectId;
+  template: string;
+  updatedAt?: Date;
+  tenantId?: string;
+}
+
+/** One change to a learner's hidden instructions; `template: null` is a reset. */
+export interface IAgencyPromptRevision extends Document {
+  _id: Types.ObjectId;
+  userId: Types.ObjectId;
+  template: string | null;
+  createdAt: Date;
+  tenantId?: string;
+}
+
 /** One engagement with an agency feature, for the recap page. */
 export interface IAgencyEvent extends Document {
   userId: Types.ObjectId;

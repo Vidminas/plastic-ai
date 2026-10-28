@@ -6,6 +6,7 @@ import {
   agencyIntentionsSchema,
   agencyReflectionSchema,
 } from './agency';
+import { AGENCY_PROMPT_MAX } from './agencyPrompt';
 import { configSchema } from './config';
 
 describe('agencySchema', () => {
@@ -13,10 +14,13 @@ describe('agencySchema', () => {
     expect(agencySchema.parse({})).toEqual({
       intentions: false,
       conversationGoal: false,
-      goalChecks: false,
       recap: false,
       reflections: false,
     });
+  });
+
+  it('ignores the goalChecks switch older configs still have', () => {
+    expect(agencySchema.parse({ goalChecks: true })).not.toHaveProperty('goalChecks');
   });
 
   it('is optional on the app config', () => {
@@ -45,6 +49,25 @@ describe('agencyIntentionsSchema', () => {
     ['field over the length limit', { goals: 'x'.repeat(AGENCY_TEXT_MAX + 1) }],
   ])('rejects a %s', (_label, input) => {
     expect(agencyIntentionsSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe('agencySchema promptTemplate', () => {
+  it('needs none, and takes a template, or an empty one', () => {
+    expect(agencySchema.parse({}).promptTemplate).toBeUndefined();
+    expect(agencySchema.parse({ promptTemplate: ' Goal: {{goal}} ' }).promptTemplate).toBe(
+      'Goal: {{goal}}',
+    );
+    expect(agencySchema.parse({ promptTemplate: '' }).promptTemplate).toBe('');
+  });
+
+  it('refuses a broken or oversized template, saying where it is broken', () => {
+    const broken = agencySchema.safeParse({ promptTemplate: 'One\n{{#goal}} two' });
+    expect(broken.success).toBe(false);
+    expect(broken.error?.issues[0].message).toBe('unclosed_section at line 2: {{#goal}}');
+    expect(
+      agencySchema.safeParse({ promptTemplate: 'x'.repeat(AGENCY_PROMPT_MAX + 1) }).success,
+    ).toBe(false);
   });
 });
 

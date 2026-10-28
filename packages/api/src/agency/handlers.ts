@@ -1,8 +1,11 @@
-import { logger } from '@librechat/data-schemas';
+import { logger, isValidObjectIdString } from '@librechat/data-schemas';
 import {
   ErrorTypes,
   RECAP_RANGES,
   agencyGoalSchema,
+  checkAgencyPrompt,
+  agencyPromptSchema,
+  defaultAgencyPrompt,
   agencyReflectionSchema,
   agencyIntentionsSchema,
   clientAgencyEventSchema,
@@ -10,6 +13,7 @@ import {
 import type {
   RecapRange,
   TAgencyRecap,
+  TAgencyPrompt,
   TAgencyConfig,
   TConversationGoal,
   TAgencyStartupConfig,
@@ -22,6 +26,7 @@ import type { AppConfig } from '@librechat/data-schemas';
 import type { Request, Response } from 'express';
 import type { AgencyEventRecorder } from './events';
 import { participantOf, screenForSafeguarding } from '~/safeguarding/service';
+import { getSafeErrorMetadata } from '~/utils/errors';
 import { maskUserText } from '~/guardrails/stored';
 
 type UserId = string;
@@ -53,6 +58,10 @@ export interface AgencyHandlerDeps {
     reflectionId: string,
     answers: TAgencyReflectionAnswers,
   ): Promise<TAgencyReflection | null>;
+  getAgencyPrompt(userId: UserId): Promise<TAgencyPrompt | null>;
+  setAgencyPrompt(userId: UserId, template: string): Promise<TAgencyPrompt>;
+  deleteAgencyPrompt(userId: UserId): Promise<void>;
+  addAgencyPromptRevision(userId: UserId, template: string | null): Promise<string>;
   /** Resolves when the user owns the conversation; null when there is no such conversation. */
   getConvo(userId: UserId, conversationId: string): Promise<unknown>;
   record: AgencyEventRecorder;
@@ -80,6 +89,9 @@ export interface AgencyHandlers {
   getReflections: Handler;
   postReflection: Handler;
   patchReflection: Handler;
+  getPrompt: Handler;
+  putPrompt: Handler;
+  deletePrompt: Handler;
 }
 
 const NOT_FOUND = { message: 'Not found' };
@@ -104,18 +116,19 @@ function gated(
     try {
       return await handle(request, res, userId);
     } catch (error) {
-      logger.error(`[agency] ${label} failed`, { userId, error: (error as Error)?.message });
+      logger.error(`[agency] ${label} failed`, { userId, ...getSafeErrorMetadata(error) });
       return res.status(500).json({ message: `Failed to ${label}` });
     }
   };
 }
 
-const conversationIdOf = (req: Request): string | null => {
-  const { conversationId } = req.params as { conversationId?: string };
-  return typeof conversationId === 'string' && conversationId.length <= 64 && conversationId
+const validConversationId = (conversationId: unknown): string | null =>
+  typeof conversationId === 'string' && conversationId.length <= 64 && conversationId
     ? conversationId
     : null;
-};
+
+const conversationIdOf = (req: Request): string | null =>
+  validConversationId((req.params as { conversationId?: string }).conversationId);
 
 type ScreenedText<K extends string> =
   | { ok: true; fields: Record<K, string> }
@@ -130,7 +143,7 @@ type ScreenedText<K extends string> =
 export async function screenLearnerText<K extends string>(
   req: { config?: AppConfig; user?: { id?: string; openidId?: string } },
   fields: Record<K, string>,
-  event: { source: 'goal' | 'intentions' | 'reflection'; conversationId?: string },
+  event: { source: 'goal' | 'intentions' | 'reflection' | 'instructions'; conversationId?: string },
 ): Promise<ScreenedText<K>> {
   const keys = Object.keys(fields) as K[];
   const masked = await Promise.all(keys.map((key) => maskUserText(req.config ?? {}, fields[key])));
@@ -152,6 +165,8 @@ export async function screenLearnerText<K extends string>(
   });
   return check.ok ? { ok: true, fields: result } : { ok: false, info: check.info };
 }
+
+const DEFAULT_PROMPT: TAgencyPrompt = { template: null };
 
 /** Blocked text answers 422 with the reasons; text that could not be screened answers 503. */
 const blocked = (res: Response, info: TSafeguardingErrorInfo): Response =>
@@ -251,10 +266,8 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
       if (range != null && !(RECAP_RANGES as readonly unknown[]).includes(range)) {
         return res.status(400).json({ message: 'Invalid range' });
       }
-      const scope =
-        typeof conversationId === 'string' && conversationId && conversationId.length <= 64
-          ? { conversationId }
-          : {};
+      const scoped = validConversationId(conversationId);
+      const scope = scoped != null ? { conversationId: scoped } : {};
       return res.json(
         await deps.getAgencyRecap(userId, {
           ...scope,
@@ -279,7 +292,7 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
 
     patchReflection: gated('reflections', 'save reflection', async (req, res, userId) => {
       const { reflectionId } = req.params as { reflectionId?: string };
-      if (typeof reflectionId !== 'string' || !/^[a-f0-9]{24}$/.test(reflectionId)) {
+      if (typeof reflectionId !== 'string' || !isValidObjectIdString(reflectionId)) {
         return res.status(400).json({ message: 'Invalid reflection' });
       }
       const answers = await screenedReflection(req, res);
@@ -293,7 +306,95 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
       deps.record.event({ userId, type: 'reflection_updated', detail: reflection.id });
       return res.json({ reflection });
     }),
+
+    getPrompt: gated('conversationGoal', 'load hidden instructions', async (req, res, userId) =>
+      res.json({
+        prompt: (await deps.getAgencyPrompt(userId)) ?? DEFAULT_PROMPT,
+        default: defaultAgencyPrompt(req.config?.agency),
+      }),
+    ),
+
+    /**
+     * Saves the learner's hidden instructions, masked and screened like a goal, after checking
+     * the template both as written and as masked, so a placeholder can never break a tag. The
+     * default itself is saved as a reset. Each change adds to the instructions' log.
+     */
+    putPrompt: gated('conversationGoal', 'save hidden instructions', async (req, res, userId) => {
+      const parsed = agencyPromptSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: 'Invalid hidden instructions' });
+      }
+      const { template } = parsed.data;
+      const written = checkAgencyPrompt(template);
+      if (!written.ok) {
+        return res.status(400).json({ code: 'invalid_template', errors: written.errors });
+      }
+      if (template.trim() === defaultAgencyPrompt(req.config?.agency)) {
+        await resetPrompt(deps, userId);
+        return res.json({ prompt: DEFAULT_PROMPT, masked: false });
+      }
+      /** Nothing to mask or screen: the learner's messages go on their own. */
+      if (template.trim() === '') {
+        return res.json({ prompt: await saveCustomPrompt(deps, userId, ''), masked: false });
+      }
+      let screened: ScreenedText<'template'>;
+      try {
+        screened = await screenLearnerText(req, { template }, { source: 'instructions' });
+      } catch (error) {
+        logger.error('[agency] Could not mask hidden instructions', {
+          userId,
+          ...getSafeErrorMetadata(error),
+        });
+        return res.status(503).json({ message: 'Could not save hidden instructions' });
+      }
+      if (!screened.ok) {
+        return blocked(res, screened.info);
+      }
+      const masked = screened.fields.template;
+      const stored = checkAgencyPrompt(masked);
+      if (!stored.ok) {
+        return res.status(400).json({ code: 'invalid_template', errors: stored.errors });
+      }
+      const prompt = await saveCustomPrompt(deps, userId, masked, masked !== template);
+      return res.json({ prompt, masked: masked !== template });
+    }),
+
+    deletePrompt: gated(
+      'conversationGoal',
+      'reset hidden instructions',
+      async (_req, res, userId) => {
+        await resetPrompt(deps, userId);
+        return res.json({ prompt: DEFAULT_PROMPT });
+      },
+    ),
   };
+}
+
+/** Saves the learner's own template, then logs the change once it has taken effect. */
+async function saveCustomPrompt(
+  deps: AgencyHandlerDeps,
+  userId: UserId,
+  template: string,
+  masked = false,
+): Promise<TAgencyPrompt> {
+  const prompt = await deps.setAgencyPrompt(userId, template);
+  const revisionId = await deps.addAgencyPromptRevision(userId, template);
+  deps.record.event({ userId, type: 'prompt_customised', detail: revisionId });
+  logger.info('[agency] Hidden instructions changed', {
+    userId,
+    revisionId,
+    length: template.length,
+    masked,
+  });
+  return prompt;
+}
+
+/** Puts the learner back on the default instructions, and logs the reset. */
+async function resetPrompt(deps: AgencyHandlerDeps, userId: UserId): Promise<void> {
+  await deps.deleteAgencyPrompt(userId);
+  const revisionId = await deps.addAgencyPromptRevision(userId, null);
+  deps.record.event({ userId, type: 'prompt_reset', detail: revisionId });
+  logger.info('[agency] Hidden instructions reset', { userId, revisionId });
 }
 
 /**
@@ -326,8 +427,11 @@ export function suggestionOf(
   return req.config?.agency?.goalSuggestions?.find((suggestion) => suggestion.id === id);
 }
 
-/** `agency` for the startup config: the classifier's topics, never its endpoint or model. */
+/**
+ * `agency` for the startup config: the classifier's topics, never its endpoint or model, and not
+ * the hidden instructions, which `getPrompt` sends when the Parameters panel opens.
+ */
 export function agencyStartupConfig(agency: TAgencyConfig): TAgencyStartupConfig {
-  const { classifier, ...rest } = agency;
+  const { classifier, promptTemplate: _promptTemplate, ...rest } = agency;
   return classifier != null ? { ...rest, classifier: { topics: classifier.topics } } : rest;
 }
