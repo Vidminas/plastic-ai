@@ -58,6 +58,7 @@ describe('resolveAgencyContext', () => {
       userId: 'u1',
       conversationId: 'c1',
       type: 'goal_set',
+      detail: 'plan my essay',
     });
     expect(text).toContain('plan my essay');
   });

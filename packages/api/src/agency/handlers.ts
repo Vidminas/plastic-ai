@@ -1,12 +1,14 @@
 import { logger } from '@librechat/data-schemas';
 import {
   ErrorTypes,
+  RECAP_RANGES,
   agencyGoalSchema,
   agencyReflectionSchema,
   agencyIntentionsSchema,
   clientAgencyEventSchema,
 } from 'librechat-data-provider';
 import type {
+  RecapRange,
   TAgencyRecap,
   TAgencyConfig,
   TConversationGoal,
@@ -37,7 +39,10 @@ export interface AgencyHandlerDeps {
     text: string,
     suggestionId?: string | null,
   ): Promise<TConversationGoal>;
-  getAgencyRecap(userId: UserId, options?: { conversationId?: string }): Promise<TAgencyRecap>;
+  getAgencyRecap(
+    userId: UserId,
+    options?: { conversationId?: string; range?: RecapRange },
+  ): Promise<TAgencyRecap>;
   listAgencyReflections(userId: UserId): Promise<TAgencyReflection[]>;
   createAgencyReflection(
     userId: UserId,
@@ -219,9 +224,10 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
         screened.fields.text,
         suggestionId,
       );
-      /** Saving the same words again is no change: nothing recorded, and no paid relabel. */
+      /** Saving the same words again is no change: no journey step, and no paid relabel. */
       if (goal.text !== previous?.text) {
-        deps.record.event({ userId, conversationId, type: 'goal_updated' });
+        /** The goal as set, so the journey shows each change rather than the latest goal. */
+        deps.record.event({ userId, conversationId, type: 'goal_updated', detail: goal.text });
         deps.onConversationGoalChanged?.(req, userId, conversationId);
       }
       return res.json({ goal });
@@ -241,12 +247,20 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
     ),
 
     getRecap: gated('recap', 'load recap', async (req, res, userId) => {
-      const { conversationId } = req.query as { conversationId?: unknown };
+      const { conversationId, range } = req.query as { conversationId?: unknown; range?: unknown };
+      if (range != null && !(RECAP_RANGES as readonly unknown[]).includes(range)) {
+        return res.status(400).json({ message: 'Invalid range' });
+      }
       const scope =
         typeof conversationId === 'string' && conversationId && conversationId.length <= 64
           ? { conversationId }
-          : undefined;
-      return res.json(await deps.getAgencyRecap(userId, scope));
+          : {};
+      return res.json(
+        await deps.getAgencyRecap(userId, {
+          ...scope,
+          range: (range as RecapRange | undefined) ?? '7d',
+        }),
+      );
     }),
 
     getReflections: gated('reflections', 'load reflections', async (_req, res, userId) =>

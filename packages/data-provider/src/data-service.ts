@@ -1,5 +1,6 @@
 import type { AxiosResponse } from 'axios';
 import type {
+  RecapRange,
   TAgencyRecap,
   TConversationGoal,
   TAgencyIntentions,
@@ -1850,8 +1851,10 @@ export const recordAgencyEvent = (event: TClientAgencyEvent): Promise<void> => {
   return request.post(endpoints.agencyEvents(), event);
 };
 
-export const getAgencyRecap = (conversationId?: string): Promise<TAgencyRecap> => {
-  return request.get(endpoints.agencyRecap(conversationId));
+export const getAgencyRecap = (
+  params: { conversationId?: string; range?: RecapRange } = {},
+): Promise<TAgencyRecap> => {
+  return request.get(endpoints.agencyRecap(params));
 };
 
 export function searchPrincipals(

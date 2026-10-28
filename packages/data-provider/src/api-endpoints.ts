@@ -642,8 +642,17 @@ export const agencyIntentions = () => `${agency()}/intentions`;
 export const agencyGoal = (conversationId: string) =>
   `${agency()}/conversations/${encodeURIComponent(conversationId)}/goal`;
 export const agencyEvents = () => `${agency()}/events`;
-export const agencyRecap = (conversationId?: string) =>
-  `${agency()}/recap${conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : ''}`;
+export const agencyRecap = (params: { conversationId?: string; range?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.conversationId) {
+    query.set('conversationId', params.conversationId);
+  }
+  if (params.range) {
+    query.set('range', params.range);
+  }
+  const search = query.toString();
+  return `${agency()}/recap${search ? `?${search}` : ''}`;
+};
 export const agencyReflections = () => `${agency()}/reflections`;
 export const agencyReflection = (reflectionId: string) =>
   `${agency()}/reflections/${encodeURIComponent(reflectionId)}`;

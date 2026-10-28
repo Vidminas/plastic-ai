@@ -244,6 +244,10 @@ export type TAgencyReflection = {
   updatedAt: string;
 };
 
+/** The periods the recap covers. */
+export const RECAP_RANGES = ['7d', '30d', 'all'] as const;
+export type RecapRange = (typeof RECAP_RANGES)[number];
+
 /** How a learner answered a goal check. */
 export const GOAL_CHECK_OUTCOMES = ['continue', 'refocus', 'goal_changed'] as const;
 export type GoalCheckOutcome = (typeof GOAL_CHECK_OUTCOMES)[number];
@@ -281,22 +285,57 @@ export const clientAgencyEventSchema = z.object({
 });
 export type TClientAgencyEvent = z.infer<typeof clientAgencyEventSchema>;
 
-/** One recorded engagement with an agency feature. */
-export type TAgencyEvent = {
-  type: AgencyEventType;
+/** One step of the learner's goal journey, newest first in the recap. */
+export type TAgencyJourneyItem = {
+  /** A conversation goal set or changed, a goal check answered, or a reflection. */
+  type: 'goal_set' | 'goal_updated' | 'goal_check' | 'reflection';
+  at: string;
+  /** For `goal_set` and `goal_updated`: the conversation's goal as it was set then. */
+  goal?: TConversationGoal;
+  /** For `goal_check`: how the learner answered it. */
+  outcome?: GoalCheckOutcome;
+  /** For `reflection`: the saved reflection, and what the learner was working on. */
+  reflectionId?: string;
+  about?: string;
   conversationId?: string;
   messageId?: string;
-  detail?: string;
-  createdAt: string;
 };
 
+/** The key conversations without a suggested goal are grouped under. */
+export const AGENCY_OWN_GOAL = 'own';
+
+/**
+ * The chats in the recap's period that had a goal, grouped by the suggested goal they started
+ * from, or `own` for goals in the learner's words.
+ */
+export type TAgencyGoalUsage = {
+  /** A suggestion's id, or `own`. */
+  goal: string;
+  /** Chats with a learner message in the period. */
+  conversations: number;
+  /** Labelled messages per support type. */
+  support: Partial<Record<AgencySupportType, number>>;
+  /** Chats per topic id (or `unclassified`). */
+  topics: Record<string, number>;
+};
+
+/**
+ * What the learner used the AI for in a period, and how their goals have changed. It counts
+ * chats and shares, not message volume: the page shows what the AI was used for, not how much.
+ */
 export type TAgencyRecap = {
-  /** New conversations with a goal set, and all new conversations. */
-  goals: { set: number; conversations: number };
-  /** Options the learner chose, and option questions offered. */
-  options: { selected: number; offered: number };
-  /** Goal checks offered, and how each answered one was resolved. */
-  goalChecks: { offered: number } & Record<GoalCheckOutcome, number>;
-  /** The latest example of each kind, for "View in chat". */
-  examples: Partial<Record<'goal' | 'option' | 'goalCheck', TAgencyEvent>>;
+  /** Chats with a learner message in the period. */
+  chats: number;
+  /** Chats per topic id (or `unclassified`), largest first. Empty without a classifier. */
+  topics: Array<{ id: string; chats: number }>;
+  /** Labelled messages per support type in the period. Empty without a classifier. */
+  support: Partial<Record<AgencySupportType, number>>;
+  /** Chats in the period by goal, most first. */
+  goalUsage: TAgencyGoalUsage[];
+  /** Chats in the period without a goal. */
+  noGoal: { conversations: number };
+  /** Up to 20 steps of the goal journey in the period, newest first. */
+  journey: TAgencyJourneyItem[];
+  /** Reflections saved in the period: how many, and the latest few, newest first. */
+  reflections: { count: number; recent: TAgencyReflection[] };
 };

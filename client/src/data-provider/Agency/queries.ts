@@ -2,6 +2,7 @@
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { QueryKeys, MutationKeys, dataService } from 'librechat-data-provider';
 import type {
+  RecapRange,
   TAgencyRecap,
   TConversationGoal,
   TAgencyIntentions,
@@ -93,13 +94,13 @@ export const useUpdateConversationGoalMutation = (
 };
 
 export const useAgencyRecapQuery = (
-  conversationId?: string,
+  params: { conversationId?: string; range?: RecapRange } = {},
   config?: UseQueryOptions<TAgencyRecap>,
 ): QueryObserverResult<TAgencyRecap> =>
   useQuery<TAgencyRecap>(
-    [QueryKeys.agencyRecap, conversationId ?? null],
-    () => dataService.getAgencyRecap(conversationId),
-    { refetchOnWindowFocus: false, ...config },
+    [QueryKeys.agencyRecap, params.conversationId ?? null, params.range ?? '7d'],
+    () => dataService.getAgencyRecap(params),
+    { refetchOnWindowFocus: false, keepPreviousData: true, ...config },
   );
 
 export const useAgencyReflectionsQuery = (

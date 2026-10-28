@@ -3,6 +3,9 @@ import { atom, useAtom } from 'jotai';
 
 export const settingsOpenAtom = atom(false);
 
+/** The tab the settings dialog opens on, when something opens it at one; read once on open. */
+export const settingsInitialTabAtom = atom<string | null>(null);
+
 /** Keep settings lazy without tying its lifetime to a responsive account-menu trigger. */
 const SettingsDialog = lazy(() => import('./Settings/Dialog'));
 

@@ -103,7 +103,7 @@ export async function resolveAgencyContext(
             ? requested
             : undefined;
         await deps.setConversationGoal(userId, conversationId, goal, suggestionId);
-        deps.record.event({ userId, conversationId, type: 'goal_set' });
+        deps.record.event({ userId, conversationId, type: 'goal_set', detail: goal });
       }
     } catch (error) {
       logger.warn('[agency] Could not resolve the conversation goal', {

@@ -39,9 +39,14 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await Promise.all(
-    ['AgencyIntentions', 'AgencyGoal', 'AgencyEvent', 'AgencyReflection', 'Conversation'].map(
-      (name) => mongoose.models[name].deleteMany({}),
-    ),
+    [
+      'AgencyIntentions',
+      'AgencyGoal',
+      'AgencyEvent',
+      'AgencyReflection',
+      'Conversation',
+      'Message',
+    ].map((name) => mongoose.models[name].deleteMany({})),
   );
 });
 
@@ -91,64 +96,6 @@ describe('conversation goals', () => {
   });
 });
 
-describe('conversation goals from a suggestion', () => {
-  it('keeps the suggestion with the text, until it is dropped', async () => {
-    await methods.setConversationGoal(userId, 'c1', 'Revise algebra', 'exams');
-    await expect(methods.getConversationGoal(userId, 'c1')).resolves.toMatchObject({
-      text: 'Revise algebra',
-      suggestionId: 'exams',
-    });
-    /** Text alone keeps the suggestion; null drops it. */
-    await methods.setConversationGoal(userId, 'c1', 'Revise geometry');
-    await expect(methods.getConversationGoal(userId, 'c1')).resolves.toMatchObject({
-      suggestionId: 'exams',
-    });
-    await methods.setConversationGoal(userId, 'c1', 'Something else', null);
-    await expect(methods.getConversationGoal(userId, 'c1')).resolves.not.toHaveProperty(
-      'suggestionId',
-    );
-  });
-});
-
-describe('getAgencyRecap', () => {
-  it('counts engagement and returns the latest examples, for this user only', async () => {
-    await mongoose.models.Conversation.create([
-      { conversationId: 'c1', user: String(userId), endpoint: 'bedrock' },
-      { conversationId: 'c2', user: String(userId), endpoint: 'bedrock' },
-      { conversationId: 'c3', user: String(otherUserId), endpoint: 'bedrock' },
-    ]);
-    await methods.setConversationGoal(userId, 'c1', 'learn regression');
-    for (const event of [
-      { type: 'options_offered', conversationId: 'c2' },
-      { type: 'options_offered', conversationId: 'c2' },
-      { type: 'option_selected', conversationId: 'c2', messageId: 'm1', detail: 'A plan' },
-      { type: 'goal_check_offered', conversationId: 'c1' },
-      { type: 'goal_check_resolved', conversationId: 'c1', messageId: 'm2', detail: 'refocus' },
-    ] as const) {
-      await methods.recordAgencyEvent({ userId, ...event });
-    }
-    await methods.recordAgencyEvent({ userId: otherUserId, type: 'option_selected' });
-
-    const recap = await methods.getAgencyRecap(userId);
-
-    expect(recap.goals).toEqual({ set: 1, conversations: 2 });
-    expect(recap.options).toEqual({ selected: 1, offered: 2 });
-    expect(recap.goalChecks).toEqual({ offered: 1, continue: 0, refocus: 1, goal_changed: 0 });
-    expect(recap.examples.goal).toMatchObject({ conversationId: 'c1', detail: 'learn regression' });
-    expect(recap.examples.option).toMatchObject({ messageId: 'm1', detail: 'A plan' });
-    expect(recap.examples.goalCheck).toMatchObject({ messageId: 'm2' });
-  });
-
-  it('scopes counts to one conversation', async () => {
-    await methods.recordAgencyEvent({ userId, type: 'options_offered', conversationId: 'c1' });
-    await methods.recordAgencyEvent({ userId, type: 'options_offered', conversationId: 'c2' });
-
-    const recap = await methods.getAgencyRecap(userId, { conversationId: 'c1' });
-    expect(recap.options.offered).toBe(1);
-    expect(recap.goals).toEqual({ set: 0, conversations: 1 });
-  });
-});
-
 describe('deleteAgencyData', () => {
   it("removes the user's intentions, goals and events, and nobody else's", async () => {
     await methods.setAgencyIntentions(userId, intentions);
@@ -183,6 +130,296 @@ describe('deleting conversations', () => {
     await expect(methods.getConversationGoal(userId, 'c1')).resolves.toBeNull();
     await expect(methods.getConversationGoal(userId, 'c2')).resolves.not.toBeNull();
     await expect(mongoose.models.AgencyEvent.countDocuments({ userId })).resolves.toBe(1);
+  });
+});
+
+describe('conversation goals from a suggestion', () => {
+  it('keeps the suggestion with the text, until it is dropped', async () => {
+    await methods.setConversationGoal(userId, 'c1', 'Revise algebra', 'exams');
+    await expect(methods.getConversationGoal(userId, 'c1')).resolves.toMatchObject({
+      text: 'Revise algebra',
+      suggestionId: 'exams',
+    });
+    /** Text alone keeps the suggestion; null drops it. */
+    await methods.setConversationGoal(userId, 'c1', 'Revise geometry');
+    await expect(methods.getConversationGoal(userId, 'c1')).resolves.toMatchObject({
+      suggestionId: 'exams',
+    });
+    await methods.setConversationGoal(userId, 'c1', 'Something else', null);
+    await expect(methods.getConversationGoal(userId, 'c1')).resolves.not.toHaveProperty(
+      'suggestionId',
+    );
+  });
+});
+
+describe('getAgencyRecap', () => {
+  const now = new Date('2026-10-15T12:00:00Z');
+  const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  const message = (conversationId: string, createdAt: Date, isCreatedByUser = true) => ({
+    messageId: new mongoose.Types.ObjectId().toString(),
+    conversationId,
+    user: String(userId),
+    isCreatedByUser,
+    text: 'hidden',
+    createdAt,
+  });
+
+  beforeEach(async () => {
+    await methods.setConversationGoal(userId, 'c1', 'Plan an essay', 'writing');
+    await methods.setConversationGoal(userId, 'c2', 'Revise algebra');
+    await methods.setConversationGoal(userId, 'c5', 'Old goal', 'exams');
+    await mongoose.models.Message.insertMany([
+      message('c1', daysAgo(0)),
+      message('c1', daysAgo(1)),
+      message('c1', daysAgo(1), false),
+      message('c2', daysAgo(2)),
+      message('c3', daysAgo(3)),
+      /** Only the assistant wrote in it this week. */
+      message('c4', daysAgo(1), false),
+      /** Before the week. */
+      message('c5', daysAgo(9)),
+      { ...message('c6', daysAgo(0)), isTemporary: true },
+      { ...message('c7', daysAgo(0)), user: String(otherUserId) },
+    ]);
+    await mongoose.models.AgencyEvent.insertMany([
+      {
+        userId,
+        conversationId: 'c1',
+        type: 'topic_classified',
+        detail: 'maths',
+        createdAt: daysAgo(3),
+      },
+      {
+        userId,
+        conversationId: 'c1',
+        type: 'topic_classified',
+        detail: 'writing',
+        createdAt: daysAgo(0),
+      },
+      {
+        userId,
+        conversationId: 'c2',
+        type: 'topic_classified',
+        detail: 'maths',
+        createdAt: daysAgo(2),
+      },
+      {
+        userId,
+        conversationId: 'c1',
+        type: 'support_classified',
+        detail: 'feedback',
+        createdAt: daysAgo(0),
+      },
+      {
+        userId,
+        conversationId: 'c1',
+        type: 'support_classified',
+        detail: 'nonsense',
+        createdAt: daysAgo(1),
+      },
+      {
+        userId,
+        conversationId: 'c2',
+        type: 'support_classified',
+        detail: 'hint',
+        createdAt: daysAgo(2),
+      },
+      {
+        userId,
+        conversationId: 'c5',
+        type: 'support_classified',
+        detail: 'answer',
+        createdAt: daysAgo(9),
+      },
+    ]);
+  });
+
+  it("counts the period's chats by topic, kind of help and goal, for this user only", async () => {
+    const recap = await methods.getAgencyRecap(userId, { range: '7d', now });
+
+    expect(recap.chats).toBe(3);
+    expect(recap.topics).toEqual([
+      { id: 'maths', chats: 1 },
+      { id: 'unclassified', chats: 1 },
+      { id: 'writing', chats: 1 },
+    ]);
+    expect(recap.support).toEqual({ feedback: 1, other: 1, hint: 1 });
+    expect(recap.goalUsage).toEqual([
+      { goal: 'own', conversations: 1, topics: { maths: 1 }, support: { hint: 1 } },
+      {
+        goal: 'writing',
+        conversations: 1,
+        topics: { writing: 1 },
+        support: { feedback: 1, other: 1 },
+      },
+    ]);
+    expect(recap.noGoal).toEqual({ conversations: 1 });
+    /** Long-term intentions have a dialog of their own, so the recap does not read them. */
+    expect(recap).not.toHaveProperty('intentions');
+  });
+
+  it("keeps a chat's topic labelled before the period", async () => {
+    await mongoose.models.AgencyEvent.create({
+      userId,
+      conversationId: 'c5',
+      type: 'topic_classified',
+      detail: 'science',
+      createdAt: daysAgo(20),
+    });
+    const recap = await methods.getAgencyRecap(userId, { now, range: '30d' });
+    expect(recap.topics).toContainEqual({ id: 'science', chats: 1 });
+  });
+
+  it('counts every chat for all time, and one conversation alone when scoped', async () => {
+    const all = await methods.getAgencyRecap(userId, { range: 'all', now });
+    expect(all.chats).toBe(4);
+    expect(all.goalUsage.map((group) => group.goal)).toEqual(['exams', 'own', 'writing']);
+    expect(all.support.answer).toBe(1);
+
+    const one = await methods.getAgencyRecap(userId, { conversationId: 'c1', range: 'all', now });
+    expect(one.chats).toBe(1);
+    expect(one.goalUsage).toEqual([
+      {
+        goal: 'writing',
+        conversations: 1,
+        topics: { writing: 1 },
+        support: { feedback: 1, other: 1 },
+      },
+    ]);
+  });
+
+  it('builds the goal journey, newest first, with each goal as it is now', async () => {
+    await methods.setConversationGoal(userId, 'c1', 'Revise algebra', 'exams');
+    const reflection = await methods.createAgencyReflection(userId, {
+      ...blank,
+      working_on: 'History essay',
+    });
+    const at = (minutes: number) => new Date(now.getTime() - (60 - minutes) * 60_000);
+    await mongoose.models.AgencyEvent.insertMany([
+      { userId, type: 'goal_set', conversationId: 'c1', createdAt: at(1) },
+      /** A goal since deleted with its conversation is left out. */
+      { userId, type: 'goal_set', conversationId: 'gone', createdAt: at(2) },
+      {
+        userId,
+        type: 'goal_check_resolved',
+        conversationId: 'c1',
+        messageId: 'm1',
+        detail: 'continue',
+        createdAt: at(3),
+      },
+      {
+        userId,
+        type: 'goal_check_resolved',
+        conversationId: 'c1',
+        messageId: 'm2',
+        detail: 'goal_changed',
+        createdAt: at(4),
+      },
+      { userId, type: 'goal_updated', conversationId: 'c1', createdAt: at(5) },
+      { userId, type: 'reflection_saved', detail: reflection.id, createdAt: at(6) },
+    ]);
+
+    const recap = await methods.getAgencyRecap(userId, { now });
+    expect(recap.journey.map((item) => item.type)).toEqual([
+      'reflection',
+      'goal_updated',
+      'goal_check',
+      'goal_check',
+      'goal_set',
+    ]);
+    expect(recap.journey[0]).toMatchObject({
+      reflectionId: reflection.id,
+      about: 'History essay',
+    });
+    expect(recap.journey[1]).toMatchObject({
+      conversationId: 'c1',
+      goal: { text: 'Revise algebra', suggestionId: 'exams' },
+    });
+    expect(recap.journey[2]).toMatchObject({
+      conversationId: 'c1',
+      messageId: 'm2',
+      outcome: 'goal_changed',
+    });
+    expect(recap.journey[3]).toMatchObject({ messageId: 'm1', outcome: 'continue' });
+  });
+
+  it("shows each goal as it was set, and only the period's steps", async () => {
+    await methods.setConversationGoal(userId, 'c1', 'Quadratics', 'exams');
+    await mongoose.models.AgencyEvent.insertMany([
+      {
+        userId,
+        type: 'goal_set',
+        conversationId: 'c1',
+        detail: 'Revise algebra',
+        createdAt: daysAgo(2),
+      },
+      {
+        userId,
+        type: 'goal_updated',
+        conversationId: 'c1',
+        detail: 'Quadratics',
+        createdAt: daysAgo(1),
+      },
+      /** Before the week. */
+      {
+        userId,
+        type: 'goal_updated',
+        conversationId: 'c1',
+        detail: 'Older',
+        createdAt: daysAgo(9),
+      },
+    ]);
+
+    const week = await methods.getAgencyRecap(userId, { now });
+    expect(week.journey.map((item) => item.goal)).toEqual([
+      { text: 'Quadratics', suggestionId: 'exams', setAt: expect.any(String) },
+      { text: 'Revise algebra' },
+    ]);
+    const all = await methods.getAgencyRecap(userId, { now, range: 'all' });
+    expect(all.journey.map((item) => item.goal?.text)).toEqual([
+      'Quadratics',
+      'Revise algebra',
+      'Older',
+    ]);
+  });
+
+  it("sums up the period's reflections, latest first", async () => {
+    const make = (working_on: string) =>
+      methods.createAgencyReflection(userId, { ...blank, working_on });
+    const old = await make('Old essay');
+    /** Past the model, whose timestamps would keep `createdAt` as it is. */
+    await mongoose.models.AgencyReflection.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(old.id) },
+      { $set: { createdAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000) } },
+    );
+    await make('Maths homework');
+    /** Apart in time, so newest first has one answer. */
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await make('History essay');
+    await methods.createAgencyReflection(otherUserId, { ...blank, working_on: 'Theirs' });
+
+    const week = await methods.getAgencyRecap(userId, { now: new Date() });
+    expect(week.reflections.count).toBe(2);
+    expect(week.reflections.recent.map((r) => r.answers.working_on)).toEqual([
+      'History essay',
+      'Maths homework',
+    ]);
+    const all = await methods.getAgencyRecap(userId, { now: new Date(), range: 'all' });
+    expect(all.reflections.count).toBe(3);
+    /** One conversation's recap has no reflections of its own. */
+    const scoped = await methods.getAgencyRecap(userId, { now: new Date(), conversationId: 'c1' });
+    expect(scoped.reflections).toEqual({ count: 0, recent: [] });
+  });
+
+  it('deletes reflections with the rest of the agency data', async () => {
+    await methods.createAgencyReflection(userId, { ...blank, reason: 'Mine' });
+    await methods.createAgencyReflection(otherUserId, { ...blank, reason: 'Theirs' });
+    await methods.deleteAgencyData(userId);
+    await expect(mongoose.models.AgencyReflection.countDocuments({ userId })).resolves.toBe(0);
+    await expect(
+      mongoose.models.AgencyReflection.countDocuments({ userId: otherUserId }),
+    ).resolves.toBe(1);
   });
 });
 
@@ -221,15 +458,5 @@ describe('reflections', () => {
     ).resolves.toBeNull();
     await expect(methods.updateAgencyReflection(userId, 'nope', blank)).resolves.toBeNull();
     await expect(methods.listAgencyReflections(otherUserId)).resolves.toEqual([]);
-  });
-
-  it('deletes reflections with the rest of the agency data', async () => {
-    await methods.createAgencyReflection(userId, { ...blank, reason: 'Mine' });
-    await methods.createAgencyReflection(otherUserId, { ...blank, reason: 'Theirs' });
-    await methods.deleteAgencyData(userId);
-    await expect(mongoose.models.AgencyReflection.countDocuments({ userId })).resolves.toBe(0);
-    await expect(
-      mongoose.models.AgencyReflection.countDocuments({ userId: otherUserId }),
-    ).resolves.toBe(1);
   });
 });

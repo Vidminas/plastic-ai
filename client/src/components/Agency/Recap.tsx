@@ -1,122 +1,78 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSetAtom } from 'jotai';
+import { Lock, Sprout } from 'lucide-react';
 import { Link, Navigate } from 'react-router-dom';
 import { Button, Spinner } from '@librechat/client';
-import { Compass, ListChecks, MessageSquareMore, Target } from 'lucide-react';
-import type { TAgencyEvent, TAgencyRecap, GoalCheckOutcome } from 'librechat-data-provider';
-import type { ReactNode } from 'react';
+import { RECAP_RANGES } from 'librechat-data-provider';
+import type { RecapRange } from 'librechat-data-provider';
 import type { TranslationKeys } from '~/hooks';
 import { recordAgencyEvent, useAgencyRecapQuery, useGetStartupConfig } from '~/data-provider';
+import { settingsInitialTabAtom, settingsOpenAtom } from '~/components/Nav/Settings';
 import OpenSidebar from '~/components/Chat/Menus/OpenSidebar';
 import useDrawerViewport from '~/hooks/Nav/useDrawerViewport';
 import { useDocumentTitle, useLocalize } from '~/hooks';
 import { trackAction } from '~/lib/rum/actions';
-import { messageLink } from './links';
+import Panel, { ToneIcon } from './recap/Panel';
+import TopicShares from './recap/TopicShares';
+import Reflections from './recap/Reflections';
+import { topicSeries } from './recap/topics';
+import Takeaways from './recap/Takeaways';
+import GoalsUsage from './recap/Goals';
+import Journey from './recap/Journey';
+import Support from './recap/Support';
 
-const OUTCOME_KEYS: Record<GoalCheckOutcome, TranslationKeys> = {
-  continue: 'com_agency_outcome_continue',
-  refocus: 'com_agency_outcome_refocus',
-  goal_changed: 'com_agency_outcome_goal_changed',
+const RANGE_KEYS: Record<RecapRange, TranslationKeys> = {
+  '7d': 'com_agency_range_7d',
+  '30d': 'com_agency_range_30d',
+  all: 'com_agency_range_all',
 };
 
-function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
+/** Where the learner can see, change or delete what is kept. */
+function YourData() {
+  const localize = useLocalize();
+  const openSettings = useSetAtom(settingsOpenAtom);
+  const setTab = useSetAtom(settingsInitialTabAtom);
   return (
-    <section
-      className={`border-border-light bg-surface-primary min-w-0 rounded-xl border p-5 ${className}`}
-    >
-      {children}
-    </section>
-  );
-}
-
-function Stat({
-  icon,
-  value,
-  total,
-  label,
-  note,
-}: {
-  icon: ReactNode;
-  value: number;
-  total?: number;
-  label: string;
-  note: string;
-}) {
-  return (
-    <Panel className="flex flex-col gap-3">
-      <div className="flex items-start gap-3">
-        <span
-          className="bg-surface-tertiary text-text-secondary rounded-lg p-2.5"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-        <div>
-          <p className="text-text-primary text-2xl font-semibold tabular-nums">
-            {value}
-            {total != null && (
-              <span className="text-text-tertiary text-base font-normal"> / {total}</span>
-            )}
-          </p>
-          <p className="text-text-primary text-sm">{label}</p>
-        </div>
+    <Panel className="flex items-start gap-3">
+      <ToneIcon icon={Lock} tone="teal" />
+      <div className="min-w-0 flex-1">
+        <h2 className="text-text-primary text-sm font-medium">
+          {localize('com_agency_data_title')}
+        </h2>
+        <p className="text-text-secondary text-sm">{localize('com_agency_data_help')}</p>
       </div>
-      <p className="text-text-secondary text-xs">{note}</p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          setTab('data');
+          openSettings(true);
+        }}
+      >
+        {localize('com_agency_data_open')}
+      </Button>
     </Panel>
   );
 }
 
-function Example({
-  icon,
-  title,
-  example,
-  describe,
-  emptyKey,
-}: {
-  icon: ReactNode;
-  title: string;
-  example?: TAgencyEvent;
-  describe: (example: TAgencyEvent) => string;
-  emptyKey: TranslationKeys;
-}) {
-  const localize = useLocalize();
-  const href = example?.conversationId
-    ? messageLink(example.conversationId, example.messageId)
-    : null;
-  return (
-    <li className="border-border-light flex items-center gap-4 border-t py-3 first:border-t-0">
-      <span className="bg-surface-tertiary text-text-secondary rounded-lg p-2" aria-hidden="true">
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-text-primary text-sm font-medium">{title}</p>
-        <p className="text-text-secondary truncate text-sm">
-          {example ? describe(example) : localize(emptyKey)}
-        </p>
-      </div>
-      {href != null ? (
-        <Button asChild variant="outline" size="sm">
-          <Link to={href}>{localize('com_agency_view_in_chat')}</Link>
-        </Button>
-      ) : (
-        <Button variant="outline" size="sm" disabled>
-          {localize('com_agency_view_in_chat')}
-        </Button>
-      )}
-    </li>
-  );
-}
-
 /**
- * How a learner has used the agency features: goals set, options chosen, goal checks and
- * how they were resolved, and the latest example of each to open in the chat.
+ * The learner's journey over a period: what their conversation goals were and how they
+ * changed, with links back to those moments in the chats, the topics they worked on, the kinds
+ * of help they asked for, what is worth noticing, and their long-term intentions. It shows
+ * what the AI was used for, not how much: no message totals or volume charts, which would
+ * suggest that more use is better.
  */
 export default function AgencyRecap() {
   const localize = useLocalize();
   const isSmallScreen = useDrawerViewport();
   const { data: startupConfig, isLoading: configLoading } = useGetStartupConfig();
   const enabled = startupConfig?.agency?.recap === true;
-  const recap = useAgencyRecapQuery(undefined, { enabled });
+  const [range, setRange] = useState<RecapRange>('7d');
+  const recap = useAgencyRecapQuery({ range }, { enabled });
   const viewed = useRef(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const loaded = !configLoading && enabled && !recap.isLoading;
 
   useDocumentTitle(`${localize('com_agency_recap_title')} | LibreChat`);
 
@@ -127,6 +83,13 @@ export default function AgencyRecap() {
       trackAction('agency.recap_viewed');
     }
   }, [enabled, recap.isSuccess]);
+
+  /** Opened from the sidebar, the page takes the focus, as a panel the sidebar opens does. */
+  useEffect(() => {
+    if (loaded) {
+      headingRef.current?.focus({ preventScroll: true });
+    }
+  }, [loaded]);
 
   if (configLoading || (enabled && recap.isLoading)) {
     return (
@@ -143,22 +106,59 @@ export default function AgencyRecap() {
   }
 
   const data = recap.data;
-  const { goals, options, goalChecks, examples } = data ?? ({} as Partial<TAgencyRecap>);
+  const classifierTopics = startupConfig?.agency?.classifier?.topics;
+  const classified = classifierTopics != null;
+  const series = topicSeries(classifierTopics ?? [], {
+    other: localize('com_agency_topic_other'),
+    unclassified: localize('com_agency_topic_unclassified'),
+  });
+  const goalsOn = startupConfig?.agency?.conversationGoal === true;
+  const reflectionsOn = startupConfig?.agency?.reflections === true;
 
   return (
     <div className="bg-surface-primary-alt text-text-primary h-full w-full overflow-y-auto">
-      <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6">
-        <header className="flex flex-wrap items-start justify-between gap-3">
+      <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6">
+        <header className="rounded-theme-surface border-border-light from-series-4/15 via-series-2/10 to-series-5/10 flex flex-wrap items-start justify-between gap-3 border bg-linear-to-br p-5">
           <div className="flex min-w-0 items-start gap-3">
             {isSmallScreen && <OpenSidebar />}
+            <ToneIcon icon={Sprout} tone="orange" className="rounded-xl p-2.5" size="size-6" />
             <div>
-              <h1 className="text-2xl font-semibold">{localize('com_agency_recap_title')}</h1>
+              <h1
+                ref={headingRef}
+                tabIndex={-1}
+                className="text-2xl font-semibold focus:outline-none"
+              >
+                {localize('com_agency_recap_title')}
+              </h1>
               <p className="text-text-secondary text-sm">{localize('com_agency_recap_intro')}</p>
             </div>
           </div>
-          <Button asChild variant="outline">
-            <Link to="/c/new">{localize('com_agency_return_to_chat')}</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label={localize('com_agency_range_label')}
+              className="border-border-light bg-surface-primary flex rounded-lg border p-0.5"
+            >
+              {RECAP_RANGES.map((option) => (
+                <Button
+                  key={option}
+                  type="button"
+                  size="sm"
+                  variant={range === option ? 'secondary' : 'ghost'}
+                  aria-pressed={range === option}
+                  onClick={() => {
+                    setRange(option);
+                    trackAction('agency.recap_range', { range: option });
+                  }}
+                >
+                  {localize(RANGE_KEYS[option])}
+                </Button>
+              ))}
+            </div>
+            <Button asChild variant="outline">
+              <Link to="/c/new">{localize('com_agency_return_to_chat')}</Link>
+            </Button>
+          </div>
         </header>
 
         {recap.isError || data == null ? (
@@ -169,69 +169,20 @@ export default function AgencyRecap() {
           </Panel>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Stat
-                icon={<Target className="size-5" />}
-                value={goals?.set ?? 0}
-                total={goals?.conversations ?? 0}
-                label={localize('com_agency_stat_goals')}
-                note={localize('com_agency_stat_goals_note')}
-              />
-              <Stat
-                icon={<ListChecks className="size-5" />}
-                value={options?.selected ?? 0}
-                total={options?.offered ?? 0}
-                label={localize('com_agency_stat_options')}
-                note={localize('com_agency_stat_options_note')}
-              />
-              <Stat
-                icon={<Compass className="size-5" />}
-                value={goalChecks?.offered ?? 0}
-                label={localize('com_agency_stat_checks')}
-                note={localize('com_agency_stat_checks_note', {
-                  continue: goalChecks?.continue ?? 0,
-                  refocus: goalChecks?.refocus ?? 0,
-                  changed: goalChecks?.goal_changed ?? 0,
-                })}
-              />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="flex flex-col gap-4 lg:col-span-2">
+                {goalsOn && <GoalsUsage recap={data} series={series} classified={classified} />}
+                <Journey recap={data} />
+              </div>
+              <div className="flex flex-col gap-4">
+                <Takeaways recap={data} series={series} />
+                {classified && <TopicShares recap={data} series={series} />}
+                {classified && <Support recap={data} />}
+                {reflectionsOn && <Reflections recap={data} />}
+              </div>
             </div>
 
-            <Panel>
-              <p className="text-text-secondary text-xs font-medium tracking-wide uppercase">
-                {localize('com_agency_in_context')}
-              </p>
-              <h2 className="text-text-primary mb-2 text-lg font-medium">
-                {localize('com_agency_recent_examples')}
-              </h2>
-              <ul>
-                <Example
-                  icon={<Target className="size-4" />}
-                  title={localize('com_agency_example_goal')}
-                  example={examples?.goal}
-                  describe={(example) => example.detail ?? ''}
-                  emptyKey="com_agency_example_goal_empty"
-                />
-                <Example
-                  icon={<ListChecks className="size-4" />}
-                  title={localize('com_agency_example_option')}
-                  example={examples?.option}
-                  describe={(example) => example.detail ?? ''}
-                  emptyKey="com_agency_example_option_empty"
-                />
-                <Example
-                  icon={<MessageSquareMore className="size-4" />}
-                  title={localize('com_agency_example_check')}
-                  example={examples?.goalCheck}
-                  describe={(example) =>
-                    example.detail != null && example.detail in OUTCOME_KEYS
-                      ? localize(OUTCOME_KEYS[example.detail as GoalCheckOutcome])
-                      : ''
-                  }
-                  emptyKey="com_agency_example_check_empty"
-                />
-              </ul>
-            </Panel>
-
+            <YourData />
           </>
         )}
       </div>

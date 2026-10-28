@@ -23,6 +23,7 @@ export const UI_ACTIONS = [
   'agency.intentions_updated',
   'agency.recap_viewed',
   'agency.reflection_saved',
+  'agency.recap_range',
 ] as const;
 
 export type UiAction = (typeof UI_ACTIONS)[number];

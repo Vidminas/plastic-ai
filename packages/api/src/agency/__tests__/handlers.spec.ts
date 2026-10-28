@@ -24,7 +24,7 @@ const makeDeps = () => ({
   setAgencyIntentions: jest.fn().mockImplementation(async (_u, update) => update),
   getConversationGoal: jest.fn().mockResolvedValue({ text: 'g' }),
   setConversationGoal: jest.fn().mockImplementation(async (_u, _c, text) => ({ text })),
-  getAgencyRecap: jest.fn().mockResolvedValue({ goals: { set: 0, conversations: 0 } }),
+  getAgencyRecap: jest.fn().mockResolvedValue({ chats: 0 }),
   getConvo: jest.fn().mockResolvedValue({ conversationId: 'c1' }),
   listAgencyReflections: jest.fn().mockResolvedValue([]),
   createAgencyReflection: jest.fn().mockImplementation(async (_u, answers) => ({
@@ -235,10 +235,11 @@ describe('createAgencyHandlers', () => {
       userId: 'u1',
       conversationId: 'c1',
       type: 'goal_updated',
+      detail: 'new goal',
     });
   });
 
-  it('saves the same goal again without recording a change or a relabel', async () => {
+  it('saves the same goal again without a journey step or a relabel', async () => {
     const deps = makeDeps();
     deps.getConversationGoal.mockResolvedValue({ text: 'same goal' });
     const res = makeRes();
@@ -399,6 +400,22 @@ describe('createAgencyHandlers', () => {
       );
       expect(bad.statusCode).toBe(400);
     });
+  });
+
+  it('passes the range to the recap, refusing an unknown range', async () => {
+    const deps = makeDeps();
+    const handlers = createAgencyHandlers(deps);
+    await handlers.getRecap(
+      makeReq({
+        query: { range: '30d' },
+      }) as never,
+      makeRes() as never,
+    );
+    expect(deps.getAgencyRecap).toHaveBeenCalledWith('u1', { range: '30d' });
+
+    const bad = makeRes();
+    await handlers.getRecap(makeReq({ query: { range: '1y' } }) as never, bad as never);
+    expect(bad.statusCode).toBe(400);
   });
 });
 
