@@ -586,6 +586,15 @@ describe('interfaceSchema.hiddenParameterSections', () => {
   });
 });
 
+describe('interfaceSchema.hiddenParameters', () => {
+  it('takes parameter keys, and is unset by default', () => {
+    expect(interfaceSchema.parse({ hiddenParameters: ['promptPrefix', 'system'] })).toMatchObject({
+      hiddenParameters: ['promptPrefix', 'system'],
+    });
+    expect(interfaceSchema.parse({}).hiddenParameters).toBeUndefined();
+  });
+});
+
 describe('bedrockEndpointSchema', () => {
   it('takes a retry attempt count from 1 to 10', () => {
     const parse = (retry: unknown) =>

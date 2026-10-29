@@ -143,6 +143,22 @@ describe('prompt template', () => {
     expect(systemPrompt?.closest('div.col-span-2')?.nextElementSibling).toBe(template);
   });
 
+  it.each([
+    ['global.anthropic.claude-opus-5', 'system'],
+    ['amazon.nova-lite-v1:0', 'promptPrefix'],
+  ])('stays in identity when %s hides its %s field', async (model, key) => {
+    setup(EModelEndpoint.bedrock, model, {
+      interface: {
+        parameters: true,
+        hiddenParameters: ['promptPrefix', 'system'],
+      } as TStartupConfig['interface'],
+      agency: { conversationGoal: true } as TStartupConfig['agency'],
+    });
+    const template = await screen.findByTestId('prompt-template');
+    expect(document.getElementById(`${key}-dynamic-textarea`)).toBeNull();
+    expect(template.closest('section')).toBe(screen.getByRole('region', { name: 'Identity' }));
+  });
+
   it('is not shown without conversation goals, or with identity hidden', async () => {
     setup(EModelEndpoint.bedrock, 'global.anthropic.claude-opus-5', {
       interface: {

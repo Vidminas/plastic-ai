@@ -177,6 +177,7 @@ export default function Parameters() {
    *  and a control left with nothing to render is dropped there too: a section is
    *  built only from controls that show something. */
   const hiddenSections = startupConfig?.interface?.hiddenParameterSections;
+  const hiddenParameters = startupConfig?.interface?.hiddenParameters;
   const sections = useMemo(
     () =>
       withoutHiddenSections(
@@ -188,12 +189,15 @@ export default function Parameters() {
                 : setting,
             )
             .filter(
-              (setting) => componentMapping[setting.component] != null && hasControl(setting),
+              (setting) =>
+                componentMapping[setting.component] != null &&
+                hasControl(setting) &&
+                hiddenParameters?.includes(setting.key) !== true,
             ),
         ),
         hiddenSections,
       ),
-    [visibleParameters, bedrockRegions, hiddenSections],
+    [visibleParameters, bedrockRegions, hiddenSections, hiddenParameters],
   );
 
   const openDialog = useCallback(() => {
@@ -208,10 +212,13 @@ export default function Parameters() {
   const showsPromptTemplate =
     startupConfig?.agency?.conversationGoal === true &&
     hiddenSections?.includes('identity') !== true;
-  /** The system prompt field it sits under, when this model has one. */
-  const promptTemplateAfter = sections
-    .flatMap((section) => section.settings.map(({ key }) => key))
-    .find((key) => key === 'promptPrefix' || key === 'system');
+  /** The system prompt field it sits under, when this model shows one, or else the end of
+   *  the identity section. */
+  const promptTemplateAfter =
+    sections
+      .flatMap((section) => section.settings.map(({ key }) => key))
+      .find((key) => key === 'promptPrefix' || key === 'system') ??
+    sections.find((section) => section.id === 'identity')?.settings.at(-1)?.key;
 
   if (!parameters) {
     return null;
@@ -294,8 +301,8 @@ export default function Parameters() {
           </section>
         );
       })}
-      {/* The prompt template applies to every chat, so a model without a system prompt
-          field still shows it, after its parameters. */}
+      {/* The prompt template applies to every chat, so a model with neither a system prompt
+          field nor an identity section still shows it, after its parameters. */}
       {showsPromptTemplate && promptTemplateAfter == null && (
         <div className="grid grid-cols-2 pt-4">
           <AgencyPrompt />

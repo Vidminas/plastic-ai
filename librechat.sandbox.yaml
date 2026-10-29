@@ -48,6 +48,9 @@ interface:
   parameters: true
   # Participants keep the token and context limits the deployment sets.
   hiddenParameterSections: ['limits']
+  # Participants can't write their own custom instructions (system prompt):
+  # the hidden instructions are where they change what the model is told.
+  hiddenParameters: ['promptPrefix', 'system']
   # Reasoning is set in the Parameters panel only, not from the composer.
   composerReasoning: false
   # A "Show what was sent" action on each message a participant sends: everything

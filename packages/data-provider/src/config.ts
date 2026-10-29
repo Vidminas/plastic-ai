@@ -2723,6 +2723,12 @@ export const interfaceSchema = z
      * the model spec's preset) for those parameters. Unset, every section shows.
      */
     hiddenParameterSections: z.array(z.enum(PARAMETER_SECTIONS)).optional(),
+    /**
+     * Single parameters to leave out of the Parameters panel, by key (`promptPrefix`, `system`,
+     * `temperature`, ...), for when the rest of their section should stay. Users then keep the
+     * defaults (or the model spec's preset) for them. Unset, every parameter shows.
+     */
+    hiddenParameters: z.array(z.string().min(1)).optional(),
     /** The reasoning control in the composer footer. Enabled by default; when off, reasoning
      * is set only in the Parameters panel. */
     composerReasoning: z.boolean().optional(),

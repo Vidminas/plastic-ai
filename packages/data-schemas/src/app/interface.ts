@@ -38,6 +38,7 @@ export async function loadDefaultInterface({
     agentSelectorLimit: interfaceConfig?.agentSelectorLimit ?? defaults.agentSelectorLimit,
     parameters: interfaceConfig?.parameters ?? (hasModelSpecs ? false : defaults.parameters),
     hiddenParameterSections: interfaceConfig?.hiddenParameterSections,
+    hiddenParameters: interfaceConfig?.hiddenParameters,
     presets: interfaceConfig?.presets ?? (hasModelSpecs ? false : defaults.presets),
     privacyPolicy: interfaceConfig?.privacyPolicy ?? defaults.privacyPolicy,
     termsOfService: interfaceConfig?.termsOfService ?? defaults.termsOfService,
