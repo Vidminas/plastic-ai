@@ -14,6 +14,7 @@ import {
   resolveDropParamsUIKeys,
 } from 'librechat-data-provider';
 import type { TPreset } from 'librechat-data-provider';
+import type { ParameterSection } from './groups';
 import {
   hasControl,
   countModified,
@@ -212,13 +213,17 @@ export default function Parameters() {
   const showsPromptTemplate =
     startupConfig?.agency?.conversationGoal === true &&
     hiddenSections?.includes('identity') !== true;
-  /** The system prompt field it sits under, when this model shows one, or else the end of
-   *  the identity section. */
-  const promptTemplateAfter =
-    sections
-      .flatMap((section) => section.settings.map(({ key }) => key))
-      .find((key) => key === 'promptPrefix' || key === 'system') ??
-    sections.find((section) => section.id === 'identity')?.settings.at(-1)?.key;
+  /** The system prompt field it sits under, when this model shows one; else it ends the
+   *  identity section. */
+  const promptTemplateAfter = sections
+    .flatMap((section) => section.settings.map(({ key }) => key))
+    .find((key) => key === 'promptPrefix' || key === 'system');
+  /** The prompt template applies to every chat, so it keeps an identity section even when
+   *  this model has no identity fields, or the deployment hides them all. */
+  const shownSections: ParameterSection[] =
+    showsPromptTemplate && !sections.some((section) => section.id === 'identity')
+      ? [{ id: 'identity', label: 'com_ui_params_identity', settings: [] }, ...sections]
+      : sections;
 
   if (!parameters) {
     return null;
@@ -230,7 +235,7 @@ export default function Parameters() {
           trade the one thing a settings panel is for, seeing the current state at a
           glance, for vertical space that pairing and quieter headings give back
           anyway. */}
-      {sections.map((section) => {
+      {shownSections.map((section) => {
         const changed = countModified(section.settings, conversation);
         const headingId = `${panelId}-${section.id}`;
 
@@ -297,17 +302,13 @@ export default function Parameters() {
                   </React.Fragment>
                 );
               })}
+              {showsPromptTemplate && section.id === 'identity' && promptTemplateAfter == null && (
+                <AgencyPrompt />
+              )}
             </div>
           </section>
         );
       })}
-      {/* The prompt template applies to every chat, so a model with neither a system prompt
-          field nor an identity section still shows it, after its parameters. */}
-      {showsPromptTemplate && promptTemplateAfter == null && (
-        <div className="grid grid-cols-2 pt-4">
-          <AgencyPrompt />
-        </div>
-      )}
       {/* The two share a row while their labels fit, stack when a translation is too
           long for the panel, and a label longer than the panel itself wraps. */}
       <div className="mt-5 flex flex-wrap gap-2">
