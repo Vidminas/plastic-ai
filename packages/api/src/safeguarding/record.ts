@@ -5,7 +5,7 @@ import type { SafeguardingAlertPublisher, SafeguardingParticipant } from './aler
 import type { SafeguardingAssessment, SafeguardingSource } from './assess';
 import type { SafeguardingSink } from './sink';
 import { createSnsAlertPublisher, formatSafeguardingAlert, getSnsClient } from './alert';
-import { getDefaultSafeguardingSink } from './sink';
+import { getDefaultSafeguardingSink, recordProcessing } from './sink';
 
 /** Where screened content was, for the log and the alert; IDs only. */
 export interface SafeguardingEvent {
@@ -30,14 +30,16 @@ export const describeFilters = (assessment: SafeguardingAssessment): string =>
 /**
  * Records every flagged or blocked detection: a `[safeguarding]` log line with the filters
  * and IDs, never the content; a record in `sink`, which the study keeps; and, for blocked
- * content, an alert through `alerts`.
+ * content, an alert through `alerts`, naming the app as `app`.
  */
 export function createSafeguardingReporter({
   alerts,
   sink,
+  app,
 }: {
   alerts?: SafeguardingAlertPublisher;
   sink?: SafeguardingSink;
+  app?: string;
 }): SafeguardingReporter {
   return {
     async report(assessment, event) {
@@ -79,11 +81,28 @@ export function createSafeguardingReporter({
           participant,
           source: event.source,
           detections: assessment.detections,
+          app,
         });
+        const attributes = { ...ids, userId: participant.userId };
+        const startedAt = Date.now();
         tasks.push(
-          alerts.publish(alert).catch((error: unknown) => {
-            logger.error('[safeguarding] Could not send an alert', { ...ids, error });
-          }),
+          alerts
+            .publish(alert)
+            .then(() => {
+              recordProcessing('safeguarding_alert', {
+                ...attributes,
+                outcome: 'sent',
+                durationMs: Date.now() - startedAt,
+              });
+            })
+            .catch((error: unknown) => {
+              recordProcessing('safeguarding_alert', {
+                ...attributes,
+                outcome: 'error',
+                durationMs: Date.now() - startedAt,
+              });
+              logger.error('[safeguarding] Could not send an alert', { ...ids, error });
+            }),
         );
       }
       await Promise.all(tasks);
@@ -97,6 +116,7 @@ const reporters = new WeakMap<TSafeguarding, SafeguardingReporter>();
  * The reporter for `config`, shared by every request with the same config: alerts go to
  * `alerts.topicArn` (`${ENV}` resolved) through SNS in `AWS_REGION`, and records to the
  * collector when the browser telemetry proxy is configured (`getDefaultSafeguardingSink`).
+ * Alerts name the app by `APP_TITLE`.
  */
 export function getSafeguardingReporter(
   config: TSafeguarding,
@@ -115,6 +135,7 @@ export function getSafeguardingReporter(
       ? createSnsAlertPublisher({ client: getSnsClient(env.AWS_REGION), topicArn })
       : undefined,
     sink: getDefaultSafeguardingSink(env),
+    app: env.APP_TITLE?.trim() || undefined,
   });
   reporters.set(config, reporter);
   return reporter;

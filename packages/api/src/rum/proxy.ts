@@ -4,7 +4,8 @@ import { RUM_COLLECTOR_ACK_HEADER } from 'librechat-data-provider';
 import type { Request, Response, RequestHandler } from 'express';
 import type { RumProxyEndpoint, RumProxyResult } from '~/app/metrics';
 import { recordRumProxyRequest } from '~/app/metrics';
-import { isEnabled } from '~/utils';
+// import { isEnabled } from '~/utils';
+import { isEnabled } from '~/utils/common';
 
 const DEFAULT_PROXY_PATH = '/api/rum';
 const DEFAULT_BODY_LIMIT = '3mb';

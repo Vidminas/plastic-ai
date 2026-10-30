@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { ApplyGuardrailCommand } from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { AppConfig } from '@librechat/data-schemas';
+import { recordProcessing } from '~/safeguarding/sink';
 import { getGuardrailTarget } from './runtime';
 import { chunkText } from './chunk';
 
@@ -60,13 +61,32 @@ export function createGuardrailTextMasker({
     return outputs.map((output) => output.text ?? '').join('');
   };
 
-  /** Text over one request's limit is masked a piece at a time, split at whitespace. */
+  /**
+   * Text over one request's limit is masked a piece at a time, split at whitespace. Recorded here
+   * so that only real calls count, not the many answers from the cache. The masker serves every
+   * request, so a record names no user.
+   */
   const apply = async (text: string): Promise<string> => {
+    const startedAt = Date.now();
+    const record = (outcome: string, calls: number) =>
+      recordProcessing('pii_mask', {
+        outcome,
+        calls,
+        chars: text.length,
+        durationMs: Date.now() - startedAt,
+      });
     const masked: string[] = [];
-    for (const chunk of chunkText(text)) {
-      masked.push(await applyToChunk(chunk));
+    try {
+      for (const chunk of chunkText(text)) {
+        masked.push(await applyToChunk(chunk));
+      }
+    } catch (error) {
+      record('error', masked.length + 1);
+      throw error;
     }
-    return masked.join('');
+    const result = masked.join('');
+    record(result === text ? 'unchanged' : 'masked', masked.length);
+    return result;
   };
 
   return async (text) => {

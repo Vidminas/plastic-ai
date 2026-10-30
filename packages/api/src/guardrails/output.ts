@@ -1,4 +1,5 @@
 import { logger } from '@librechat/data-schemas';
+import { recordProcessing } from '~/safeguarding/sink';
 
 type Detection = { type?: string; name?: string; detected?: boolean };
 
@@ -63,6 +64,11 @@ export function reportGuardrailOutputDetections(
   if (responseMetadata.metadata != null) {
     delete responseMetadata.metadata.trace;
   }
+  recordProcessing('output_guardrail', {
+    ...ids,
+    outcome: identifiers.length > 0 ? 'identifiers' : 'clean',
+    identifiers: identifiers.join(','),
+  });
   if (identifiers.length > 0) {
     logger.warn('[piiMasking] A model response contains personal identifiers', {
       ...ids,

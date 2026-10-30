@@ -1,5 +1,7 @@
 import { randomBytes } from 'crypto';
+import { logger } from '@librechat/data-schemas';
 import { isRumProxyEnabled, resolveRumProxyTarget } from '~/rum/proxy';
+import { getSafeErrorMetadata } from '~/utils/errors';
 
 /** A detection as the study keeps it: IDs and filters, never the content. */
 export interface SafeguardingRecord {
@@ -154,6 +156,33 @@ export function getDefaultOtlpSpanSender(
     target,
     authorization: env.RUM_PROXY_AUTHORIZATION?.trim() || undefined,
     serviceName: `${env.RUM_SERVICE_NAME?.trim() || 'librechat'}-api`,
+  });
+}
+
+/**
+ * Records a call that processed user input as a `processing.*` span, in the background, when the
+ * browser telemetry proxy is configured: what happened and how long it took, never the content.
+ * Numbers are sent as text, as every span attribute here is. A failure is only logged.
+ */
+export function recordProcessing(
+  operation: string,
+  attributes: Readonly<Record<string, string | number | undefined>>,
+  send: SendOtlpSpan | undefined = getDefaultOtlpSpanSender(),
+): void {
+  send?.({
+    name: `processing.${operation}`,
+    scope: 'processing',
+    attributes: Object.fromEntries(
+      Object.entries(attributes).map(([key, value]) => [
+        key,
+        typeof value === 'number' ? String(value) : value,
+      ]),
+    ),
+  }).catch((error: unknown) => {
+    logger.warn('[processing] Could not send a span', {
+      operation,
+      ...getSafeErrorMetadata(error),
+    });
   });
 }
 

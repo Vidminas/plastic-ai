@@ -436,6 +436,31 @@
         "whereLanguage": "sql",
         "groupBy": "Event, LogAttributes['label']"
       }
+    },
+    {
+      "id": "processing",
+      "x": 0,
+      "y": 112,
+      "w": 24,
+      "h": 8,
+      "config": {
+        "name": "Screening, masking and alerts",
+        "source": "Usage timeline",
+        "displayType": "table",
+        "select": [
+          { "aggFn": "count", "valueExpression": "", "aggCondition": "", "alias": "Events" },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "DurationMs",
+            "aggCondition": "",
+            "alias": "p95 (ms)"
+          }
+        ],
+        "where": "Event LIKE 'processing.%'",
+        "whereLanguage": "sql",
+        "groupBy": "Event, LogAttributes['outcome']"
+      }
     }
   ]
 }
