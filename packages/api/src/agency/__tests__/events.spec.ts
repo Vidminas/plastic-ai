@@ -4,6 +4,7 @@ import {
   pendingAskOf,
   createAgencyAnswerRecorder,
   createAgencyEventRecorder,
+  withClassifierSpans,
 } from '../events';
 
 const options = [
@@ -101,5 +102,55 @@ describe('createAgencyAnswerRecorder', () => {
     await middleware(req as never, res as never, jest.fn());
     res.emit('finish');
     expect(record.event).not.toHaveBeenCalled();
+  });
+});
+
+describe('withClassifierSpans', () => {
+  const classified = {
+    userId: 'u1',
+    conversationId: 'c1',
+    messageId: 'm1',
+    type: 'signal_classified' as const,
+    detail: 'reject',
+    classifierVersion: 'abc',
+  };
+
+  it('sends what the classifier records, by id and label, as well as recording it', () => {
+    const event = jest.fn();
+    const send = jest.fn().mockResolvedValue(undefined);
+    withClassifierSpans({ event }, send).event(classified);
+    expect(event).toHaveBeenCalledWith(classified);
+    expect(send).toHaveBeenCalledWith({
+      name: 'agency.signal_classified',
+      scope: 'agency',
+      attributes: {
+        userId: 'u1',
+        conversationId: 'c1',
+        messageId: 'm1',
+        label: 'reject',
+        classifierVersion: 'abc',
+      },
+    });
+  });
+
+  it('leaves other events to the recorder', () => {
+    const send = jest.fn().mockResolvedValue(undefined);
+    withClassifierSpans({ event: jest.fn() }, send).event({
+      userId: 'u1',
+      type: 'goal_set',
+      detail: 'A goal in the learner words',
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('still records when the collector fails, or is not configured', async () => {
+    const event = jest.fn();
+    withClassifierSpans({ event }, jest.fn().mockRejectedValue(new Error('down'))).event(
+      classified,
+    );
+    await new Promise(setImmediate);
+    expect(event).toHaveBeenCalledTimes(1);
+    const recorder = { event };
+    expect(withClassifierSpans(recorder, undefined)).toBe(recorder);
   });
 });

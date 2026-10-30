@@ -1,4 +1,11 @@
+import path from 'path';
+import { createRequire } from 'module';
+import { context } from '@opentelemetry/api';
 import { initializeModel } from '@librechat/agents';
+import { FakeListChatModel } from '@langchain/core/utils/testing';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { getLangfuseTracerProvider, setLangfuseTracerProvider } from '@langfuse/tracing';
+import { BasicTracerProvider, InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
 import type { Request } from 'express';
 import { createAgencyClassifierInvoker } from '../classifyHost';
 
@@ -108,6 +115,74 @@ describe('createAgencyClassifierInvoker', () => {
         additionalModelRequestFields: expect.objectContaining({ thinking: { type: 'disabled' } }),
       }),
     ]);
+  });
+
+  describe('tracing', () => {
+    const invokeConfig = async () => {
+      await optionsFor('amazon.nova-lite-v1:0');
+      return invokeModel.mock.calls[0][1];
+    };
+
+    it('traces it in Langfuse as a named trace, with its user and conversation on every span', async () => {
+      process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+      process.env.LANGFUSE_SECRET_KEY = 'sk';
+      /** Langfuse's span processor, as @librechat/agents makes it: it is what copies the trace's
+       *  user, conversation and name onto each span. */
+      const entry = require.resolve('@librechat/agents');
+      const dist = entry.slice(0, entry.lastIndexOf(`${path.sep}dist${path.sep}`) + 5);
+      const { createLangfuseSpanProcessor } = createRequire(entry)(
+        path.join(dist, 'cjs', 'langfuseToolOutputTracing.cjs'),
+      );
+      const exporter = new InMemorySpanExporter();
+      const processor = createLangfuseSpanProcessor({
+        publicKey: 'pk',
+        secretKey: 'sk',
+        baseUrl: 'https://langfuse.test',
+        exporter,
+        shouldExportSpan: () => true,
+      });
+      const provider = new BasicTracerProvider({ spanProcessors: [processor] });
+      const previous = getLangfuseTracerProvider();
+      setLangfuseTracerProvider(provider);
+      /** The app has one from @librechat/agents, which registers it when Langfuse is set up. */
+      const contextManager = new AsyncLocalStorageContextManager().enable();
+      context.setGlobalContextManager(contextManager);
+      (initializeModel as jest.Mock).mockReturnValue(
+        new FakeListChatModel({ responses: ['{"support":"hint"}'] }),
+      );
+      try {
+        await optionsFor('amazon.nova-lite-v1:0');
+        await provider.forceFlush();
+      } finally {
+        setLangfuseTracerProvider(previous);
+        context.disable();
+      }
+
+      const spans = exporter.getFinishedSpans();
+      const root = spans.find((span) => span.parentSpanContext == null);
+      expect(root?.name).toBe('agency-classifier');
+      expect(spans).toHaveLength(2);
+      for (const span of spans) {
+        expect(span.attributes).toMatchObject({
+          'user.id': 'user-1',
+          'session.id': 'convo-1',
+          'langfuse.trace.name': 'agency-classifier',
+        });
+      }
+    });
+
+    it('does not trace without Langfuse credentials', async () => {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+      expect((await invokeConfig()).callbacks).toBeUndefined();
+    });
+
+    it('does not trace with tracing turned off', async () => {
+      process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+      process.env.LANGFUSE_SECRET_KEY = 'sk';
+      process.env.LANGFUSE_TRACING_ENABLED = 'false';
+      expect((await invokeConfig()).callbacks).toBeUndefined();
+    });
   });
 
   it('sends a model without thinking no request fields', async () => {

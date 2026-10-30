@@ -2,6 +2,8 @@ import { logger } from '@librechat/data-schemas';
 import { AGENCY_QUESTION_IDS, isGoalCheckOutcome } from 'librechat-data-provider';
 import type { AgencyEventType, TAgencyConfig } from 'librechat-data-provider';
 import type { NextFunction, Request, Response } from 'express';
+import type { SendOtlpSpan } from '~/safeguarding/sink';
+import { getDefaultOtlpSpanSender } from '~/safeguarding/sink';
 import { getSafeErrorMetadata } from '~/utils/errors';
 
 export interface AgencyEventInput {
@@ -31,6 +33,44 @@ export function createAgencyEventRecorder({
           eventType: input.type,
           ...getSafeErrorMetadata(error),
         });
+      });
+    },
+  };
+}
+
+/** What the classifier records, which the analytics store keeps as `agency.*` spans too. */
+const CLASSIFIER_EVENTS: ReadonlySet<AgencyEventType> = new Set<AgencyEventType>([
+  'support_classified',
+  'topic_classified',
+  'signal_classified',
+  'signals_checked',
+]);
+
+/**
+ * Also sends the classifier's events to the OpenTelemetry collector, for HyperDX, when the browser
+ * telemetry proxy is configured. They hold IDs and labels only. A failure is logged and goes no
+ * further: the event is still recorded.
+ */
+export function withClassifierSpans(
+  recorder: AgencyEventRecorder,
+  send: SendOtlpSpan | undefined = getDefaultOtlpSpanSender(),
+): AgencyEventRecorder {
+  if (send == null) {
+    return recorder;
+  }
+  return {
+    event(input) {
+      recorder.event(input);
+      if (!CLASSIFIER_EVENTS.has(input.type)) {
+        return;
+      }
+      const { userId, conversationId, messageId, detail, classifierVersion } = input;
+      send({
+        name: `agency.${input.type}`,
+        scope: 'agency',
+        attributes: { userId, conversationId, messageId, label: detail, classifierVersion },
+      }).catch((error: unknown) => {
+        logger.warn('[agency] Could not send a classifier span', getSafeErrorMetadata(error));
       });
     },
   };

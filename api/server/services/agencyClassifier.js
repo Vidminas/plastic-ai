@@ -1,5 +1,6 @@
 const {
   createAgencyClassifier,
+  withClassifierSpans,
   createAgencyEventRecorder,
   createAgencyClassifierInvoker,
 } = require('@librechat/api');
@@ -22,7 +23,9 @@ const getAgencyClassifier = () =>
         bulkWriteOps: { insertMany: db.bulkInsertTransactions, updateBalance: db.updateBalance },
       },
     }),
-    record: createAgencyEventRecorder({ recordAgencyEvent: db.recordAgencyEvent }),
+    record: withClassifierSpans(
+      createAgencyEventRecorder({ recordAgencyEvent: db.recordAgencyEvent }),
+    ),
     getConversationGoal: db.getConversationGoal,
     getMessages: db.getMessages,
   }));

@@ -113,6 +113,8 @@ AS SELECT
     SpanAttributes['filters'] AS filters,
     SpanAttributes['studyId'] AS study_id,
     SpanAttributes['messageId'] AS message_id,
+    SpanAttributes['label'] AS label,
+    SpanAttributes['classifierVersion'] AS classifier_version,
     ServiceName AS service
 FROM analytics.ui_events_store FINAL;
 
@@ -297,7 +299,7 @@ AS SELECT
         'questions', questions, 'declined', declined, 'stage', stage, 'reason', reason,
         'identifiers', identifiers, 'status', status, 'client_build', client_build,
         'severity', severity, 'source', source, 'filters', filters, 'study_id', study_id,
-        'message_id', message_id
+        'message_id', message_id, 'label', label, 'classifier_version', classifier_version
     )) AS LogAttributes
 FROM analytics.ui_events
 UNION ALL
