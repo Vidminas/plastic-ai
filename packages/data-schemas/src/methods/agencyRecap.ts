@@ -25,9 +25,11 @@ export function recapSince(range: RecapRange, now: Date): Date | undefined {
   return range === 'all' ? undefined : new Date(now.getTime() - RECAP_RANGE_DAYS[range] * DAY_MS);
 }
 
-export interface RecapLabel {
+/** How many of a chat's messages asked for one kind of support in the period. */
+export interface RecapSupportCount {
   conversationId?: string;
   detail?: string;
+  messages: number;
 }
 
 export interface RecapUsageInput {
@@ -40,8 +42,8 @@ export interface RecapUsageInput {
   goals: ReadonlyMap<string, string>;
   /** Conversation id to its latest topic label. */
   topics: ReadonlyMap<string, string>;
-  /** `support_classified` labels in the period. */
-  support: readonly RecapLabel[];
+  /** Labelled messages in the period, by chat and kind of support. */
+  support: readonly RecapSupportCount[];
 }
 
 export type RecapUsage = Pick<
@@ -52,8 +54,8 @@ export type RecapUsage = Pick<
 const isSupportType = (value: string | undefined): value is AgencySupportType =>
   (AGENCY_SUPPORT_TYPES as readonly string[]).includes(value ?? '');
 
-const increment = <K extends string>(counts: Partial<Record<K, number>>, key: K): void => {
-  counts[key] = (counts[key] ?? 0) + 1;
+const increment = <K extends string>(counts: Partial<Record<K, number>>, key: K, by = 1): void => {
+  counts[key] = (counts[key] ?? 0) + by;
 };
 
 const byCount = <T>(counts: Map<string, T>, size: (value: T) => number) =>
@@ -92,13 +94,13 @@ export function computeRecapUsage({
   }
 
   const overall: TAgencyRecap['support'] = {};
-  for (const label of support) {
-    const type = isSupportType(label.detail) ? label.detail : 'other';
-    increment(overall, type);
-    const goal = label.conversationId != null ? goals.get(label.conversationId) : undefined;
+  for (const { conversationId, detail, messages } of support) {
+    const type = isSupportType(detail) ? detail : 'other';
+    increment(overall, type, messages);
+    const goal = conversationId != null ? goals.get(conversationId) : undefined;
     const group = goal != null ? groups.get(goal) : undefined;
     if (group != null) {
-      increment(group.support, type);
+      increment(group.support, type, messages);
     }
   }
 

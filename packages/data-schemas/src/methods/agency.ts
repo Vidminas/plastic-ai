@@ -16,7 +16,7 @@ import type {
   IAgencyReflection,
   RecordAgencyEventParams,
 } from '~/types/agency';
-import type { RecapJourneyEvent, RecapLabel } from './agencyRecap';
+import type { RecapJourneyEvent } from './agencyRecap';
 import { buildRecapJourney, computeRecapUsage, recapSince } from './agencyRecap';
 
 type UserId = string | Types.ObjectId;
@@ -245,43 +245,58 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
     const sinceFilter = since != null ? { createdAt: { $gte: since } } : {};
     const events = eventModel();
 
-    /** Run once and shared: the topic read waits on it, and a query re-runs on every `then`. */
-    const chats = mongoose.models.Message.distinct('conversationId', {
-      user: String(userId),
-      isCreatedByUser: true,
-      isTemporary: { $ne: true },
-      ...(conversationId != null ? { conversationId } : {}),
-      ...sinceFilter,
-    }).exec() as Promise<string[]>;
+    /** Aggregations do not cast their filters as `find` does. */
+    const eventOwner = { userId: new Types.ObjectId(String(userId)) };
 
     const [
       conversations,
       conversationGoals,
-      topicEvents,
-      supportEvents,
+      topicLabels,
+      supportCounts,
       journeyEvents,
       reflections,
       reflectionCount,
     ] = await Promise.all([
-      chats,
+      mongoose.models.Message.distinct('conversationId', {
+        user: String(userId),
+        isCreatedByUser: true,
+        isTemporary: { $ne: true },
+        ...(conversationId != null ? { conversationId } : {}),
+        ...sinceFilter,
+      }).exec() as Promise<string[]>,
       goalModel()
         .find(scope)
         .select('conversationId text suggestionId setAt')
         .lean<IAgencyGoal[]>(),
-      /** Only the period's chats need a topic, and a label from before the period still counts. */
-      chats.then((ids) =>
-        ids.length > 0
-          ? events
-              .find({ userId, type: 'topic_classified', conversationId: { $in: ids } })
-              .sort({ createdAt: 1 })
-              .select('conversationId detail')
-              .lean<RecapLabel[]>()
-          : [],
-      ),
-      events
-        .find({ ...scope, type: 'support_classified', ...sinceFilter })
-        .select('conversationId detail')
-        .lean<RecapLabel[]>(),
+      /** Each chat's latest topic: a label from before the period still counts. */
+      events.aggregate<{ _id: string; topic: string }>([
+        {
+          $match: {
+            ...eventOwner,
+            conversationId: conversationId ?? { $type: 'string' },
+            type: 'topic_classified',
+            detail: { $type: 'string' },
+          },
+        },
+        { $sort: { createdAt: 1 } },
+        { $group: { _id: '$conversationId', topic: { $last: '$detail' } } },
+      ]),
+      events.aggregate<{ _id: { conversationId?: string; detail?: string }; messages: number }>([
+        {
+          $match: {
+            ...eventOwner,
+            ...(conversationId != null ? { conversationId } : {}),
+            type: 'support_classified',
+            ...sinceFilter,
+          },
+        },
+        {
+          $group: {
+            _id: { conversationId: '$conversationId', detail: '$detail' },
+            messages: { $sum: 1 },
+          },
+        },
+      ]),
       events
         .find({ ...scope, ...JOURNEY_FILTER, ...sinceFilter })
         .sort({ createdAt: -1 })
@@ -301,14 +316,6 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
         : Promise.resolve(0),
     ]);
 
-    /** Sorted oldest first, so the latest label of each conversation wins. */
-    const topics = new Map<string, string>();
-    for (const label of topicEvents) {
-      if (label.conversationId != null && label.detail != null) {
-        topics.set(label.conversationId, label.detail);
-      }
-    }
-
     return {
       ...computeRecapUsage({
         conversations,
@@ -317,8 +324,8 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
             (goal) => [goal.conversationId, goal.suggestionId ?? AGENCY_OWN_GOAL] as const,
           ),
         ),
-        topics,
-        support: supportEvents,
+        topics: new Map(topicLabels.map(({ _id, topic }) => [_id, topic])),
+        support: supportCounts.map(({ _id, messages }) => ({ ..._id, messages })),
       }),
       journey: buildRecapJourney(
         journeyEvents,
