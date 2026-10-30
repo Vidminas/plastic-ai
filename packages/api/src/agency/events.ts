@@ -10,6 +10,8 @@ export interface AgencyEventInput {
   conversationId?: string;
   messageId?: string;
   detail?: string;
+  /** For signs of agency: identifies the model, question and definitions that marked them. */
+  classifierVersion?: string;
 }
 
 /** Records engagement in the background; a failure is logged and never reaches the caller. */

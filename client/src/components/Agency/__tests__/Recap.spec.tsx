@@ -8,7 +8,12 @@ const mockRecordEvent = jest.fn();
 const mockRecapQuery = jest.fn();
 let mockRecap: { data?: TAgencyRecap; isLoading: boolean; isError: boolean; isSuccess: boolean };
 let mockRecapEnabled = true;
-let mockClassifier: { topics: Array<{ id: string; label: string }> } | undefined;
+let mockClassifier:
+  | {
+      topics: Array<{ id: string; label: string }>;
+      signals: Array<{ id: string; label: string }>;
+    }
+  | undefined;
 
 jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string, vars?: Record<string, unknown>) =>
@@ -46,6 +51,11 @@ jest.mock('~/data-provider', () => ({
   useCreateAgencyReflectionMutation: () => ({ mutate: jest.fn(), isLoading: false }),
 }));
 
+const signals = [
+  { id: 'redirect', label: 'Went own way' },
+  { id: 'negotiate', label: 'Negotiated' },
+];
+
 const recap: TAgencyRecap = {
   chats: 4,
   topics: [
@@ -54,9 +64,27 @@ const recap: TAgencyRecap = {
     { id: 'unclassified', chats: 1 },
   ],
   support: { hint: 3, explanation: 1, other: 1 },
+  signals: {
+    counts: { negotiate: 1, redirect: 2, retired: 9 },
+    recent: [
+      {
+        signals: ['redirect', 'negotiate', 'retired'],
+        at: '2026-10-14T10:00:00.000Z',
+        conversationId: 'c1',
+        messageId: 'm1',
+        excerpt: 'No, let me try it my way first',
+      },
+    ],
+  },
   goalUsage: [
-    { goal: 'exams', conversations: 2, support: { hint: 3 }, topics: { maths: 2 } },
-    { goal: 'own', conversations: 1, support: {}, topics: { retired: 1 } },
+    {
+      goal: 'exams',
+      conversations: 2,
+      support: { hint: 3 },
+      signals: { redirect: 2, retired: 9 },
+      topics: { maths: 2 },
+    },
+    { goal: 'own', conversations: 1, support: {}, signals: {}, topics: { retired: 1 } },
   ],
   noGoal: { conversations: 1 },
   journey: [
@@ -107,7 +135,7 @@ const renderRecap = () =>
 beforeEach(() => {
   jest.clearAllMocks();
   mockRecapEnabled = true;
-  mockClassifier = { topics: [{ id: 'maths', label: 'Maths' }] };
+  mockClassifier = { topics: [{ id: 'maths', label: 'Maths' }], signals };
   mockRecap = { data: recap, isLoading: false, isError: false, isSuccess: true };
 });
 
@@ -165,7 +193,7 @@ describe('AgencyRecap', () => {
       within(rows[0])
         .getAllByRole('cell')
         .map((cell) => cell.textContent),
-    ).toEqual(['50%', 'Maths', 'com_agency_support_hint']);
+    ).toEqual(['50%', 'Maths', 'com_agency_support_hint', 'Went own way']);
     /** A topic no longer configured counts as "something else". */
     expect(within(rows[1]).getByText('com_agency_topic_other')).toBeInTheDocument();
     expect(within(rows[2]).getAllByRole('cell')[0]).toHaveTextContent('25%');
@@ -185,7 +213,7 @@ describe('AgencyRecap', () => {
     expect(screen.getByText('com_agency_journey_set {"0":"Revise algebra"}')).toBeInTheDocument();
     expect(screen.getByText('com_agency_journey_check_refocus')).toBeInTheDocument();
     expect(
-      screen
+      within(screen.getByRole('list', { name: 'com_agency_journey_title' }))
         .getAllByRole('link', { name: 'com_agency_view_in_chat' })
         .map((link) => link.getAttribute('href')),
     ).toEqual(['/c/c2', '/c/c1?message=m1']);
@@ -206,12 +234,57 @@ describe('AgencyRecap', () => {
     expect(screen.getByText('com_agency_takeaway_no_goal {"count":1}')).toBeInTheDocument();
   });
 
-  it('leaves out topics and types of use without a classifier', () => {
+  it('shows the configured signs of agency by kind and by goal, linking to the latest', () => {
+    mockClassifier = { topics: [], signals };
+    renderRecap();
+    expect(screen.getByRole('list', { name: 'com_agency_signals_title' })).toHaveTextContent(
+      'Went own way',
+    );
+    expect(screen.queryByText('retired')).not.toBeInTheDocument();
+    const quoted = within(screen.getByRole('list', { name: 'com_agency_signals_recent' }));
+    expect(quoted.getByText('No, let me try it my way first')).toBeInTheDocument();
+    expect(quoted.getByText('Went own way')).toBeInTheDocument();
+    expect(quoted.getByText('Negotiated')).toBeInTheDocument();
+    const rows = screen.getByRole('table').querySelectorAll('tbody tr');
+    expect(within(rows[0] as HTMLElement).getByText('Went own way')).toBeVisible();
+    const links = screen.getAllByRole('link', { name: 'com_agency_view_in_chat' });
+    expect(links.map((link) => link.getAttribute('href'))).toContain('/c/c1?message=m1');
+    const items = within(screen.getByRole('list', { name: 'com_agency_signals_title' }))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(items[0]).toContain('2');
+    expect(items[1]).toContain('1');
+  });
+
+  it('leaves out the quotes when none has a sign still configured', () => {
+    mockClassifier = { topics: [], signals: [{ id: 'other-sign', label: 'Other sign' }] };
+    mockRecap = {
+      ...mockRecap,
+      data: { ...recap, signals: { ...recap.signals, counts: { 'other-sign': 1 } } },
+    };
+    renderRecap();
+    expect(screen.getByText('Other sign')).toBeInTheDocument();
+    expect(screen.queryByText('com_agency_signals_recent')).not.toBeInTheDocument();
+  });
+
+  it('says so when no message was marked in the period', () => {
+    mockClassifier = { topics: [], signals };
+    mockRecap = {
+      ...mockRecap,
+      data: { ...recap, signals: { counts: {}, recent: [] } },
+    };
+    renderRecap();
+    expect(screen.getByText('com_agency_signals_empty')).toBeInTheDocument();
+  });
+
+  it('leaves out topics, types of use and signs of agency without a classifier', () => {
     mockClassifier = undefined;
     renderRecap();
     expect(screen.queryByText('com_agency_topics_title')).not.toBeInTheDocument();
     expect(screen.queryByText('com_agency_support_title')).not.toBeInTheDocument();
     expect(screen.queryByText('com_agency_goals_usage_topics')).not.toBeInTheDocument();
+    expect(screen.queryByText('com_agency_signals_title')).not.toBeInTheDocument();
+    expect(screen.queryByText('com_agency_goals_usage_signals')).not.toBeInTheDocument();
   });
 
   it("gives an overview of the period's reflections, each opening in the dialog", async () => {

@@ -568,6 +568,16 @@ describe('createAgencyHandlers', () => {
       makeRes() as never,
     );
     expect(deps.getAgencyRecap).toHaveBeenCalledWith('u1', { range: '30d' });
+    await createAgencyHandlers(deps).getRecap(
+      makeReq({
+        config: { agency: { ...allOn, classifier: { signals: [{ id: 'reject' }] } } },
+      }) as never,
+      makeRes() as never,
+    );
+    expect(deps.getAgencyRecap).toHaveBeenLastCalledWith('u1', {
+      range: '7d',
+      signalIds: ['reject'],
+    });
 
     const bad = makeRes();
     await handlers.getRecap(makeReq({ query: { range: '1y' } }) as never, bad as never);
@@ -576,15 +586,30 @@ describe('createAgencyHandlers', () => {
 });
 
 describe('agencyStartupConfig', () => {
-  it("sends the classifier's topics, not its endpoint or model", () => {
+  it('sends what the classifier labels, not its endpoint, model, prompts or definitions', () => {
     const topics = [{ id: 'maths', label: 'Maths' }];
     expect(
       agencyStartupConfig({
         ...allOn,
-        classifier: { endpoint: 'bedrock', model: 'secret-model', topics },
+        classifier: {
+          endpoint: 'bedrock',
+          model: 'secret-model',
+          topics,
+          signals: [{ id: 'reject', label: 'Rejected', definition: 'secret' }],
+          prompts: { topics: 'secret-prompt' },
+        },
         promptTemplate: 'Study coach.',
       } as never),
-    ).toEqual({ ...allOn, classifier: { topics } });
+    ).toEqual({
+      ...allOn,
+      classifier: { topics, signals: [{ id: 'reject', label: 'Rejected' }] },
+    });
     expect(agencyStartupConfig(allOn as never)).toEqual(allOn);
+    expect(
+      agencyStartupConfig({
+        ...allOn,
+        classifier: { endpoint: 'bedrock', model: 'm', topics },
+      } as never),
+    ).toEqual({ ...allOn, classifier: { topics, signals: [] } });
   });
 });

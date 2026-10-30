@@ -2,9 +2,10 @@ import { useId } from 'react';
 import { Target } from 'lucide-react';
 import { AGENCY_OWN_GOAL } from 'librechat-data-provider';
 import type { TAgencyRecap, TGoalSuggestion } from 'librechat-data-provider';
+import type { SignalLabel } from './labels';
 import type { TopicSeries } from './topics';
+import { SUPPORT_KEYS, rankSignals, rankSupport } from './labels';
 import { GoalIcon, useGoalSuggestions } from '../goals';
-import { SUPPORT_KEYS, rankSupport } from './labels';
 import Panel, { PanelHeading } from './Panel';
 import { rankTopics } from './topics';
 import { useLocalize } from '~/hooks';
@@ -23,16 +24,19 @@ export function useGoalName() {
 /**
  * How the period's chats map onto the learner's conversation goals, grouped by the suggested
  * goal each started from, with goals in their own words and chats without a goal after them:
- * each group's share of the chats, its main topics and the kinds of help asked for.
+ * each group's share of the chats, its main topics, the kinds of help asked for and the signs of
+ * agency in them.
  */
 export default function GoalsUsage({
   recap,
   series,
   classified,
+  signals,
 }: {
   recap: TAgencyRecap;
   series: TopicSeries[];
   classified: boolean;
+  signals: SignalLabel[];
 }) {
   const localize = useLocalize();
   const headingId = useId();
@@ -70,8 +74,11 @@ export default function GoalsUsage({
                     <th scope="col" className="py-2 pe-3 font-medium">
                       {localize('com_agency_goals_usage_topics')}
                     </th>
-                    <th scope="col" className="py-2 font-medium">
+                    <th scope="col" className="py-2 pe-3 font-medium">
                       {localize('com_agency_goals_usage_support')}
+                    </th>
+                    <th scope="col" className="py-2 font-medium">
+                      {localize('com_agency_goals_usage_signals')}
                     </th>
                   </>
                 )}
@@ -116,7 +123,7 @@ export default function GoalsUsage({
                     </td>
                   )}
                   {classified && (
-                    <td className="py-2.5">
+                    <td className="py-2.5 pe-3">
                       <span className="flex flex-wrap gap-1">
                         {rankSupport(row.support)
                           .slice(0, 3)
@@ -131,6 +138,22 @@ export default function GoalsUsage({
                       </span>
                     </td>
                   )}
+                  {classified && (
+                    <td className="py-2.5">
+                      <span className="flex flex-wrap gap-1">
+                        {rankSignals(row.signals, signals)
+                          .slice(0, 2)
+                          .map(({ signal }) => (
+                            <span
+                              key={signal.id}
+                              className="bg-surface-tertiary text-text-secondary rounded-full px-2 py-0.5 text-xs"
+                            >
+                              {signal.label}
+                            </span>
+                          ))}
+                      </span>
+                    </td>
+                  )}
                 </tr>
               ))}
               <tr className="border-border-light text-text-secondary border-t">
@@ -140,6 +163,7 @@ export default function GoalsUsage({
                 <td className="py-2.5 pe-3 tabular-nums">{share(recap.noGoal.conversations)}</td>
                 {classified && (
                   <>
+                    <td />
                     <td />
                     <td />
                   </>

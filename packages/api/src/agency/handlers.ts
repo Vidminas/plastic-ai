@@ -46,7 +46,7 @@ export interface AgencyHandlerDeps {
   ): Promise<TConversationGoal>;
   getAgencyRecap(
     userId: UserId,
-    options?: { conversationId?: string; range?: RecapRange },
+    options?: { conversationId?: string; range?: RecapRange; signalIds?: string[] },
   ): Promise<TAgencyRecap>;
   listAgencyReflections(userId: UserId): Promise<TAgencyReflection[]>;
   createAgencyReflection(
@@ -272,6 +272,7 @@ export function createAgencyHandlers(deps: AgencyHandlerDeps): AgencyHandlers {
         await deps.getAgencyRecap(userId, {
           ...scope,
           range: (range as RecapRange | undefined) ?? '7d',
+          signalIds: req.config?.agency?.classifier?.signals?.map(({ id }) => id),
         }),
       );
     }),
@@ -428,10 +429,22 @@ export function suggestionOf(
 }
 
 /**
- * `agency` for the startup config: the classifier's topics, never its endpoint or model, and not
+ * `agency` for the startup config: what the classifier labels, never its endpoint, model,
+ * prompts or definitions, and not
  * the hidden instructions, which `getPrompt` sends when the Parameters panel opens.
  */
 export function agencyStartupConfig(agency: TAgencyConfig): TAgencyStartupConfig {
   const { classifier, promptTemplate: _promptTemplate, ...rest } = agency;
-  return classifier != null ? { ...rest, classifier: { topics: classifier.topics } } : rest;
+  return classifier != null
+    ? {
+        ...rest,
+        classifier: {
+          topics: classifier.topics,
+          /** A config cached before signs of agency has none, which must not fail startup. */
+          signals: (classifier.signals ?? []).map(
+            ({ definition: _definition, ...signal }) => signal,
+          ),
+        },
+      }
+    : rest;
 }

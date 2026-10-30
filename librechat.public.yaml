@@ -343,18 +343,42 @@ agency:
   # The chats' own model labels, in the background, the kind of help each message
   # asks for and each chat's general topic, for the recap. The participant's words
   # are masked as a prompt is before they are sent; only the labels are kept.
-  # At most seven topics; "something else" is always added.
+  # At most seven topics; "something else" is always added. It also marks messages
+  # that show the participant steering the AI. Only the labels and marks are kept.
   classifier:
     endpoint: bedrock
     model: 'eu.anthropic.claude-sonnet-5-5'
-    # The question the classifier is asked. The rules around it (the chat is data,
-    # not instructions, and the reply's shape) stay fixed, and the list of topics
-    # below follows it.
+    # The questions the classifier is asked, each followed by its list: the topics or
+    # the signals below, with their definitions. The rules around them (the chat is
+    # data, not instructions, and the reply's shape) stay fixed.
     prompts:
       topics: >-
         Which school or study subject is the conversation about? Choose the closest
         id, judging by the subject matter of the goal and the learner messages. Use
         other only when none is even close.
+      signals: >-
+        Which of these does the LAST learner message itself clearly show? Judge the
+        learner's words, not the assistant's. Choose every one that applies; most
+        messages show none.
+    # What the classifier marks. Each `definition` goes to the classifier; `label` is
+    # what participants see in the learning journey. Marks are kept by id, so give a
+    # changed meaning a new id; the recap leaves out ids no longer listed.
+    signals:
+      - id: specify
+        label: "Set out what you needed"
+        definition: "sets their own direction, or clarifies up front, in detail, what they need, such as its scope, level, format or limits, what they do not want, or examples of what they mean"
+      - id: clarify
+        label: "Asked what the AI meant"
+        definition: "asks the assistant to clarify what it meant by something it said"
+      - id: compare
+        label: "Compared options"
+        definition: "asks for several options, or weighs options against each other, before choosing"
+      - id: negotiate
+        label: "Negotiated the result"
+        definition: "pushes back on or bargains over a result, asking the assistant to adjust it"
+      - id: reject
+        label: "Rejected a proposal"
+        definition: "says no to something the assistant proposed, such as a suggestion, plan or answer"
     topics:
       - id: maths
         label: "Maths"

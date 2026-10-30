@@ -61,6 +61,7 @@ export interface IAgencyEvent extends Document {
   conversationId?: string;
   messageId?: string;
   detail?: string;
+  classifierVersion?: string;
   createdAt: Date;
   tenantId?: string;
 }
@@ -71,4 +72,5 @@ export interface RecordAgencyEventParams {
   conversationId?: string;
   messageId?: string;
   detail?: string;
+  classifierVersion?: string;
 }

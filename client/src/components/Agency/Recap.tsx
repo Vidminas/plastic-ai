@@ -18,6 +18,7 @@ import Reflections from './recap/Reflections';
 import { topicSeries } from './recap/topics';
 import Takeaways from './recap/Takeaways';
 import GoalsUsage from './recap/Goals';
+import Signals from './recap/Signals';
 import Journey from './recap/Journey';
 import Support from './recap/Support';
 
@@ -112,6 +113,7 @@ export default function AgencyRecap() {
     other: localize('com_agency_topic_other'),
     unclassified: localize('com_agency_topic_unclassified'),
   });
+  const signals = startupConfig?.agency?.classifier?.signals ?? [];
   const goalsOn = startupConfig?.agency?.conversationGoal === true;
   const reflectionsOn = startupConfig?.agency?.reflections === true;
 
@@ -171,7 +173,15 @@ export default function AgencyRecap() {
           <>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="flex flex-col gap-4 lg:col-span-2">
-                {goalsOn && <GoalsUsage recap={data} series={series} classified={classified} />}
+                {goalsOn && (
+                  <GoalsUsage
+                    recap={data}
+                    series={series}
+                    classified={classified}
+                    signals={signals}
+                  />
+                )}
+                {classified && <Signals recap={data} signals={signals} />}
                 <Journey recap={data} />
               </div>
               <div className="flex flex-col gap-4">

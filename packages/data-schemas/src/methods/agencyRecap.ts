@@ -18,6 +18,18 @@ const RECAP_RANGE_DAYS: Record<Exclude<RecapRange, 'all'>, number> = { '7d': 7, 
 /** Journey steps the recap shows at most. */
 const RECAP_JOURNEY_MAX = 20;
 
+/** Marked messages the recap links to at most. */
+export const RECAP_SIGNALS_RECENT = 8;
+
+/** The most of a marked message the recap quotes. */
+const RECAP_EXCERPT_CHARS = 240;
+
+/** The start of a message, on one line, to quote in the recap. */
+export function recapExcerpt(text: string | null | undefined): string {
+  const line = (text ?? '').replace(/\s+/g, ' ').trim();
+  return line.length > RECAP_EXCERPT_CHARS ? `${line.slice(0, RECAP_EXCERPT_CHARS)}…` : line;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** When a range starts: that many days before now, or undefined for `all`. */
@@ -29,6 +41,13 @@ export function recapSince(range: RecapRange, now: Date): Date | undefined {
 export interface RecapSupportCount {
   conversationId?: string;
   detail?: string;
+  messages: number;
+}
+
+/** How many of a chat's messages were marked with a sign of agency in the period. */
+export interface RecapSignalCount {
+  conversationId: string;
+  signal: string;
   messages: number;
 }
 
@@ -44,11 +63,15 @@ export interface RecapUsageInput {
   topics: ReadonlyMap<string, string>;
   /** Labelled messages in the period, by chat and kind of support. */
   support: readonly RecapSupportCount[];
+  /** Marked messages in the period, by chat and sign of agency. */
+  signals: readonly RecapSignalCount[];
+  /** The latest marked messages in the period, newest first. */
+  recentSignals: TAgencyRecap['signals']['recent'];
 }
 
 export type RecapUsage = Pick<
   TAgencyRecap,
-  'chats' | 'topics' | 'support' | 'goalUsage' | 'noGoal'
+  'chats' | 'topics' | 'support' | 'signals' | 'goalUsage' | 'noGoal'
 >;
 
 const isSupportType = (value: string | undefined): value is AgencySupportType =>
@@ -63,20 +86,19 @@ const byCount = <T>(counts: Map<string, T>, size: (value: T) => number) =>
 
 /**
  * What the period's chats were for: how many there were, by topic, by goal (with each goal's
- * topics and kinds of help), and the kinds of help asked for overall.
+ * topics, kinds of help and signs of agency), and the kinds of help and signs of agency overall.
  */
 export function computeRecapUsage({
   conversations,
   goals,
   topics,
   support,
+  signals,
+  recentSignals,
 }: RecapUsageInput): RecapUsage {
   const chats = new Set(conversations);
   const topicChats = new Map<string, number>();
-  const groups = new Map<
-    string,
-    { conversations: number; topics: Record<string, number>; support: TAgencyGoalUsage['support'] }
-  >();
+  const groups = new Map<string, Omit<TAgencyGoalUsage, 'goal'>>();
   let noGoal = 0;
 
   for (const conversationId of chats) {
@@ -87,7 +109,7 @@ export function computeRecapUsage({
       noGoal += 1;
       continue;
     }
-    const group = groups.get(goal) ?? { conversations: 0, topics: {}, support: {} };
+    const group = groups.get(goal) ?? { conversations: 0, topics: {}, support: {}, signals: {} };
     group.conversations += 1;
     increment(group.topics, topic);
     groups.set(goal, group);
@@ -104,10 +126,21 @@ export function computeRecapUsage({
     }
   }
 
+  const signalCounts: TAgencyRecap['signals']['counts'] = {};
+  for (const { conversationId, signal, messages } of signals) {
+    increment(signalCounts, signal, messages);
+    const goal = goals.get(conversationId);
+    const group = goal != null ? groups.get(goal) : undefined;
+    if (group != null) {
+      increment(group.signals, signal, messages);
+    }
+  }
+
   return {
     chats: chats.size,
     topics: byCount(topicChats, (count) => count).map(([id, count]) => ({ id, chats: count })),
     support: overall,
+    signals: { counts: signalCounts, recent: recentSignals },
     goalUsage: byCount(groups, (group) => group.conversations).map(([goal, group]) => ({
       goal,
       ...group,

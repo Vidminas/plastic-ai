@@ -278,12 +278,13 @@ describe('getAgencyRecap', () => {
     ]);
     expect(recap.support).toEqual({ feedback: 1, other: 1, hint: 1 });
     expect(recap.goalUsage).toEqual([
-      { goal: 'own', conversations: 1, topics: { maths: 1 }, support: { hint: 1 } },
+      { goal: 'own', conversations: 1, topics: { maths: 1 }, support: { hint: 1 }, signals: {} },
       {
         goal: 'writing',
         conversations: 1,
         topics: { writing: 1 },
         support: { feedback: 1, other: 1 },
+        signals: {},
       },
     ]);
     expect(recap.noGoal).toEqual({ conversations: 1 });
@@ -317,8 +318,67 @@ describe('getAgencyRecap', () => {
         conversations: 1,
         topics: { writing: 1 },
         support: { feedback: 1, other: 1 },
+        signals: {},
       },
     ]);
+  });
+
+  it('counts signs of agency once per message, by goal, and lists the latest', async () => {
+    const signal = (conversationId: string, messageId: string, detail: string, age: number) => ({
+      userId,
+      conversationId,
+      messageId,
+      type: 'signal_classified',
+      detail,
+      createdAt: daysAgo(age),
+    });
+    await mongoose.models.Message.insertMany([
+      {
+        ...message('c1', daysAgo(0)),
+        messageId: 'm2',
+        text: 'Keep it\n\nto one page,   for a beginner',
+      },
+      { ...message('c3', daysAgo(1)), messageId: 'm3', text: 'x'.repeat(500) },
+      /** Someone else's message with the same id is not quoted. */
+      { ...message('c1', daysAgo(1)), messageId: 'm1', text: 'Theirs', user: String(otherUserId) },
+    ]);
+    await mongoose.models.AgencyEvent.insertMany([
+      signal('c1', 'm1', 'redirect', 2),
+      /** The same message, labelled again when its reply was regenerated. */
+      signal('c1', 'm1', 'redirect', 1),
+      signal('c1', 'm2', 'specify', 0),
+      signal('c3', 'm3', 'negotiate', 0.5),
+      /** Before the week. */
+      signal('c1', 'm4', 'redirect', 9),
+      { ...signal('c1', 'm6', 'preempt', 0), userId: otherUserId },
+    ]);
+    const recap = await methods.getAgencyRecap(userId, { range: '7d', now });
+    expect(recap.signals.counts).toEqual({ redirect: 1, specify: 1, negotiate: 1 });
+    /** m1 is not this learner's saved message, so there is nothing to quote. */
+    expect(recap.signals.recent.map(({ messageId }) => messageId)).toEqual(['m2', 'm3']);
+    expect(recap.signals.recent[0]).toMatchObject({
+      signals: ['specify'],
+      conversationId: 'c1',
+      messageId: 'm2',
+      excerpt: 'Keep it to one page, for a beginner',
+    });
+    expect(recap.signals.recent[1].excerpt).toHaveLength(241);
+    expect(recap.goalUsage.find((group) => group.goal === 'writing')?.signals).toEqual({
+      redirect: 1,
+      specify: 1,
+    });
+
+    /** Removed signs take no place among the latest. */
+    await mongoose.models.AgencyEvent.insertMany(
+      ['m7', 'm8', 'm9', 'm10', 'm11'].map((id) => signal('c1', id, 'retired', 0)),
+    );
+    const configured = await methods.getAgencyRecap(userId, {
+      range: '7d',
+      now,
+      signalIds: ['redirect', 'specify', 'negotiate'],
+    });
+    expect(configured.signals.counts).toEqual({ redirect: 1, specify: 1, negotiate: 1 });
+    expect(configured.signals.recent.map(({ messageId }) => messageId)).toEqual(['m2', 'm3']);
   });
 
   it('builds the goal journey, newest first, with each goal as it is now', async () => {

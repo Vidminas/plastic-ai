@@ -1,5 +1,7 @@
 import {
   agencySchema,
+  AGENCY_SIGNALS_MAX,
+  DEFAULT_AGENCY_SIGNALS,
   AGENCY_CLASSIFIER_PROMPT_MAX,
   AGENCY_TEXT_MAX,
   agencyGoalSchema,
@@ -74,12 +76,12 @@ describe('agencySchema promptTemplate', () => {
 describe('agencySchema classifier prompts', () => {
   const classifier = { endpoint: 'bedrock', model: 'm' };
 
-  it('takes a topic prompt, and does not need one', () => {
+  it('takes either prompt, and needs neither', () => {
     expect(agencySchema.parse({ classifier }).classifier?.prompts).toBeUndefined();
     expect(
-      agencySchema.parse({ classifier: { ...classifier, prompts: { topics: ' Pick one ' } } })
+      agencySchema.parse({ classifier: { ...classifier, prompts: { signals: ' Spot these ' } } })
         .classifier?.prompts,
-    ).toEqual({ topics: 'Pick one' });
+    ).toEqual({ signals: 'Spot these' });
   });
 
   it('refuses an empty or oversized prompt', () => {
@@ -87,6 +89,39 @@ describe('agencySchema classifier prompts', () => {
       expect(
         agencySchema.safeParse({ classifier: { ...classifier, prompts: { topics } } }).success,
       ).toBe(false);
+    }
+  });
+
+  it('marks the default signs of agency unless given others', () => {
+    const ids = agencySchema.parse({ classifier }).classifier?.signals.map(({ id }) => id);
+    expect(ids).toEqual(DEFAULT_AGENCY_SIGNALS.map(({ id }) => id));
+    expect(ids).toEqual(expect.arrayContaining(['reject', 'clarify', 'compare']));
+    const signals = [{ id: 'own-words', label: 'Own words', definition: 'writes their own' }];
+    expect(
+      agencySchema.parse({ classifier: { ...classifier, signals } }).classifier?.signals,
+    ).toEqual(signals);
+  });
+
+  it('refuses signs whose ids differ only by _ and -, which a reply reads alike', () => {
+    const signals = ['study_plan', 'study-plan'].map((id) => ({
+      id,
+      label: id,
+      definition: 'plans',
+    }));
+    expect(agencySchema.safeParse({ classifier: { ...classifier, signals } }).success).toBe(false);
+  });
+
+  it('refuses an empty, repeated or oversized list of signs, or one without a definition', () => {
+    const signal = { id: 'a', label: 'A', definition: 'does a' };
+    for (const signals of [
+      [],
+      [signal, signal],
+      [{ id: 'a', label: 'A' }],
+      Array.from({ length: AGENCY_SIGNALS_MAX + 1 }, (_, i) => ({ ...signal, id: `s${i}` })),
+    ]) {
+      expect(agencySchema.safeParse({ classifier: { ...classifier, signals } }).success).toBe(
+        false,
+      );
     }
   });
 });

@@ -5,6 +5,7 @@ import { takeaways } from '../derive';
 const base: TAgencyRecap = {
   chats: 4,
   support: {},
+  signals: { counts: {}, recent: [] },
   topics: [],
   goalUsage: [],
   noGoal: { conversations: 0 },
@@ -29,8 +30,8 @@ describe('takeaways', () => {
           ...base,
           support: { other: 6, hint: 3, answer: 1 },
           goalUsage: [
-            { goal: 'exams', conversations: 2, support: {}, topics: {} },
-            { goal: 'own', conversations: 1, support: {}, topics: {} },
+            { goal: 'exams', conversations: 2, support: {}, signals: {}, topics: {} },
+            { goal: 'own', conversations: 1, support: {}, signals: {}, topics: {} },
           ],
           topics: [
             { id: 'unclassified', chats: 2 },

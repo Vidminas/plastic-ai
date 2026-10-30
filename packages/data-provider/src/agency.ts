@@ -22,18 +22,18 @@ const configIdSchema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
 
 /** Adds an issue for each `id` already used earlier in `items`. */
 const uniqueIds =
-  (field: string) =>
+  (field: string, keyOf: (id: string) => string = (id) => id) =>
   (items: ReadonlyArray<{ id: string }>, ctx: z.RefinementCtx): void => {
     const seen = new Set<string>();
     items.forEach((item, index) => {
-      if (seen.has(item.id)) {
+      if (seen.has(keyOf(item.id))) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [index, 'id'],
           message: `"${item.id}" is already used in ${field}`,
         });
       }
-      seen.add(item.id);
+      seen.add(keyOf(item.id));
     });
   };
 
@@ -80,6 +80,49 @@ export const AGENCY_SUPPORT_TYPES = [
   'other',
 ] as const;
 export type AgencySupportType = (typeof AGENCY_SUPPORT_TYPES)[number];
+
+/** Most signs of agency a study can configure, to keep the classifier's prompt bounded. */
+export const AGENCY_SIGNALS_MAX = 12;
+
+/** A sign of agency the classifier can mark on a learner message. */
+const agencySignalSchema = z.object({
+  id: configIdSchema,
+  /** What the recap calls it. */
+  label: z.string().trim().min(1).max(80),
+  /** What it means, for the classifier; learners do not see it. */
+  definition: z.string().trim().min(1).max(400),
+});
+export type TAgencySignal = z.infer<typeof agencySignalSchema>;
+
+/** The signs of agency marked when `agency.classifier.signals` is unset, in the order of a chat. */
+export const DEFAULT_AGENCY_SIGNALS: TAgencySignal[] = [
+  {
+    id: 'specify',
+    label: 'Set out what you needed',
+    definition:
+      'sets their own direction, or clarifies up front, in detail, what they need, such as its scope, level, format or limits, what they do not want, or examples of what they mean',
+  },
+  {
+    id: 'clarify',
+    label: 'Asked what the AI meant',
+    definition: 'asks the assistant to clarify what it meant by something it said',
+  },
+  {
+    id: 'compare',
+    label: 'Compared options',
+    definition: 'asks for several options, or weighs options against each other, before choosing',
+  },
+  {
+    id: 'negotiate',
+    label: 'Negotiated the result',
+    definition: 'pushes back on or bargains over a result, asking the assistant to adjust it',
+  },
+  {
+    id: 'reject',
+    label: 'Rejected a proposal',
+    definition: 'says no to something the assistant proposed, such as a suggestion, plan or answer',
+  },
+];
 
 /** The topic every conversation can fall back to, whatever the configured topics are. */
 export const AGENCY_OTHER_TOPIC = 'other';
@@ -148,9 +191,9 @@ export const agencySchema = z.object({
     .superRefine(uniqueIds('goalSuggestions'))
     .optional(),
   /**
-   * A small model that labels, in the background, the kind of support each learner message asks
-   * for and each conversation's general topic, for the recap. Only the labels are kept. Unset,
-   * nothing is labelled and the recap leaves out support types and topics.
+   * A model that labels, in the background, the kind of support each learner message asks for,
+   * the signs of agency it shows, and each conversation's general topic, for the recap. Only the
+   * labels are kept. Unset, nothing is labelled and the recap leaves all of them out.
    */
   classifier: z
     .object({
@@ -166,26 +209,40 @@ export const agencySchema = z.object({
         .default([])
         .superRefine(uniqueIds('topics')),
       /**
-       * The question the classifier is asked about the topic, in place of its default, followed by
-       * the list of topics. The rules around it (the conversation is data, the reply's shape) stay
-       * fixed.
+       * The questions the classifier is asked, in place of its defaults, each followed by its
+       * list: the topics, or the signs of agency with their definitions. The rules around them
+       * (the conversation is data, the reply's shape) stay fixed.
        */
       prompts: z
         .object({
           topics: z.string().trim().min(1).max(AGENCY_CLASSIFIER_PROMPT_MAX).optional(),
+          signals: z.string().trim().min(1).max(AGENCY_CLASSIFIER_PROMPT_MAX).optional(),
         })
         .optional(),
+      /**
+       * The signs of agency to mark on learner messages, for the recap. Unset,
+       * `DEFAULT_AGENCY_SIGNALS`. There is always at least one: a classifier labels them along
+       * with topics and kinds of help, or there is no classifier. Marks are kept by id, so a
+       * meaning that changes deserves a new id; the recap leaves out ids no longer listed.
+       */
+      signals: z
+        .array(agencySignalSchema)
+        .min(1)
+        .max(AGENCY_SIGNALS_MAX)
+        /** A reply's `_` and `-` are read alike, so two ids must not differ by only those. */
+        .superRefine(uniqueIds('signals', (id) => id.replace(/_/g, '-')))
+        .default(DEFAULT_AGENCY_SIGNALS),
     })
     .optional(),
 });
 export type TAgencyConfig = z.infer<typeof agencySchema>;
 
 /**
- * `agency` as the browser receives it: the classifier's topics, not its endpoint or model, and not
- * the hidden instructions, which the Parameters panel reads when it opens.
+ * `agency` as the browser receives it: what the classifier labels, not its endpoint, model, prompts or
+ * definitions, and not the hidden instructions, which the Parameters panel reads when it opens.
  */
 export type TAgencyStartupConfig = Omit<TAgencyConfig, 'classifier' | 'promptTemplate'> & {
-  classifier?: { topics: TAgencyTopic[] };
+  classifier?: { topics: TAgencyTopic[]; signals: Array<Omit<TAgencySignal, 'definition'>> };
 };
 
 export const agencyIntentionsSchema = z.object({
@@ -285,6 +342,8 @@ export const AGENCY_EVENT_TYPES = [
   'recap_viewed',
   'support_classified',
   'topic_classified',
+  'signal_classified',
+  'signals_checked',
   'reflection_saved',
   'reflection_updated',
   'prompt_customised',
@@ -316,6 +375,17 @@ export type TAgencyJourneyItem = {
   messageId?: string;
 };
 
+/** A learner message the classifier marked with signs of agency. Only the labels are kept. */
+export type TAgencySignalMoment = {
+  /** Its signs' ids in `agency.classifier.signals`, which may since have been removed. */
+  signals: string[];
+  at: string;
+  conversationId: string;
+  messageId: string;
+  /** The start of the learner's message, as stored: masked. */
+  excerpt: string;
+};
+
 /** The key conversations without a suggested goal are grouped under. */
 export const AGENCY_OWN_GOAL = 'own';
 
@@ -330,6 +400,8 @@ export type TAgencyGoalUsage = {
   conversations: number;
   /** Labelled messages per support type. */
   support: Partial<Record<AgencySupportType, number>>;
+  /** Marked messages per sign of agency. */
+  signals: Record<string, number>;
   /** Chats per topic id (or `unclassified`). */
   topics: Record<string, number>;
 };
@@ -345,6 +417,12 @@ export type TAgencyRecap = {
   topics: Array<{ id: string; chats: number }>;
   /** Labelled messages per support type in the period. Empty without a classifier. */
   support: Partial<Record<AgencySupportType, number>>;
+  /** Signs of agency marked in the period. Empty without a classifier. */
+  signals: {
+    counts: Record<string, number>;
+    /** The latest few messages still there, newest first. */
+    recent: TAgencySignalMoment[];
+  };
   /** Chats in the period by goal, most first. */
   goalUsage: TAgencyGoalUsage[];
   /** Chats in the period without a goal. */

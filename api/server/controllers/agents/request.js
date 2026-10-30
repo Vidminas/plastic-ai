@@ -3304,6 +3304,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
           temporary: reqCtx.isTemporary,
           repeated: Boolean(isRegenerate || isContinued),
           messageId: userMessage?.messageId,
+          parentMessageId,
           message: userMessage?.text ?? text ?? '',
           reply: replyTextOf(response),
           firstTurn: parentMessageId === Constants.NO_PARENT && isNewConvo,

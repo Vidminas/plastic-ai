@@ -10,6 +10,7 @@ import type {
   TAgencyReflection,
   TAgencyReflectionAnswers,
 } from 'librechat-data-provider';
+import type { PipelineStage } from 'mongoose';
 import type {
   IAgencyGoal,
   IAgencyEvent,
@@ -19,7 +20,13 @@ import type {
   RecordAgencyEventParams,
 } from '~/types/agency';
 import type { RecapJourneyEvent } from './agencyRecap';
-import { buildRecapJourney, computeRecapUsage, recapSince } from './agencyRecap';
+import {
+  recapSince,
+  recapExcerpt,
+  buildRecapJourney,
+  computeRecapUsage,
+  RECAP_SIGNALS_RECENT,
+} from './agencyRecap';
 
 type UserId = string | Types.ObjectId;
 
@@ -34,6 +41,8 @@ export interface AgencyRecapOptions {
   conversationId?: string;
   range?: RecapRange;
   now?: Date;
+  /** Only these signs of agency, so that removed ones take no place among the latest. */
+  signalIds?: string[];
 }
 
 export interface AgencyMethods {
@@ -244,21 +253,42 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
 
   async function getAgencyRecap(
     userId: UserId,
-    { conversationId, range = '7d', now = new Date() }: AgencyRecapOptions = {},
+    { conversationId, range = '7d', now = new Date(), signalIds }: AgencyRecapOptions = {},
   ): Promise<TAgencyRecap> {
     const scope = conversationId == null ? { userId } : { userId, conversationId };
     const since = recapSince(range, now);
     const sinceFilter = since != null ? { createdAt: { $gte: since } } : {};
     const events = eventModel();
-
     /** Aggregations do not cast their filters as `find` does. */
     const eventOwner = { userId: new Types.ObjectId(String(userId)) };
+    const eventChats = { conversationId: conversationId ?? { $type: 'string' } };
+    /** One row per message and sign: a turn labelled twice counts once. */
+    const markedMessages: PipelineStage[] = [
+      {
+        $match: {
+          ...eventOwner,
+          ...eventChats,
+          type: 'signal_classified',
+          messageId: { $type: 'string' },
+          detail: signalIds != null ? { $in: signalIds } : { $type: 'string' },
+          ...sinceFilter,
+        },
+      },
+      {
+        $group: {
+          _id: { conversationId: '$conversationId', messageId: '$messageId', signal: '$detail' },
+          at: { $max: '$createdAt' },
+        },
+      },
+    ];
 
     const [
       conversations,
       conversationGoals,
       topicLabels,
       supportCounts,
+      signalCounts,
+      recentSignals,
       journeyEvents,
       reflections,
       reflectionCount,
@@ -279,7 +309,7 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
         {
           $match: {
             ...eventOwner,
-            conversationId: conversationId ?? { $type: 'string' },
+            ...eventChats,
             type: 'topic_classified',
             detail: { $type: 'string' },
           },
@@ -303,6 +333,49 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
           },
         },
       ]),
+      events.aggregate<{ _id: { conversationId: string; signal: string }; messages: number }>([
+        ...markedMessages,
+        {
+          $group: {
+            _id: { conversationId: '$_id.conversationId', signal: '$_id.signal' },
+            messages: { $sum: 1 },
+          },
+        },
+      ]),
+      /** The latest marked messages, each with its signs, and the words of each to quote. */
+      events
+        .aggregate<{
+          _id: { conversationId: string; messageId: string };
+          at: Date;
+          signals: string[];
+        }>([
+          ...markedMessages,
+          {
+            $group: {
+              _id: { conversationId: '$_id.conversationId', messageId: '$_id.messageId' },
+              at: { $max: '$at' },
+              signals: { $push: '$_id.signal' },
+            },
+          },
+          { $sort: { at: -1 } },
+          { $limit: RECAP_SIGNALS_RECENT },
+        ])
+        .then(async (marked) => {
+          const texts =
+            marked.length > 0
+              ? await mongoose.models.Message.find({
+                  user: String(userId),
+                  messageId: { $in: marked.map(({ _id }) => _id.messageId) },
+                })
+                  .select('messageId text')
+                  .lean<Array<{ messageId: string; text?: string | null }>>()
+              : [];
+          const textOf = new Map(texts.map(({ messageId, text }) => [messageId, text]));
+          return marked.flatMap(({ _id, at, signals }) => {
+            const excerpt = recapExcerpt(textOf.get(_id.messageId));
+            return excerpt ? [{ ..._id, signals, excerpt, at: at.toISOString() }] : [];
+          });
+        }),
       events
         .find({ ...scope, ...JOURNEY_FILTER, ...sinceFilter })
         .sort({ createdAt: -1 })
@@ -332,6 +405,8 @@ export function createAgencyMethods(mongoose: typeof import('mongoose')): Agency
         ),
         topics: new Map(topicLabels.map(({ _id, topic }) => [_id, topic])),
         support: supportCounts.map(({ _id, messages }) => ({ ..._id, messages })),
+        signals: signalCounts.map(({ _id, messages }) => ({ ..._id, messages })),
+        recentSignals,
       }),
       journey: buildRecapJourney(
         journeyEvents,

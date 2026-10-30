@@ -10,6 +10,8 @@ const AgencyEventSchema: Schema<IAgencyEvent> = new Schema({
   /** The chosen option's label, a goal check's outcome, a goal as it was set (masked), or a
    *  label or record id. Long enough for a goal (`AGENCY_TEXT_MAX`). */
   detail: { type: String, maxlength: AGENCY_TEXT_MAX },
+  /** For signs of agency: identifies the model, question and definitions that marked them. */
+  classifierVersion: { type: String },
   createdAt: { type: Date, default: Date.now },
   tenantId: { type: String, index: true },
 });
