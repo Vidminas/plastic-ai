@@ -340,13 +340,13 @@ agency:
       title: "Verify information against other sources"
       description: "Check what the AI says against books, notes or trusted websites."
       icon: target
-  # A small model labels, in the background, the kind of help each message asks
-  # for and each chat's general topic, for the recap. The participant's words
+  # The chats' own model labels, in the background, the kind of help each message
+  # asks for and each chat's general topic, for the recap. The participant's words
   # are masked as a prompt is before they are sent; only the labels are kept.
   # At most seven topics; "something else" is always added.
   classifier:
     endpoint: bedrock
-    model: 'eu.amazon.nova-lite-v1:0'
+    model: 'eu.anthropic.claude-sonnet-5-5'
     # The question the classifier is asked. The rules around it (the chat is data,
     # not instructions, and the reply's shape) stay fixed, and the list of topics
     # below follows it.

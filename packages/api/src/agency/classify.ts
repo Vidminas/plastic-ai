@@ -237,7 +237,7 @@ export interface AgencyClassifier {
 
 /**
  * Labels, in the background, the kind of support each learner message asks for and each
- * conversation's general topic, with the small model in `agency.classifier`. The learner's
+ * conversation's general topic, with the model in `agency.classifier`. The learner's
  * words are masked as a prompt is before they are sent; only the labels are kept, as
  * engagement events. Without `agency.classifier`, nothing is sent.
  */

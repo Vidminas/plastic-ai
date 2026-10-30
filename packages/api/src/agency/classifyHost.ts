@@ -1,4 +1,5 @@
 import { initializeModel } from '@librechat/agents';
+import { EModelEndpoint } from 'librechat-data-provider';
 import type { AppConfig } from '@librechat/data-schemas';
 import type { ClientOptions } from '@librechat/agents';
 import type { Request } from 'express';
@@ -7,6 +8,7 @@ import type { EndpointDbMethods, ServerRequest } from '~/types';
 import type { AgencyClassifierDeps } from './classify';
 import type { RecordUsageDeps } from '~/agents/usage';
 import {
+  LABEL_MAX_OUTPUT_TOKENS,
   resolveActivityLabelModel,
   mapCollectedMetadataToUsage,
 } from '~/agents/activityLabels/host';
@@ -48,6 +50,12 @@ export function createAgencyClassifierInvoker({
       ids,
       db,
       explicitModel: classifier.model,
+      /** Claude's newer models think unless told not to, which could spend the small output cap
+       *  before any label is written. Passed here so a Bedrock fallback keeps both limits too. */
+      modelParameters:
+        classifier.endpoint === EModelEndpoint.bedrock
+          ? { thinking: false, maxOutputTokens: LABEL_MAX_OUTPUT_TOKENS }
+          : undefined,
     });
     const model = initializeModel({
       provider: llm.provider,
