@@ -19,7 +19,7 @@
     "kind": "trace",
     "name": "Conversation traces",
     "connection": "ClickHouse",
-    "from": { "databaseName": "analytics", "tableName": "spans" },
+    "from": { "databaseName": "analytics", "tableName": "traces" },
     "timestampValueExpression": "Timestamp",
     "displayedTimestampValueExpression": "Timestamp",
     "defaultTableSelectExpression": "Timestamp, ServiceName, SpanName, UserId, ConversationId, Model, Duration, StatusCode, StatusMessage",

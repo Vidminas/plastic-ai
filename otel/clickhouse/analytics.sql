@@ -51,6 +51,7 @@ DROP VIEW IF EXISTS analytics.ui_events_capture;
 DROP VIEW IF EXISTS analytics.participants_capture;
 
 DROP VIEW IF EXISTS analytics.timeline;
+DROP VIEW IF EXISTS analytics.traces;
 DROP VIEW IF EXISTS analytics.chat_turns;
 DROP VIEW IF EXISTS analytics.feedback;
 DROP VIEW IF EXISTS analytics.llm_generations;
@@ -184,10 +185,11 @@ GROUP BY trace_id;
 -- Every span of those traces, whatever its type (agent, chain, tool, retriever,
 -- model call, event), with its full input and output, in the column layout
 -- HyperDX expects of a trace source, so its trace viewer shows each turn as a
--- tree: HyperDX's "Conversation traces" source reads it. SpanAttributes holds
--- everything else Langfuse records about the span: model settings, every usage
--- and cost figure, tool calls and the tools offered, tags, release, version and
--- its metadata (prefixed usage., cost., tool_definition. and metadata.).
+-- tree: HyperDX's "Conversation traces" source reads it through
+-- analytics.traces. SpanAttributes holds everything else Langfuse records about
+-- the span: model settings, every usage and cost figure, tool calls and the
+-- tools offered, tags, release, version and its metadata (prefixed usage.,
+-- cost., tool_definition. and metadata.).
 CREATE VIEW analytics.spans
 DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
@@ -306,6 +308,15 @@ DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT user_id, cognito_id, email
 FROM analytics.participants_store FINAL;
 
+-- The spans above with the CognitoId and Email of their user, for HyperDX's
+-- "Conversation traces" source. HyperDX applies each dashboard filter to all
+-- tiles, so each source must have the columns that the filters use.
+CREATE VIEW analytics.traces
+DEFINER = CURRENT_USER SQL SECURITY DEFINER
+AS SELECT s.*, p.cognito_id AS CognitoId, p.email AS Email
+FROM analytics.spans AS s
+LEFT JOIN analytics.participants AS p ON p.user_id = s.UserId;
+
 -- Every event above on one timeline, one row per event, in the column layout
 -- HyperDX expects of a log source (Timestamp, ServiceName, SeverityText, Body,
 -- LogAttributes). HyperDX's "Usage timeline" source and dashboards read it
@@ -314,7 +325,7 @@ FROM analytics.participants_store FINAL;
 -- `llm` (a model call) or `feedback` (a score). Input and Output hold the turn's
 -- or model call's content; Reason and Comment the feedback's; StatusMessage why
 -- a turn or call failed. TraceId opens the turn in HyperDX's trace viewer
--- (analytics.spans). Scores take their user and conversation from their trace.
+-- (analytics.traces). Scores take their user and conversation from their trace.
 -- CognitoId and Email come from analytics.participants, or from a login.refused
 -- event, which has no app user. They are empty if not known.
 CREATE VIEW analytics.timeline
