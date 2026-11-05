@@ -83,6 +83,7 @@ jest.mock('@librechat/api', () => {
     isTokenRetired: actualApi.isTokenRetired,
     TOKEN_RETIREMENT_FIELDS: actualApi.TOKEN_RETIREMENT_FIELDS,
     recordRumProxyRequest: jest.fn(),
+    recordParticipant: jest.fn(),
     getAuthFailureReasonCategory: actualApi.getAuthFailureReasonCategory,
     buildSafeAuthLogContext: actualApi.buildSafeAuthLogContext,
     getValidOpenIdReuseUserId: (token) => {
@@ -123,6 +124,7 @@ const {
   clearCloudFrontCookies,
   maybeRefreshCloudFrontAuthCookiesMiddleware,
   recordRumProxyRequest,
+  recordParticipant,
   generateTwoFactorSetupToken,
   isTwoFactorEnrollmentRequired,
 } = require('@librechat/api');
@@ -209,6 +211,12 @@ describe('requireJwtAuth tenant context chaining', () => {
     expect(tenantId).toBe('tenant-abc');
   });
 
+  it('records the participant after passport auth succeeds', () => {
+    const req = mockReq({ tenantId: 'tenant-abc', role: 'user' });
+    requireJwtAuth(req, mockRes(), jest.fn());
+    expect(recordParticipant).toHaveBeenCalledWith(req.user);
+  });
+
   it('refreshes CloudFront auth cookies after passport auth succeeds', () => {
     const req = mockReq({ tenantId: 'tenant-abc', role: 'user' });
     const res = mockRes();
@@ -222,6 +230,20 @@ describe('requireJwtAuth tenant context chaining', () => {
       expect.any(Function),
     );
     expect(next).toHaveBeenCalled();
+  });
+
+  it('does not record the participant when the two-factor gate blocks them', async () => {
+    isTwoFactorEnrollmentRequired.mockReturnValue(true);
+    recordParticipant.mockClear();
+    const req = mockReq(
+      { id: 'user-123', provider: 'local', twoFactorEnabled: false },
+      { method: 'GET', baseUrl: '/api/convos', path: '/' },
+    );
+    const res = mockRes();
+    requireJwtAuth(req, res, jest.fn());
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(recordParticipant).not.toHaveBeenCalled();
   });
 
   it('blocks protected API access for unenrolled local users', async () => {

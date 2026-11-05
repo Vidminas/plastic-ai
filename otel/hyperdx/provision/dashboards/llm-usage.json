@@ -10,6 +10,20 @@
       "source": "Usage timeline"
     },
     {
+      "id": "cognito",
+      "name": "Cognito ID",
+      "type": "QUERY_EXPRESSION",
+      "expression": "CognitoId",
+      "source": "Usage timeline"
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "type": "QUERY_EXPRESSION",
+      "expression": "Email",
+      "source": "Usage timeline"
+    },
+    {
       "id": "model",
       "name": "Model",
       "type": "QUERY_EXPRESSION",
@@ -228,7 +242,7 @@
         ],
         "where": "ServiceName = 'llm'",
         "whereLanguage": "sql",
-        "groupBy": "UserId"
+        "groupBy": "UserId, CognitoId, Email"
       }
     },
     {
@@ -265,7 +279,7 @@
         "name": "Event timeline",
         "source": "Usage timeline",
         "displayType": "search",
-        "select": "Timestamp, ServiceName, UserId, ConversationId, Body, Model, TotalTokens, Cost, DurationMs, Rating, Reason, Comment",
+        "select": "Timestamp, ServiceName, UserId, CognitoId, Email, ConversationId, Body, Model, TotalTokens, Cost, DurationMs, Rating, Reason, Comment",
         "where": "",
         "whereLanguage": "lucene"
       }
@@ -297,7 +311,7 @@
         "name": "Feedback with reasons and comments",
         "source": "Usage timeline",
         "displayType": "search",
-        "select": "Timestamp, UserId, ConversationId, Rating, Reason, Comment",
+        "select": "Timestamp, UserId, CognitoId, Email, ConversationId, Rating, Reason, Comment",
         "where": "ServiceName = 'feedback'",
         "whereLanguage": "sql"
       }
@@ -312,7 +326,7 @@
         "name": "Conversations (message and reply)",
         "source": "Usage timeline",
         "displayType": "search",
-        "select": "Timestamp, UserId, ConversationId, Input, Output",
+        "select": "Timestamp, UserId, CognitoId, Email, ConversationId, Input, Output",
         "where": "ServiceName = 'chat'",
         "whereLanguage": "sql"
       }

@@ -17,7 +17,8 @@
 -- (NFS) volume ClickHouse runs on in AWS does not support. Dropping goes in
 -- reverse order of use, timeline first, as it reads the other views.
 --
--- One table is never dropped: analytics.ui_events_store, the study's record of
+-- Two tables are never dropped: analytics.participants_store (below) and
+-- analytics.ui_events_store. analytics.ui_events_store is the study's record of
 -- named UI actions and page views, and of the server's safeguarding detections
 -- (safeguarding.flag and safeguarding.block, packages/api/src/safeguarding;
 -- safeguarding.withhold before the level was renamed).
@@ -47,6 +48,7 @@ ORDER BY (Timestamp, SpanId);
 -- inserts it. Recreated on every run, so a change to the filter applies; the
 -- backfill after it covers anything inserted in between.
 DROP VIEW IF EXISTS analytics.ui_events_capture;
+DROP VIEW IF EXISTS analytics.participants_capture;
 
 DROP VIEW IF EXISTS analytics.timeline;
 DROP VIEW IF EXISTS analytics.chat_turns;
@@ -55,6 +57,7 @@ DROP VIEW IF EXISTS analytics.llm_generations;
 DROP VIEW IF EXISTS analytics.spans;
 DROP VIEW IF EXISTS analytics.llm_traces;
 DROP VIEW IF EXISTS analytics.ui_events;
+DROP VIEW IF EXISTS analytics.participants;
 
 CREATE MATERIALIZED VIEW analytics.ui_events_capture
 TO analytics.ui_events_store
@@ -80,11 +83,43 @@ WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'processing.%'
    OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
 
+-- The Cognito ID and email of each app user, from the participant.seen spans
+-- (packages/api/src/rum/participant.ts). Keeps the latest row for each user.
+CREATE TABLE IF NOT EXISTS analytics.participants_store
+(
+    user_id String,
+    cognito_id String,
+    email String,
+    seen DateTime64(3)
+)
+ENGINE = ReplacingMergeTree(seen)
+ORDER BY user_id;
+
+CREATE MATERIALIZED VIEW analytics.participants_capture
+TO analytics.participants_store
+DEFINER = CURRENT_USER SQL SECURITY DEFINER
+AS SELECT
+    SpanAttributes['userId'] AS user_id,
+    SpanAttributes['cognitoId'] AS cognito_id,
+    SpanAttributes['email'] AS email,
+    toDateTime64(Timestamp, 3) AS seen
+FROM hyperdx.otel_traces
+WHERE SpanName = 'participant.seen';
+
+INSERT INTO analytics.participants_store
+SELECT
+    SpanAttributes['userId'] AS user_id,
+    SpanAttributes['cognitoId'] AS cognito_id,
+    SpanAttributes['email'] AS email,
+    toDateTime64(Timestamp, 3) AS seen
+FROM hyperdx.otel_traces
+WHERE SpanName = 'participant.seen';
+
 -- Named UI actions (client/src/lib/rum/actions.ts), the agency features' among
 -- them, page views and safeguarding detections, from the store above.
 -- client_build is the browser build the session ran. A detection names its
--- filters (type:name[:confidence]) and the participant's study ID (Cognito
--- username), never the content.
+-- filters (type:name[:confidence]) and the participant's app user ID, never
+-- the content.
 CREATE VIEW analytics.ui_events
 DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
@@ -113,7 +148,6 @@ AS SELECT
     SpanAttributes['severity'] AS severity,
     SpanAttributes['source'] AS source,
     SpanAttributes['filters'] AS filters,
-    SpanAttributes['studyId'] AS study_id,
     SpanAttributes['messageId'] AS message_id,
     SpanAttributes['label'] AS label,
     SpanAttributes['classifierVersion'] AS classifier_version,
@@ -264,6 +298,12 @@ AS SELECT
 FROM default.scores FINAL
 WHERE is_deleted = 0;
 
+-- One row for each app user.
+CREATE VIEW analytics.participants
+DEFINER = CURRENT_USER SQL SECURITY DEFINER
+AS SELECT user_id, cognito_id, email
+FROM analytics.participants_store FINAL;
+
 -- Every event above on one timeline, one row per event, in the column layout
 -- HyperDX expects of a log source (Timestamp, ServiceName, SeverityText, Body,
 -- LogAttributes). HyperDX's "Usage timeline" source and dashboards read it
@@ -273,9 +313,12 @@ WHERE is_deleted = 0;
 -- or model call's content; Reason and Comment the feedback's; StatusMessage why
 -- a turn or call failed. TraceId opens the turn in HyperDX's trace viewer
 -- (analytics.spans). Scores take their user and conversation from their trace.
+-- CognitoId and Email come from analytics.participants. They are empty if not known.
 CREATE VIEW analytics.timeline
 DEFINER = CURRENT_USER SQL SECURITY DEFINER
-AS SELECT
+AS SELECT e.*, p.cognito_id AS CognitoId, p.email AS Email
+FROM (
+SELECT
     toDateTime64(time, 3) AS Timestamp,
     'ui' AS ServiceName,
     multiIf(action = 'file.upload_failed' OR action = 'safeguarding.flag'
@@ -306,7 +349,7 @@ AS SELECT
         'file_id', file_id, 'file_type', file_type, 'tool_resource', tool_resource,
         'questions', questions, 'declined', declined, 'stage', stage, 'reason', reason,
         'identifiers', identifiers, 'status', status, 'client_build', client_build,
-        'severity', severity, 'source', source, 'filters', filters, 'study_id', study_id,
+        'severity', severity, 'source', source, 'filters', filters,
         'message_id', message_id, 'label', label, 'classifier_version', classifier_version,
         'outcome', outcome, 'calls', calls, 'chars', chars
     )) AS LogAttributes
@@ -394,4 +437,6 @@ SELECT
         mapFilter((k, v) -> v != '', map('score_id', f.score_id, 'score_name', f.name, 'score_source', toString(f.source)))
     )
 FROM analytics.feedback AS f
-LEFT JOIN analytics.llm_traces AS t ON t.trace_id = f.trace_id;
+LEFT JOIN analytics.llm_traces AS t ON t.trace_id = f.trace_id
+) AS e
+LEFT JOIN analytics.participants AS p ON p.user_id = e.UserId;

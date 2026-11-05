@@ -6,7 +6,7 @@
     "from": { "databaseName": "analytics", "tableName": "timeline" },
     "timestampValueExpression": "Timestamp",
     "displayedTimestampValueExpression": "Timestamp",
-    "defaultTableSelectExpression": "Timestamp, ServiceName, UserId, Body, Model, TotalTokens, Cost, Rating, Reason",
+    "defaultTableSelectExpression": "Timestamp, ServiceName, UserId, CognitoId, Email, Body, Model, TotalTokens, Cost, Rating, Reason",
     "serviceNameExpression": "ServiceName",
     "severityTextExpression": "SeverityText",
     "bodyExpression": "Body",

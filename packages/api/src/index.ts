@@ -140,6 +140,7 @@ export { memoryDiagnostics } from './utils/memory';
 /* RUM */
 export * from './rum/proxy';
 export * from './rum/limiter';
+export * from './rum/participant';
 /* OpenAPI */
 export { createOpenApiRouter } from './openapi/router';
 export type { OpenApiRouterDeps } from './openapi/router';
