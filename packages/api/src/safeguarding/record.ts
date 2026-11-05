@@ -55,7 +55,6 @@ export function createSafeguardingReporter({
         {
           ...ids,
           userId: participant.userId,
-          studyId: participant.studyId,
           severity: assessment.severity,
           filters,
         },
@@ -68,7 +67,6 @@ export function createSafeguardingReporter({
               ...ids,
               severity: assessment.severity,
               userId: participant.userId,
-              ...(participant.studyId ? { studyId: participant.studyId } : {}),
               filters,
             })
             .catch((error: unknown) => {

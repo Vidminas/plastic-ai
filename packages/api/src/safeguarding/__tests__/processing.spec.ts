@@ -14,7 +14,7 @@ jest.mock('../sink', () => ({
 }));
 
 const record = recordProcessing as jest.Mock;
-const participant = { userId: 'u1', studyId: 'sub-1' };
+const participant = { userId: 'u1', email: 'p1@study.test' };
 const blocked: SafeguardingAssessment = {
   severity: 'block',
   detections: [{ type: 'content', name: 'VIOLENCE', confidence: 'HIGH', severity: 'block' }],

@@ -211,7 +211,7 @@ function createDetector(
 type ScreeningRequest = Request & {
   file?: Express.Multer.File;
   file_id?: string;
-  user?: { id?: string; openidId?: string };
+  user?: { id?: string; email?: string };
   config?: Partial<AppConfig>;
 };
 
