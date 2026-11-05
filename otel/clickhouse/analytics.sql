@@ -69,7 +69,7 @@ WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'safeguarding.%'
    OR SpanName LIKE 'agency.%'
    OR SpanName LIKE 'processing.%'
-   OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
+   OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change', 'login.refused');
 
 -- What the collector's tables still hold (their last 30 days), including any
 -- event inserted while the capture view was being recreated.
@@ -81,7 +81,7 @@ WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'safeguarding.%'
    OR SpanName LIKE 'agency.%'
    OR SpanName LIKE 'processing.%'
-   OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
+   OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change', 'login.refused');
 
 -- The Cognito ID and email of each app user, from the participant.seen spans
 -- (packages/api/src/rum/participant.ts). Keeps the latest row for each user.
@@ -148,6 +148,8 @@ AS SELECT
     SpanAttributes['severity'] AS severity,
     SpanAttributes['source'] AS source,
     SpanAttributes['filters'] AS filters,
+    SpanAttributes['cognitoId'] AS cognito_id,
+    SpanAttributes['email'] AS email,
     SpanAttributes['messageId'] AS message_id,
     SpanAttributes['label'] AS label,
     SpanAttributes['classifierVersion'] AS classifier_version,
@@ -313,15 +315,19 @@ FROM analytics.participants_store FINAL;
 -- or model call's content; Reason and Comment the feedback's; StatusMessage why
 -- a turn or call failed. TraceId opens the turn in HyperDX's trace viewer
 -- (analytics.spans). Scores take their user and conversation from their trace.
--- CognitoId and Email come from analytics.participants. They are empty if not known.
+-- CognitoId and Email come from analytics.participants, or from a login.refused
+-- event, which has no app user. They are empty if not known.
 CREATE VIEW analytics.timeline
 DEFINER = CURRENT_USER SQL SECURITY DEFINER
-AS SELECT e.*, p.cognito_id AS CognitoId, p.email AS Email
+AS SELECT
+    e.*,
+    if(p.cognito_id != '', p.cognito_id, e.LogAttributes['cognito_id']) AS CognitoId,
+    if(p.email != '', p.email, e.LogAttributes['email']) AS Email
 FROM (
 SELECT
     toDateTime64(time, 3) AS Timestamp,
     'ui' AS ServiceName,
-    multiIf(action = 'file.upload_failed' OR action = 'safeguarding.flag'
+    multiIf(action IN ('file.upload_failed', 'login.refused', 'safeguarding.flag')
                 OR outcome IN ('flag', 'identifiers'), 'warn',
             action IN ('safeguarding.block', 'safeguarding.withhold')
                 OR outcome IN ('block', 'error'), 'error', 'info') AS SeverityText,
@@ -350,6 +356,7 @@ SELECT
         'questions', questions, 'declined', declined, 'stage', stage, 'reason', reason,
         'identifiers', identifiers, 'status', status, 'client_build', client_build,
         'severity', severity, 'source', source, 'filters', filters,
+        'cognito_id', cognito_id, 'email', email,
         'message_id', message_id, 'label', label, 'classifier_version', classifier_version,
         'outcome', outcome, 'calls', calls, 'chars', chars
     )) AS LogAttributes
