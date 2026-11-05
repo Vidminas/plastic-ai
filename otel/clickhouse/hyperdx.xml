@@ -8,17 +8,32 @@
   comments. The password comes from the container
   environment and is never written here.
 
+  The `analytics` profile limits each query of HyperDX and of the study
+  notebook (terraform/notebook.tf) to 1 GiB. Without a limit, a large search
+  can use most of the server memory, and ClickHouse then stops the inserts of
+  Langfuse and of the collector. Groupings and sorts spill to disk at 384 MiB.
+  At 512 MiB, a hash table can become larger than the limit before it spills.
+
   Mounted into /etc/clickhouse-server/users.d/ by docker-compose.override.yml and
   embedded into the ClickHouse task by terraform/clickhouse.tf.
 -->
 <clickhouse>
+  <profiles>
+    <analytics>
+      <profile>default</profile>
+      <max_memory_usage>1073741824</max_memory_usage>
+      <max_bytes_before_external_group_by>402653184</max_bytes_before_external_group_by>
+      <max_bytes_before_external_sort>402653184</max_bytes_before_external_sort>
+    </analytics>
+  </profiles>
+
   <users>
     <hyperdx>
       <password from_env="HYPERDX_CLICKHOUSE_PASSWORD" />
       <networks>
         <ip>::/0</ip>
       </networks>
-      <profile>default</profile>
+      <profile>analytics</profile>
       <quota>default</quota>
       <grants>
         <query>GRANT ALL ON hyperdx.*</query>
