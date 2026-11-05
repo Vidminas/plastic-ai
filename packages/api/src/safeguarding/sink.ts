@@ -8,7 +8,6 @@ export interface SafeguardingRecord {
   readonly severity: 'flag' | 'block';
   readonly source: string;
   readonly userId: string;
-  readonly studyId?: string;
   readonly conversationId?: string;
   readonly messageId?: string;
   readonly fileId?: string;

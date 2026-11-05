@@ -3,7 +3,7 @@ import { PublishCommand } from '@aws-sdk/client-sns';
 import { createSnsAlertPublisher, formatSafeguardingAlert } from '../alert';
 import { createSafeguardingReporter } from '../record';
 
-const participant = { userId: 'u1', studyId: 'f3a1-sub' };
+const participant = { userId: 'u1', email: 'p1@study.test' };
 const blocked = {
   severity: 'block' as const,
   detections: [
@@ -30,7 +30,7 @@ describe('formatSafeguardingAlert', () => {
       [
         'Safeguarding alert (plastic-ai)',
         '',
-        'Participant: f3a1-sub (app user u1)',
+        'Participant: p1@study.test (app user u1)',
         "Screened: the assistant's response",
         'Triggered: content filter: VIOLENCE (HIGH confidence)',
         'Severity: strong (content blocked)',
@@ -81,7 +81,6 @@ describe('createSafeguardingReporter', () => {
       conversationId: 'c1',
       messageId: 'm1',
       userId: 'u1',
-      studyId: 'f3a1-sub',
       severity: 'block',
       filters: 'content:VIOLENCE:HIGH,word:custom',
     });
@@ -107,7 +106,6 @@ describe('createSafeguardingReporter', () => {
       messageId: 'm1',
       severity: 'block',
       userId: 'u1',
-      studyId: 'f3a1-sub',
       filters: 'content:VIOLENCE:HIGH,word:custom',
     });
   });

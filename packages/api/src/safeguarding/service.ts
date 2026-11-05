@@ -14,15 +14,15 @@ import { blockedReasons } from './assess';
 
 type SafeguardingConfigHolder = Partial<AppConfig> | undefined;
 
-/** The pseudonymous IDs an alert and log name a participant by: never their name or email. */
+/** The app user ID and email that an alert shows. Never the name. */
 export function participantOf(user: {
   id?: string;
   _id?: { toString(): string } | string;
-  openidId?: string;
+  email?: string;
 }): SafeguardingParticipant {
   return {
     userId: user.id ?? (user._id == null ? 'unknown' : String(user._id)),
-    ...(user.openidId ? { studyId: user.openidId } : {}),
+    ...(user.email ? { email: user.email } : {}),
   };
 }
 

@@ -57,7 +57,7 @@ export function getParticipantText(body: ChatBody): { text: string; source: 'pro
 type SafeguardedRequest = Request & {
   body: ChatBody;
   config?: Partial<AppConfig>;
-  user?: { id?: string; openidId?: string };
+  user?: { id?: string; email?: string };
 };
 
 type Deny = (

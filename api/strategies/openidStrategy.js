@@ -31,6 +31,7 @@ const {
   getOpenIdRoleSyncOptions,
   getOpenIdRolesForOpenIdSync,
   getLibreChatRolesForOpenIdSync,
+  recordLoginRefusal,
   DEFAULT_OAUTH_TOKEN_TTL_SECONDS,
 } = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
@@ -856,6 +857,7 @@ function createOpenIDCallback(existingUsersOnly) {
       const user = await processOpenIDAuth(tokenset, existingUsersOnly);
       done(null, user);
     } catch (err) {
+      recordLoginRefusal(tokenset, err);
       if (err.message === 'Email domain not allowed') {
         return done(null, false, { message: err.message });
       }

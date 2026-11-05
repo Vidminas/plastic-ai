@@ -10,6 +10,7 @@ const {
   getAuthFailureReasonCategory,
   buildSafeAuthLogContext,
   maybeRefreshCloudFrontAuthCookiesMiddleware,
+  recordParticipant,
   recordRumProxyRequest,
   getValidOpenIdReuseUserId,
   generateTwoFactorSetupToken,
@@ -201,6 +202,7 @@ const requireJwtAuth = (req, res, next) => {
       req.authStrategy = strategy;
       logFallbackSuccess(strategy);
       return requiredTwoFactorGate(req, res, next, () => {
+        recordParticipant(user);
         tenantContextMiddleware(req, res, (tenantErr) => {
           if (tenantErr) {
             return next(tenantErr);

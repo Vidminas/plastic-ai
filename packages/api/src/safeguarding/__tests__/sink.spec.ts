@@ -5,7 +5,6 @@ const record = {
   severity: 'flag' as const,
   source: 'response',
   userId: 'u1',
-  studyId: 'sub-1',
   conversationId: 'c1',
   filters: 'content:INSULTS:MEDIUM',
 };

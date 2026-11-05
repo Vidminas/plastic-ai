@@ -9,7 +9,7 @@ import * as screen from '../screen';
 const safeguarding = safeguardingSchema.parse({
   guardrail: { guardrailIdentifier: 'gr', guardrailVersion: '1' },
 });
-const participant = { userId: 'u1', studyId: 'sub-1' };
+const participant = { userId: 'u1', email: 'p1@study.test' };
 
 const withScreen = (result: SafeguardingAssessment | Error) =>
   jest.spyOn(screen, 'getSafeguardingScreener').mockReturnValue({
@@ -139,8 +139,8 @@ describe('checkModelOutput for the model filter', () => {
 });
 
 describe('participantOf', () => {
-  it('names a participant by the app user ID and Cognito username only', () => {
-    expect(participantOf({ id: 'u1', openidId: 'sub-1' })).toEqual(participant);
+  it('names a participant by the app user ID and email only', () => {
+    expect(participantOf({ id: 'u1', email: 'p1@study.test' })).toEqual(participant);
     expect(participantOf({ _id: 'u2' })).toEqual({ userId: 'u2' });
   });
 });
@@ -175,7 +175,7 @@ describe('createSafeguardingCheck', () => {
     ({
       body: { text: 'a message', conversationId: 'c1', messageId: 'm1' },
       config,
-      user: { id: 'u1', openidId: 'sub-1' },
+      user: { id: 'u1', email: 'p1@study.test' },
     }) as unknown as Request;
 
   it('denies blocked text with the safeguarding error', async () => {

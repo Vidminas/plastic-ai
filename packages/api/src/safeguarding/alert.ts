@@ -1,12 +1,12 @@
 import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
 import type { SafeguardingDetection, SafeguardingSource } from './assess';
 
-/** Who an alert is about: pseudonymous IDs only, never a name or email address. */
+/** The participant that an alert is about. Never their name. */
 export interface SafeguardingParticipant {
   /** The app's user ID. */
   readonly userId: string;
-  /** The Cognito username (the user's `sub`, as `openidId`), which researchers map to a participant. */
-  readonly studyId?: string;
+  /** The email address of the account. The research team sets up each account. */
+  readonly email?: string;
 }
 
 export interface SafeguardingAlert {
@@ -45,8 +45,8 @@ const describe = ({ type, name, confidence }: SafeguardingDetection): string => 
 };
 
 /**
- * The alert for blocked content, as plain text for email: the participant's pseudonymous
- * IDs, what was screened, the filters and the severity. Never the content.
+ * The alert for blocked content, as plain text for email: the email and app user ID of the
+ * participant, what was screened, the filters and the severity. Never the content.
  */
 export function formatSafeguardingAlert({
   participant,
@@ -68,7 +68,7 @@ export function formatSafeguardingAlert({
     message: [
       `Safeguarding alert (${app})`,
       '',
-      `Participant: ${participant.studyId ?? 'unknown study ID'} (app user ${participant.userId})`,
+      `Participant: ${participant.email ?? 'unknown email'} (app user ${participant.userId})`,
       `Screened: ${SOURCE_LABELS[source]}`,
       `Triggered: ${shown.length > 0 ? shown.map(describe).join('; ') : 'the model guardrail (no filter named)'}`,
       'Severity: strong (content blocked)',
