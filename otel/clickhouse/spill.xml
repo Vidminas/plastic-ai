@@ -1,0 +1,11 @@
+<!--
+  Writes temporary data, for example groupings and sorts that spill to disk,
+  to the local disk of the task, not to the EFS data volume. EFS is slow and
+  bills every byte that is written.
+
+  Mounted into /etc/clickhouse-server/config.d/ by docker-compose.override.yml
+  and embedded into the ClickHouse task by terraform/clickhouse.tf.
+-->
+<clickhouse>
+  <tmp_path>/tmp/clickhouse/</tmp_path>
+</clickhouse>
