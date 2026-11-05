@@ -17,6 +17,7 @@ const staticRoute = require('./static');
 const storedFiles = require('./storedFiles');
 const messages = require('./messages');
 const memories = require('./memories');
+const agency = require('./agency');
 const presets = require('./presets');
 const projects = require('./projects');
 const prompts = require('./prompts');
@@ -86,6 +87,7 @@ module.exports = {
   balance,
   messages,
   memories,
+  agency,
   endpoints,
   assistants,
   categories,

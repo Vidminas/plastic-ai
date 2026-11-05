@@ -64,6 +64,8 @@ FROM hyperdx.otel_traces
 WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'file.%'
    OR SpanName LIKE 'safeguarding.%'
+   OR SpanName LIKE 'agency.%'
+   OR SpanName LIKE 'processing.%'
    OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
 
 -- What the collector's tables still hold (their last 30 days), including any
@@ -74,12 +76,15 @@ FROM hyperdx.otel_traces
 WHERE SpanName LIKE 'message.%'
    OR SpanName LIKE 'file.%'
    OR SpanName LIKE 'safeguarding.%'
+   OR SpanName LIKE 'agency.%'
+   OR SpanName LIKE 'processing.%'
    OR SpanName IN ('model.switch', 'agent.switch', 'question.answer', 'conversation.new', 'spa-route-change');
 
--- Named UI actions (client/src/lib/rum/actions.ts), page views and safeguarding
--- detections, from the store above. client_build is the browser build the
--- session ran. A detection names its filters (type:name[:confidence]) and the
--- participant's study ID (Cognito username), never the content.
+-- Named UI actions (client/src/lib/rum/actions.ts), the agency features' among
+-- them, page views and safeguarding detections, from the store above.
+-- client_build is the browser build the session ran. A detection names its
+-- filters (type:name[:confidence]) and the participant's study ID (Cognito
+-- username), never the content.
 CREATE VIEW analytics.ui_events
 DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
@@ -110,6 +115,12 @@ AS SELECT
     SpanAttributes['filters'] AS filters,
     SpanAttributes['studyId'] AS study_id,
     SpanAttributes['messageId'] AS message_id,
+    SpanAttributes['label'] AS label,
+    SpanAttributes['classifierVersion'] AS classifier_version,
+    SpanAttributes['outcome'] AS outcome,
+    SpanAttributes['durationMs'] AS duration_ms,
+    SpanAttributes['calls'] AS calls,
+    SpanAttributes['chars'] AS chars,
     ServiceName AS service
 FROM analytics.ui_events_store FINAL;
 
@@ -267,8 +278,10 @@ DEFINER = CURRENT_USER SQL SECURITY DEFINER
 AS SELECT
     toDateTime64(time, 3) AS Timestamp,
     'ui' AS ServiceName,
-    multiIf(action = 'file.upload_failed' OR action = 'safeguarding.flag', 'warn',
-            action IN ('safeguarding.block', 'safeguarding.withhold'), 'error', 'info') AS SeverityText,
+    multiIf(action = 'file.upload_failed' OR action = 'safeguarding.flag'
+                OR outcome IN ('flag', 'identifiers'), 'warn',
+            action IN ('safeguarding.block', 'safeguarding.withhold')
+                OR outcome IN ('block', 'error'), 'error', 'info') AS SeverityText,
     if(action = 'spa-route-change', 'page.view', toString(action)) AS Event,
     if(action = 'spa-route-change', concat('page.view ', route), toString(action)) AS Body,
     user_id AS UserId,
@@ -278,7 +291,7 @@ AS SELECT
     toUInt64(0) AS OutputTokens,
     toUInt64(0) AS TotalTokens,
     toFloat64(0) AS Cost,
-    toInt64(0) AS DurationMs,
+    toInt64OrZero(duration_ms) AS DurationMs,
     rating AS Rating,
     '' AS Reason,
     '' AS Comment,
@@ -294,7 +307,8 @@ AS SELECT
         'questions', questions, 'declined', declined, 'stage', stage, 'reason', reason,
         'identifiers', identifiers, 'status', status, 'client_build', client_build,
         'severity', severity, 'source', source, 'filters', filters, 'study_id', study_id,
-        'message_id', message_id
+        'message_id', message_id, 'label', label, 'classifier_version', classifier_version,
+        'outcome', outcome, 'calls', calls, 'chars', chars
     )) AS LogAttributes
 FROM analytics.ui_events
 UNION ALL

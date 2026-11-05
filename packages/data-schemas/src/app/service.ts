@@ -9,6 +9,7 @@ import {
   getConfigDefaults,
   piiMaskingSchema,
   safeguardingSchema,
+  agencySchema,
   langfuseConfigSchema,
   skillSyncConfigSchema,
   uploadScreeningSchema,
@@ -213,6 +214,7 @@ export const AppService = async (params?: {
     config.piiMasking == null ? undefined : piiMaskingSchema.parse(config.piiMasking);
   const safeguarding =
     config.safeguarding == null ? undefined : safeguardingSchema.parse(config.safeguarding);
+  const agency = config.agency == null ? undefined : agencySchema.parse(config.agency);
   const langfuse = loadLangfuseConfig(config);
 
   const defaultConfig = {
@@ -244,6 +246,7 @@ export const AppService = async (params?: {
     uploadScreening,
     piiMasking,
     safeguarding,
+    agency,
     summarization,
     availableTools,
     imageOutputType,

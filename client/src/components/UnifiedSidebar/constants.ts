@@ -87,3 +87,18 @@ export const DRAWER_UNPAINTED = 'hidden';
  * waiting for the deferred Recoil commit that a large conversation stalls.
  */
 export const MOBILE_SCRIM_ID = 'mobile-drawer-scrim';
+
+/**
+ * The sidebar link a full page answers to (Insights, the learning journey). While one is showing,
+ * its icon is the active one and the panel of chats or parameters stays closed: none of it
+ * belongs to that page.
+ */
+export function routePanelOf(pathname: string): string | undefined {
+  if (pathname.startsWith('/insights')) {
+    return 'insights';
+  }
+  if (pathname.startsWith('/agency')) {
+    return 'agency-recap';
+  }
+  return undefined;
+}

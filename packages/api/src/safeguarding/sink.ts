@@ -1,5 +1,7 @@
 import { randomBytes } from 'crypto';
+import { logger } from '@librechat/data-schemas';
 import { isRumProxyEnabled, resolveRumProxyTarget } from '~/rum/proxy';
+import { getSafeErrorMetadata } from '~/utils/errors';
 
 /** A detection as the study keeps it: IDs and filters, never the content. */
 export interface SafeguardingRecord {
@@ -40,15 +42,22 @@ export interface OtlpSpanRequest {
   }>;
 }
 
-/** OTLP/JSON for one zero-length span, as the collector's `/v1/traces` takes it. */
-export function toOtlpSpan(
-  record: SafeguardingRecord,
-  { serviceName, at = new Date() }: { serviceName: string; at?: Date },
+/** A zero-length span for the analytics store: names and IDs, never content. */
+export interface OtlpSpan {
+  name: string;
+  scope: string;
+  attributes: Readonly<Record<string, unknown>>;
+  at?: Date;
+}
+
+/** Sends one span to the OpenTelemetry collector. */
+export type SendOtlpSpan = (span: OtlpSpan) => Promise<void>;
+
+function toOtlpRequest(
+  { name, scope, attributes, at = new Date() }: OtlpSpan,
+  serviceName: string,
 ): OtlpSpanRequest {
   const time = `${at.getTime()}000000`;
-  const attributes: OtlpAttribute[] = Object.entries(record)
-    .filter(([, value]) => typeof value === 'string' && value !== '')
-    .map(([key, value]) => ({ key, value: { stringValue: value as string } }));
   return {
     resourceSpans: [
       {
@@ -57,16 +66,18 @@ export function toOtlpSpan(
         },
         scopeSpans: [
           {
-            scope: { name: 'safeguarding' },
+            scope: { name: scope },
             spans: [
               {
                 traceId: randomBytes(16).toString('hex'),
                 spanId: randomBytes(8).toString('hex'),
-                name: `safeguarding.${record.severity}`,
+                name,
                 kind: 1,
                 startTimeUnixNano: time,
                 endTimeUnixNano: time,
-                attributes,
+                attributes: Object.entries(attributes)
+                  .filter(([, value]) => typeof value === 'string' && value !== '')
+                  .map(([key, value]) => ({ key, value: { stringValue: value as string } })),
               },
             ],
           },
@@ -76,13 +87,23 @@ export function toOtlpSpan(
   };
 }
 
-/**
- * Sends each record to the OpenTelemetry collector as a `safeguarding.flag` or
- * `safeguarding.block` span, through the same target and credentials as the browser
- * telemetry proxy (`RUM_PROXY_TARGET_URL`, `RUM_PROXY_AUTHORIZATION`). The analytics store
- * keeps these spans for the study, beside the browser's named actions.
- */
-export function createOtlpSafeguardingSink({
+const safeguardingSpan = (record: SafeguardingRecord, at?: Date): OtlpSpan => ({
+  name: `safeguarding.${record.severity}`,
+  scope: 'safeguarding',
+  attributes: { ...record },
+  at,
+});
+
+/** OTLP/JSON for one zero-length span, as the collector's `/v1/traces` takes it. */
+export function toOtlpSpan(
+  record: SafeguardingRecord,
+  { serviceName, at }: { serviceName: string; at?: Date },
+): OtlpSpanRequest {
+  return toOtlpRequest(safeguardingSpan(record, at), serviceName);
+}
+
+/** Posts spans to the collector at `target`. Throws when it does not accept one. */
+export function createOtlpSpanSender({
   target,
   authorization,
   serviceName,
@@ -92,37 +113,83 @@ export function createOtlpSafeguardingSink({
   authorization?: string;
   serviceName: string;
   fetchImpl?: typeof fetch;
-}): SafeguardingSink {
-  return {
-    async write(record, at) {
-      const response = await fetchImpl(target, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          ...(authorization ? { authorization } : {}),
-        },
-        body: JSON.stringify(toOtlpSpan(record, { serviceName, at })),
-        redirect: 'error',
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!response.ok) {
-        throw new Error(`collector answered ${response.status}`);
-      }
-    },
+}): SendOtlpSpan {
+  return async (span) => {
+    const response = await fetchImpl(target, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(authorization ? { authorization } : {}),
+      },
+      body: JSON.stringify(toOtlpRequest(span, serviceName)),
+      redirect: 'error',
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new Error(`collector answered ${response.status}`);
+    }
   };
+}
+
+/**
+ * Sends each record to the OpenTelemetry collector as a `safeguarding.flag` or
+ * `safeguarding.block` span, through the same target and credentials as the browser
+ * telemetry proxy (`RUM_PROXY_TARGET_URL`, `RUM_PROXY_AUTHORIZATION`). The analytics store
+ * keeps these spans for the study, beside the browser's named actions.
+ */
+export function createOtlpSafeguardingSink(
+  options: Parameters<typeof createOtlpSpanSender>[0],
+): SafeguardingSink {
+  const send = createOtlpSpanSender(options);
+  return { write: (record, at) => send(safeguardingSpan(record, at)) };
+}
+
+/** Sends to the collector when the browser telemetry proxy is configured, else undefined. */
+export function getDefaultOtlpSpanSender(
+  env: NodeJS.ProcessEnv = process.env,
+): SendOtlpSpan | undefined {
+  const target = isRumProxyEnabled() ? resolveRumProxyTarget('/v1/traces') : undefined;
+  if (target == null) {
+    return undefined;
+  }
+  return createOtlpSpanSender({
+    target,
+    authorization: env.RUM_PROXY_AUTHORIZATION?.trim() || undefined,
+    serviceName: `${env.RUM_SERVICE_NAME?.trim() || 'librechat'}-api`,
+  });
+}
+
+/**
+ * Records a call that processed user input as a `processing.*` span, in the background, when the
+ * browser telemetry proxy is configured: what happened and how long it took, never the content.
+ * Numbers are sent as text, as every span attribute here is. A failure is only logged.
+ */
+export function recordProcessing(
+  operation: string,
+  attributes: Readonly<Record<string, string | number | undefined>>,
+  send: SendOtlpSpan | undefined = getDefaultOtlpSpanSender(),
+): void {
+  send?.({
+    name: `processing.${operation}`,
+    scope: 'processing',
+    attributes: Object.fromEntries(
+      Object.entries(attributes).map(([key, value]) => [
+        key,
+        typeof value === 'number' ? String(value) : value,
+      ]),
+    ),
+  }).catch((error: unknown) => {
+    logger.warn('[processing] Could not send a span', {
+      operation,
+      ...getSafeErrorMetadata(error),
+    });
+  });
 }
 
 /** The collector sink when the browser telemetry proxy is configured, else none. */
 export function getDefaultSafeguardingSink(
   env: NodeJS.ProcessEnv = process.env,
 ): SafeguardingSink | undefined {
-  const target = isRumProxyEnabled() ? resolveRumProxyTarget('/v1/traces') : undefined;
-  if (target == null) {
-    return undefined;
-  }
-  return createOtlpSafeguardingSink({
-    target,
-    authorization: env.RUM_PROXY_AUTHORIZATION?.trim() || undefined,
-    serviceName: `${env.RUM_SERVICE_NAME?.trim() || 'librechat'}-api`,
-  });
+  const send = getDefaultOtlpSpanSender(env);
+  return send != null ? { write: (record, at) => send(safeguardingSpan(record, at)) } : undefined;
 }

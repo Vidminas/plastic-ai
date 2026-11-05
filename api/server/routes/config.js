@@ -24,6 +24,7 @@ const {
   resolveCodeWorkspaceInheritanceCapability,
   resolveCodeEnvironmentTransitionVersion,
   loadConversationListLimits,
+  agencyStartupConfig,
 } = require('@librechat/api');
 const {
   DEFAULT_MCP_APP_CSP_LIMITS,
@@ -352,6 +353,7 @@ router.get('/', async function (req, res) {
             },
           }
         : {}),
+      ...(appConfig?.agency ? { agency: agencyStartupConfig(appConfig.agency) } : {}),
       ...(codeEnvironmentDecisionVersion != null ? { codeEnvironmentDecisionVersion } : {}),
       mcpApps: resolveMCPAppsPolicy(
         appConfig?.mcpSettings?.apps,

@@ -141,7 +141,7 @@ type MaybeAzureConfig = ClientOptions & {
  *  steered by injection in untrusted tool output) generates and BILLS its
  *  provider-default output on every batch; `normalizeLabelOutput` bounds
  *  only what persists, not what the provider generates. */
-const LABEL_MAX_OUTPUT_TOKENS = 256;
+export const LABEL_MAX_OUTPUT_TOKENS = 256;
 
 /** Effective activity-label settings for one endpoint. */
 export interface ResolvedActivityConfig {
@@ -291,9 +291,17 @@ export async function resolveActivityLabelModel({
   db,
   phase = false,
   reasoning = false,
+  explicitModel,
+  modelParameters,
 }: ResolveActivityLabelModelParams & {
   phase?: boolean;
   reasoning?: boolean;
+  /** A model chosen elsewhere (the agency classifier's), run on the agent's own endpoint: it
+   *  wins over every fallback, and `activityEndpoint` does not move it. */
+  explicitModel?: string;
+  /** Settings for this call, which the endpoint also works out a fallback model's from: without
+   *  them a fallback gets its own defaults, not this call's limits. */
+  modelParameters?: Record<string, unknown>;
 }): Promise<ActivityLabelLLM> {
   const appConfig = req.config as AppConfig | undefined;
   const agentEndpoint = agent.endpoint ?? '';
@@ -339,7 +347,7 @@ export async function resolveActivityLabelModel({
     publicEndpoint,
   );
   let endpoint = agentEndpoint;
-  if (activity.endpoint != null && activity.endpoint !== agentEndpoint) {
+  if (explicitModel == null && activity.endpoint != null && activity.endpoint !== agentEndpoint) {
     try {
       providerConfig = getProviderConfig({ provider: activity.endpoint, appConfig });
       endpoint = activity.endpoint;
@@ -379,7 +387,9 @@ export async function resolveActivityLabelModel({
    *  model with different behavior and cost. The title fallback applies only
    *  when `activityModel` is absent. */
   let model: string | undefined;
-  if (activity.model === Constants.CURRENT_MODEL) {
+  if (explicitModel != null) {
+    model = explicitModel;
+  } else if (activity.model === Constants.CURRENT_MODEL) {
     model = runModel;
   } else if (activity.model != null) {
     model = activity.model;
@@ -391,7 +401,8 @@ export async function resolveActivityLabelModel({
   const options = await providerConfig.getOptions({
     req,
     endpoint,
-    model_parameters: { model },
+    // model_parameters: { model },
+    model_parameters: { ...modelParameters, model },
     db,
   });
   const llmConfig = options.llmConfig as MaybeAzureConfig | undefined;
@@ -449,6 +460,13 @@ export async function resolveActivityLabelModel({
   };
   if (anthropicCarrier != null && clientOptions.clientOptions == null) {
     clientOptions.clientOptions = anthropicCarrier;
+  }
+  /** Asked for by this call, so not a primary generation's setting riding along. */
+  const requestFields = (rawOptions as { additionalModelRequestFields?: unknown })
+    .additionalModelRequestFields;
+  if (modelParameters != null && requestFields != null) {
+    (clientOptions as { additionalModelRequestFields?: unknown }).additionalModelRequestFields =
+      requestFields;
   }
   /** Replace the stripped primary caps with a SMALL one — see
    *  {@link LABEL_MAX_OUTPUT_TOKENS} — routed with the SAME model/API

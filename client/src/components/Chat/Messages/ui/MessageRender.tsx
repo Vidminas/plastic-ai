@@ -15,6 +15,7 @@ import Elapsed, { shouldShowElapsed } from '~/components/Chat/Messages/Elapsed';
 import { getHeaderHoverLabel } from '~/components/Chat/Messages/ui/HeaderLabel';
 import MessageContent from '~/components/Chat/Messages/Content/MessageContent';
 import { useLocalize, useMessageActions, useContentMetadata } from '~/hooks';
+import { SentPromptPanel } from '~/components/Chat/Messages/SentPrompt';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
 import { PrivateText } from '~/components/Chat/Messages/PrivateText';
 import HoverButtons from '~/components/Chat/Messages/HoverButtons';
@@ -256,6 +257,7 @@ const MessageRender = memo(function MessageRender({
             />
           ))}
       </MessageContext.Provider>
+      <SentPromptPanel message={msg} />
     </Row>
   );
 }, areMessageRenderPropsEqual);

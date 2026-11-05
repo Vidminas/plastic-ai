@@ -24,6 +24,10 @@ const SOURCE_LABELS: Record<SafeguardingSource, string> = {
   answer: "the participant's answer to the assistant's question",
   upload: 'a file the participant uploaded',
   response: "the assistant's response",
+  goal: 'a goal the participant set for a conversation',
+  intentions: "the participant's long-term learning intentions",
+  reflection: 'a reflection the participant wrote on the recap',
+  instructions: 'the hidden instructions the participant wrote for the assistant',
 };
 
 const TYPE_LABELS: Record<SafeguardingDetection['type'], string> = {

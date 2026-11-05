@@ -1,3 +1,11 @@
+import {
+  createAgencyEventModel,
+  createAgencyGoalModel,
+  createAgencyPromptModel,
+  createAgencyIntentionsModel,
+  createAgencyReflectionModel,
+  createAgencyPromptRevisionModel,
+} from './agency';
 import { createAgentQueuedTurnModel, createAgentQueuedTurnSequenceModel } from './queuedTurn';
 import { createAgentTriggerLaneSequenceModel } from './triggerLaneSequence';
 import { createScheduleModel, createScheduleRunModel } from './schedule';
@@ -17,6 +25,7 @@ import { createAgentApiKeyModel } from './agentApiKey';
 import { createTransactionModel } from './transaction';
 import { createPromptGroupModel } from './promptGroup';
 import { createSystemGrantModel } from './systemGrant';
+import { createSentPromptModel } from './sentPrompt';
 import { createPluginAuthModel } from './pluginAuth';
 import { createSharedLinkModel } from './sharedLink';
 import { createAccessRoleModel } from './accessRole';
@@ -85,6 +94,13 @@ export function createModels(mongoose: typeof import('mongoose')): {
   SharedLink: ReturnType<typeof createSharedLinkModel>;
   ToolCall: ReturnType<typeof createToolCallModel>;
   MemoryEntry: ReturnType<typeof createMemoryModel>;
+  AgencyIntentions: ReturnType<typeof createAgencyIntentionsModel>;
+  AgencyGoal: ReturnType<typeof createAgencyGoalModel>;
+  AgencyEvent: ReturnType<typeof createAgencyEventModel>;
+  AgencyReflection: ReturnType<typeof createAgencyReflectionModel>;
+  AgencyPrompt: ReturnType<typeof createAgencyPromptModel>;
+  AgencyPromptRevision: ReturnType<typeof createAgencyPromptRevisionModel>;
+  SentPrompt: ReturnType<typeof createSentPromptModel>;
   ToolFavorite: ReturnType<typeof createToolFavoriteModel>;
   AccessRole: ReturnType<typeof createAccessRoleModel>;
   AclEntry: ReturnType<typeof createAclEntryModel>;
@@ -136,6 +152,13 @@ export function createModels(mongoose: typeof import('mongoose')): {
     SharedLink: createSharedLinkModel(mongoose),
     ToolCall: createToolCallModel(mongoose),
     MemoryEntry: createMemoryModel(mongoose),
+    AgencyIntentions: createAgencyIntentionsModel(mongoose),
+    AgencyGoal: createAgencyGoalModel(mongoose),
+    AgencyEvent: createAgencyEventModel(mongoose),
+    AgencyReflection: createAgencyReflectionModel(mongoose),
+    AgencyPrompt: createAgencyPromptModel(mongoose),
+    AgencyPromptRevision: createAgencyPromptRevisionModel(mongoose),
+    SentPrompt: createSentPromptModel(mongoose),
     ToolFavorite: createToolFavoriteModel(mongoose),
     AccessRole: createAccessRoleModel(mongoose),
     AclEntry: createAclEntryModel(mongoose),

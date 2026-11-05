@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ZodError } from 'zod';
 import type { TEndpointsConfig, TModelsConfig, TConfig } from './types';
+import type { TAgencyStartupConfig } from './agency';
 import {
   MAX_SUBAGENTS,
   MAX_SUBAGENTS_CEILING,
@@ -39,6 +40,7 @@ import {
   scheduledMCPResourceBindingSchema,
   scheduledMCPReadOnlyPolicySchema,
 } from './types/scheduleConsent';
+import { agencySchema } from './agency';
 
 export const AGENT_BACKGROUND_COMPLETION_RESULT_MAX_CHARS_DEFAULT = 24 * 1024;
 export const AGENT_BACKGROUND_COMPLETION_RESULT_MAX_CHARS_HARD_MAX = 64 * 1024;
@@ -2721,9 +2723,21 @@ export const interfaceSchema = z
      * the model spec's preset) for those parameters. Unset, every section shows.
      */
     hiddenParameterSections: z.array(z.enum(PARAMETER_SECTIONS)).optional(),
+    /**
+     * Single parameters to leave out of the Parameters panel, by key (`promptPrefix`, `system`,
+     * `temperature`, ...), for when the rest of their section should stay. Users then keep the
+     * defaults (or the model spec's preset) for them. Unset, every parameter shows.
+     */
+    hiddenParameters: z.array(z.string().min(1)).optional(),
     /** The reasoning control in the composer footer. Enabled by default; when off, reasoning
      * is set only in the Parameters panel. */
     composerReasoning: z.boolean().optional(),
+    /**
+     * A "Show what was sent" action on the user's own messages: everything the model got on that
+     * turn (the system content, the message as sent, how many earlier messages went with it and
+     * the tools offered), kept from the turn's first model call. Off by default.
+     */
+    sentPrompt: z.boolean().optional(),
     multiConvo: z.boolean().optional(),
     bookmarks: z.boolean().optional(),
     memories: z.boolean().optional(),
@@ -3220,6 +3234,8 @@ export type TStartupConfig = {
   /** `safeguarding.signposting` (or `openingHours.support`): the services shown with blocked
    *  content when no crisis notice is configured. */
   safeguardingSupport?: TSupportService[];
+  /** `agency`: which learner-agency features are on, with the classifier's topics only. */
+  agency?: TAgencyStartupConfig;
   /** Conversation-owned code-environment decision protocol supported by the API.
    * Clients must not emit selection-less decisions unless this is advertised. */
   codeEnvironmentDecisionVersion?: typeof CODE_ENVIRONMENT_DECISION_VERSION;
@@ -4027,8 +4043,20 @@ export type TSafeguardingReason = {
 
 /** The `info` of a `safeguarding` error: why content was blocked, or that it could not be screened. */
 export type TSafeguardingErrorInfo = {
-  /** What was blocked: the participant's own message or file, or the model's response. */
-  source: 'prompt' | 'answer' | 'upload' | 'response';
+  /**
+   * What was blocked: the participant's own message or file, the model's response, or what
+   * they wrote as a conversation goal, their long-term intentions or their hidden instructions
+   * (`agency`).
+   */
+  source:
+    | 'prompt'
+    | 'answer'
+    | 'upload'
+    | 'response'
+    | 'goal'
+    | 'intentions'
+    | 'reflection'
+    | 'instructions';
   reasons: TSafeguardingReason[];
   /** The guardrail could not be reached, so the content was refused unscreened. */
   unavailable?: boolean;
@@ -4487,6 +4515,7 @@ export const configSchema = z.object({
   uploadScreening: uploadScreeningSchema.optional(),
   piiMasking: piiMaskingSchema.optional(),
   safeguarding: safeguardingSchema.optional(),
+  agency: agencySchema.optional(),
   endpoints: z
     .object({
       allowedAddresses: allowedAddressesSchema,

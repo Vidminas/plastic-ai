@@ -1,4 +1,5 @@
-import { createOtlpSafeguardingSink, toOtlpSpan } from '../sink';
+import { logger } from '@librechat/data-schemas';
+import { recordProcessing, createOtlpSafeguardingSink, toOtlpSpan } from '../sink';
 
 const record = {
   severity: 'flag' as const,
@@ -8,6 +9,30 @@ const record = {
   conversationId: 'c1',
   filters: 'content:INSULTS:MEDIUM',
 };
+
+describe('recordProcessing', () => {
+  it('sends what happened as text, under processing.*', () => {
+    const send = jest.fn().mockResolvedValue(undefined);
+    recordProcessing('pii_mask', { outcome: 'masked', durationMs: 12, chars: undefined }, send);
+    expect(send).toHaveBeenCalledWith({
+      name: 'processing.pii_mask',
+      scope: 'processing',
+      attributes: { outcome: 'masked', durationMs: '12', chars: undefined },
+    });
+  });
+
+  it('only logs a failure, and does nothing without a collector', async () => {
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
+    recordProcessing('pii_mask', {}, jest.fn().mockRejectedValue(new Error('down')));
+    await new Promise(setImmediate);
+    expect(warn).toHaveBeenCalledWith(
+      '[processing] Could not send a span',
+      expect.objectContaining({ operation: 'pii_mask' }),
+    );
+    warn.mockRestore();
+    expect(() => recordProcessing('pii_mask', {}, undefined)).not.toThrow();
+  });
+});
 
 describe('toOtlpSpan', () => {
   it('makes one safeguarding span carrying the record as attributes', () => {

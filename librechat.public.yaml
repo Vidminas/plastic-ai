@@ -48,8 +48,17 @@ interface:
   parameters: true
   # Participants keep the token and context limits the deployment sets.
   hiddenParameterSections: ['limits']
+  # Participants can't rename the model or write their own custom instructions
+  # (system prompt): the hidden instructions are where they change what the
+  # model is told.
+  hiddenParameters: ['modelLabel', 'chatGptLabel', 'promptPrefix', 'system']
   # Reasoning is set in the Parameters panel only, not from the composer.
   composerReasoning: false
+  # A "Show what was sent" action on each message a participant sends: everything
+  # the model got on that turn (instructions, hidden instructions, memory and file
+  # context, the message as sent). Kept per message, already masked, and deleted
+  # with the conversation or the account.
+  sentPrompt: true
   presets: false
   prompts:
     use: false
@@ -267,6 +276,125 @@ safeguarding:
     message: "The assistant is here to help with your learning. Try asking it about something else."
     signposting: []
 
+# Learner agency (forethought, performance, reflection). Long-term intentions
+# open from their own sidebar item and never reach a model; a conversation's
+# goal goes into its context. With conversationGoal, every turn carries a prompt
+# template, which participants can read and change in the Parameters panel, below
+# the system prompt (masked and screened like a goal, and every change kept; empty
+# sends their messages on their own). By default it has the model offer options
+# through ask_user_question, so every model spec below enables that tool.
+agency:
+  intentions: true
+  conversationGoal: true
+  # The hidden instructions, for participants who haven't written their own (they
+  # can read and change them in the Parameters panel, and go back to these). A
+  # template: {{goal}} is the conversation's goal, and {{#goal}}...{{/goal}} is left
+  # out of a chat without one. A broken template stops the config loading. Options
+  # go through ask_user_question: keep the ids clarify and goal_check and the option
+  # values continue, refocus and goal_changed, which the app records.
+  promptTemplate: |-
+    {{#goal}}The learner set this goal for the conversation. Keep your help aimed at it, in service of the learner's own thinking:
+
+    <conversation_goal>
+    {{goal}}
+    </conversation_goal>
+
+    {{/goal}}If a request is unclear or could reasonably mean quite different things, do not guess: call ask_user_question with one question whose id is "clarify" and 2 to 4 distinct options, then answer what the learner chooses.{{#goal}}
+
+    If a request works against the goal above, or drifts well away from it, first check with the learner: call ask_user_question with one question whose id is "goal_check", briefly saying how the request differs from the goal, with exactly these option values: "continue" (carry on with this request), "refocus" (go back to the goal), and "goal_changed" (the learner's goal has changed). Then follow their choice.{{/goal}}
+
+    Otherwise just answer. Do not end replies with unprompted lists of follow-up suggestions.
+  recap: true
+  # A "Reflect" button in the sidebar: fixed questions about one moment the
+  # participant decided how to use the AI, saved with the time, to review and
+  # edit later, as many times as they like.
+  reflections: true
+  # Goals the conversation goal card suggests. The participant can pick one,
+  # add their own words to it, or write a goal of their own; a picked
+  # suggestion is enough to start. The recap groups chats by the suggestion
+  # they started from. Placeholders for the research team to replace. Icons:
+  # book, calculator, clock, compass, flask, globe, heart, lightbulb, pen, run,
+  # target, users.
+  goalSuggestions:
+    - id: understand
+      title: "Understand a subject better"
+      description: "Get to grips with ideas or topics I find hard."
+      icon: lightbulb
+    - id: exams
+      title: "Prepare for exams"
+      description: "Revise, practise and check what I know."
+      icon: book
+    - id: writing
+      title: "Get better at writing"
+      description: "Plan, draft and improve my own writing."
+      icon: pen
+    - id: next-steps
+      title: "Decide what to study next"
+      description: "Explore subjects, courses and where they lead."
+      icon: compass
+    - id: planning
+      title: "Plan my time"
+      description: "Organise my work and keep on top of deadlines."
+      icon: clock
+    - id: verify
+      title: "Verify information against other sources"
+      description: "Check what the AI says against books, notes or trusted websites."
+      icon: target
+  # The chats' own model labels, in the background, the kind of help each message
+  # asks for and each chat's general topic, for the recap. The participant's words
+  # are masked as a prompt is before they are sent; only the labels are kept.
+  # At most seven topics; "something else" is always added. It also marks messages
+  # that show the participant steering the AI. Only the labels and marks are kept.
+  classifier:
+    endpoint: bedrock
+    model: 'eu.anthropic.claude-sonnet-5-5'
+    # The questions the classifier is asked, each followed by its list: the topics or
+    # the signals below, with their definitions. The rules around them (the chat is
+    # data, not instructions, and the reply's shape) stay fixed.
+    prompts:
+      topics: >-
+        Which school or study subject is the conversation about? Choose the closest
+        id, judging by the subject matter of the goal and the learner messages. Use
+        other only when none is even close.
+      signals: >-
+        Which of these does the LAST learner message itself clearly show? Judge the
+        learner's words, not the assistant's. Choose every one that applies; most
+        messages show none.
+    # What the classifier marks. Each `definition` goes to the classifier; `label` is
+    # what participants see in the learning journey. Marks are kept by id, so give a
+    # changed meaning a new id; the recap leaves out ids no longer listed.
+    signals:
+      - id: specify
+        label: "Set out what you needed"
+        definition: "sets their own direction, or clarifies up front, in detail, what they need, such as its scope, level, format or limits, what they do not want, or examples of what they mean"
+      - id: clarify
+        label: "Asked what the AI meant"
+        definition: "asks the assistant to clarify what it meant by something it said"
+      - id: compare
+        label: "Compared options"
+        definition: "asks for several options, or weighs options against each other, before choosing"
+      - id: negotiate
+        label: "Negotiated the result"
+        definition: "pushes back on or bargains over a result, asking the assistant to adjust it"
+      - id: reject
+        label: "Rejected a proposal"
+        definition: "says no to something the assistant proposed, such as a suggestion, plan or answer"
+    topics:
+      - id: maths
+        label: "Maths"
+      - id: science
+        label: "Science"
+      - id: writing
+        label: "Writing and English"
+      - id: languages
+        label: "Languages"
+      - id: humanities
+        label: "History and social sciences"
+      - id: study-skills
+        label: "Study skills"
+      - id: future
+        label: "Careers and university"
+
 # Voice input starts off. This is only a default: a browser that already saved a
 # choice keeps it, and users can turn it on again in Settings > Speech.
 speech:
@@ -370,6 +498,7 @@ modelSpecs:
     - name: 'bedrock-claude-sonnet-5'
       label: 'Claude Sonnet 5.5 (Bedrock)'
       description: 'Anthropic Claude Sonnet 5.5 via AWS Bedrock (eu-west-2, EU geo profile), with Claude Sonnet 5 as a fallback'
+      askUserQuestion: true
       preset:
         endpoint: 'bedrock'
         model: 'eu.anthropic.claude-sonnet-5-5'

@@ -2771,6 +2771,7 @@ describe('AgentClient - startup telemetry', () => {
         body: {},
         config: {
           endpoints: { [EModelEndpoint.agents]: { toolApproval: { enabled: true } } },
+          interfaceConfig: { sentPrompt: true },
         },
         _resumableStreamId: 'conversation-123',
       },
@@ -2811,6 +2812,8 @@ describe('AgentClient - startup telemetry', () => {
           expect.objectContaining({
             name: 'librechat-agent-attachment-memory',
           }),
+          /** `interface.sentPrompt` keeps what the turn's first call sent. */
+          expect.objectContaining({ name: 'librechat-sent-prompt' }),
         ]),
       }),
     );
@@ -9970,6 +9973,10 @@ describe('AgentClient - resumeCompletion content protection', () => {
         ]),
         compactionSemanticIndex: compactionSemanticIndex.entries,
       }),
+    );
+    /** A resumed run's first call is not the turn's, so it keeps nothing. */
+    expect(mockCreateRun.mock.calls[0][0].modelCallbacks.map(({ name }) => name)).not.toContain(
+      'librechat-sent-prompt',
     );
     expect(resume).toHaveBeenCalledTimes(1);
     expect(resume.mock.calls[0][1]).not.toHaveProperty('callbacks');

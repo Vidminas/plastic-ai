@@ -9,6 +9,8 @@ import { maskUserText } from '~/guardrails/stored';
 
 type ChatBody = {
   text?: unknown;
+  /** The conversation goal a learner set, sent with the first message (`agency`). */
+  goal?: unknown;
   answer?: unknown;
   answers?: unknown;
   quotes?: unknown;
@@ -23,7 +25,8 @@ const nonEmpty = (value: unknown): value is string => typeof value === 'string' 
 /**
  * What a participant wrote in a chat or resume request, as the model will read it: the
  * message with its quoted excerpts, a free-form answer to the model's question, the chosen
- * answers, and the text of a tool decision. `source` is `prompt` for a message, else `answer`.
+ * answers, the text of a tool decision, and a new conversation's goal. `source` is `prompt`
+ * for a message, else `answer`.
  */
 export function getParticipantText(body: ChatBody): { text: string; source: 'prompt' | 'answer' } {
   const parts: string[] = [];
@@ -32,6 +35,9 @@ export function getParticipantText(body: ChatBody): { text: string; source: 'pro
   const message = quotes == null ? typed : mergeQuotedText(typed, quotes);
   if (message) {
     parts.push(message);
+  }
+  if (nonEmpty(body.goal)) {
+    parts.push(body.goal);
   }
   if (body.answers != null && typeof body.answers === 'object' && !Array.isArray(body.answers)) {
     parts.push(...getBoundedAskUserAnswerValues(body.answers).filter(nonEmpty));

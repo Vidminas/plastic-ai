@@ -66,7 +66,9 @@ const {
   settleExistingRowsBeforeErrorTurn,
   resolveDisconnectSnapshotMode,
   markAbortedCompactionContent,
+  replyTextOf,
 } = require('@librechat/api');
+const { getAgencyClassifier } = require('~/server/services/agencyClassifier');
 const { disposeClient } = require('~/server/cleanup');
 const {
   getMCPRequestContext,
@@ -3294,6 +3296,19 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
           await finishOwnedTerminalClaim();
         }
         await finishResumableRequest(req, userId);
+
+        void getAgencyClassifier().classifyTurn(req, {
+          userId,
+          conversationId: conversation?.conversationId,
+          completed: !terminalWasAborted && !preemptIncomplete,
+          temporary: reqCtx.isTemporary,
+          repeated: Boolean(isRegenerate || isContinued),
+          messageId: userMessage?.messageId,
+          parentMessageId,
+          message: userMessage?.text ?? text ?? '',
+          reply: replyTextOf(response),
+          firstTurn: parentMessageId === Constants.NO_PARENT && isNewConvo,
+        });
 
         if (titleTiming === 'immediate') {
           // Title was fired in parallel above (if eligible); a stopped turn already

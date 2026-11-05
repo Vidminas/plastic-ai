@@ -1,5 +1,15 @@
 import type { AxiosResponse } from 'axios';
 import type {
+  RecapRange,
+  TAgencyRecap,
+  TConversationGoal,
+  TAgencyIntentions,
+  TAgencyReflection,
+  TClientAgencyEvent,
+  TAgencyIntentionsInput,
+  TAgencyReflectionInput,
+} from './agency';
+import type {
   TTracePage,
   TTracePageParams,
   TTraceAvailability,
@@ -8,7 +18,9 @@ import type {
 } from './types/traces';
 import type { TInsightsAccessResponse, TInsightsParams, TInsightsResponse } from './types/insights';
 import type { ScheduleMCPConsentView, ConfirmScheduleMCPConsent } from './types/scheduleConsent';
+import type { TAgencyPrompt, TAgencyPromptSaved, TAgencyPromptResponse } from './agencyPrompt';
 import type { TFileConfig } from './file-config';
+import type { TSentPrompt } from './sentPrompt';
 import type * as tl from './types/tools';
 import type * as t from './types';
 import { TOOL_CALL_PREVIEWS_PARAM, TOOL_CALL_PREVIEWS_VERSION } from './previews';
@@ -1794,6 +1806,76 @@ export const createMemory = (data: {
   agentId?: string;
 }): Promise<{ created: boolean; memory: q.TUserMemory }> => {
   return request.post(endpoints.memories(), data);
+};
+
+/* Learner agency */
+export const getAgencyIntentions = (): Promise<{ intentions: TAgencyIntentions | null }> => {
+  return request.get(endpoints.agencyIntentions());
+};
+
+export const updateAgencyIntentions = (
+  intentions: TAgencyIntentionsInput,
+): Promise<{ intentions: TAgencyIntentions }> => {
+  return request.put(endpoints.agencyIntentions(), intentions);
+};
+
+export const getConversationGoal = (
+  conversationId: string,
+): Promise<{ goal: TConversationGoal | null }> => {
+  return request.get(endpoints.agencyGoal(conversationId));
+};
+
+export const updateConversationGoal = (
+  conversationId: string,
+  goal: { text: string; suggestionId?: string | null },
+): Promise<{ goal: TConversationGoal }> => {
+  return request.put(endpoints.agencyGoal(conversationId), goal);
+};
+
+export const getAgencyReflections = (): Promise<{ reflections: TAgencyReflection[] }> => {
+  return request.get(endpoints.agencyReflections());
+};
+
+export const createAgencyReflection = (
+  reflection: TAgencyReflectionInput,
+): Promise<{ reflection: TAgencyReflection }> => {
+  return request.post(endpoints.agencyReflections(), reflection);
+};
+
+export const updateAgencyReflection = (
+  reflectionId: string,
+  reflection: TAgencyReflectionInput,
+): Promise<{ reflection: TAgencyReflection }> => {
+  return request.patch(endpoints.agencyReflection(reflectionId), reflection);
+};
+
+export const getSentPrompt = (
+  conversationId: string,
+  messageId: string,
+): Promise<{ sentPrompt: TSentPrompt }> => {
+  return request.get(endpoints.messageSentPrompt(conversationId, messageId));
+};
+
+export const getAgencyPrompt = (): Promise<TAgencyPromptResponse> => {
+  return request.get(endpoints.agencyPrompt());
+};
+
+export const updateAgencyPrompt = (template: string): Promise<TAgencyPromptSaved> => {
+  return request.put(endpoints.agencyPrompt(), { template });
+};
+
+export const resetAgencyPrompt = (): Promise<{ prompt: TAgencyPrompt }> => {
+  return request.delete(endpoints.agencyPrompt());
+};
+
+export const recordAgencyEvent = (event: TClientAgencyEvent): Promise<void> => {
+  return request.post(endpoints.agencyEvents(), event);
+};
+
+export const getAgencyRecap = (
+  params: { conversationId?: string; range?: RecapRange } = {},
+): Promise<TAgencyRecap> => {
+  return request.get(endpoints.agencyRecap(params));
 };
 
 export function searchPrincipals(

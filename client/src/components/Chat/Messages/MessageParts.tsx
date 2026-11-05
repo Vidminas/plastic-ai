@@ -19,6 +19,7 @@ import MessageIcon from '~/components/Chat/Messages/MessageIcon';
 import { showThinkingAtom } from '~/store/showThinking';
 import Elapsed, { shouldShowElapsed } from './Elapsed';
 import ContentParts from './Content/ContentParts';
+import { SentPromptPanel } from './SentPrompt';
 import SiblingSwitch from './SiblingSwitch';
 import { AuthorContext } from '~/Providers';
 import HoverButtons from './HoverButtons';
@@ -197,6 +198,7 @@ function MessageParts(props: TMessageProps) {
               />
             </ErrorSourceProvider>
           </AuthorContext.Provider>
+          <SentPromptPanel message={message} />
         </MessageRow>
       </div>
     </div>

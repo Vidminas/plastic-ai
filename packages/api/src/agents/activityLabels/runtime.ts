@@ -446,7 +446,7 @@ export function buildPrompt(
   return sections.join('\n\n');
 }
 
-function extractText(content: unknown): string {
+export function extractText(content: unknown): string {
   if (typeof content === 'string') {
     return content.trim();
   }

@@ -7,6 +7,8 @@ export * from './Langfuse';
 export * from './Insights';
 /* Memories */
 export * from './Memories';
+/* Learner agency */
+export * from './Agency';
 export * from './Messages';
 export * from './Misc';
 export * from './Projects';

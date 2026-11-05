@@ -14,6 +14,7 @@ import {
   resolveDropParamsUIKeys,
 } from 'librechat-data-provider';
 import type { TPreset } from 'librechat-data-provider';
+import type { ParameterSection } from './groups';
 import {
   hasControl,
   countModified,
@@ -26,6 +27,7 @@ import { useChatContext, useLiveAnnouncer } from '~/Providers';
 import { SaveAsPresetDialog } from '~/components/Endpoints';
 import { useSetIndexOptions, useLocalize } from '~/hooks';
 import { componentMapping } from './components';
+import AgencyPrompt from './AgencyPrompt';
 import { logger, cn } from '~/utils';
 
 export default function Parameters() {
@@ -176,6 +178,7 @@ export default function Parameters() {
    *  and a control left with nothing to render is dropped there too: a section is
    *  built only from controls that show something. */
   const hiddenSections = startupConfig?.interface?.hiddenParameterSections;
+  const hiddenParameters = startupConfig?.interface?.hiddenParameters;
   const sections = useMemo(
     () =>
       withoutHiddenSections(
@@ -187,12 +190,15 @@ export default function Parameters() {
                 : setting,
             )
             .filter(
-              (setting) => componentMapping[setting.component] != null && hasControl(setting),
+              (setting) =>
+                componentMapping[setting.component] != null &&
+                hasControl(setting) &&
+                hiddenParameters?.includes(setting.key) !== true,
             ),
         ),
         hiddenSections,
       ),
-    [visibleParameters, bedrockRegions, hiddenSections],
+    [visibleParameters, bedrockRegions, hiddenSections, hiddenParameters],
   );
 
   const openDialog = useCallback(() => {
@@ -202,6 +208,22 @@ export default function Parameters() {
     setPreset(newPreset);
     setIsDialogOpen(true);
   }, [conversation]);
+
+  /** The learner's prompt template, with conversation goals, unless identity is hidden. */
+  const showsPromptTemplate =
+    startupConfig?.agency?.conversationGoal === true &&
+    hiddenSections?.includes('identity') !== true;
+  /** The system prompt field it sits under, when this model shows one; else it ends the
+   *  identity section. */
+  const promptTemplateAfter = sections
+    .flatMap((section) => section.settings.map(({ key }) => key))
+    .find((key) => key === 'promptPrefix' || key === 'system');
+  /** The prompt template applies to every chat, so it keeps an identity section even when
+   *  this model has no identity fields, or the deployment hides them all. */
+  const shownSections: ParameterSection[] =
+    showsPromptTemplate && !sections.some((section) => section.id === 'identity')
+      ? [{ id: 'identity', label: 'com_ui_params_identity', settings: [] }, ...sections]
+      : sections;
 
   if (!parameters) {
     return null;
@@ -213,7 +235,7 @@ export default function Parameters() {
           trade the one thing a settings panel is for, seeing the current state at a
           glance, for vertical space that pairing and quieter headings give back
           anyway. */}
-      {sections.map((section) => {
+      {shownSections.map((section) => {
         const changed = countModified(section.settings, conversation);
         const headingId = `${panelId}-${section.id}`;
 
@@ -260,23 +282,29 @@ export default function Parameters() {
                  *  wrap differently still lines their inputs up. Applied here rather
                  *  than in the shared controls, which the preset editors reuse. */
                 return (
-                  <div
-                    key={key}
-                    className={cn(
-                      '*:h-full',
-                      isWideParameter(setting) ? 'col-span-2' : 'col-span-1',
-                    )}
-                  >
-                    <Component
-                      settingKey={key}
-                      defaultValue={defaultValue}
-                      {...rest}
-                      setOption={setOption}
-                      conversation={conversation}
-                    />
-                  </div>
+                  <React.Fragment key={key}>
+                    <div
+                      className={cn(
+                        '*:h-full',
+                        isWideParameter(setting) ? 'col-span-2' : 'col-span-1',
+                      )}
+                    >
+                      <Component
+                        settingKey={key}
+                        defaultValue={defaultValue}
+                        {...rest}
+                        setOption={setOption}
+                        conversation={conversation}
+                      />
+                    </div>
+                    {/* The prompt template follows the system prompt it is sent after. */}
+                    {showsPromptTemplate && key === promptTemplateAfter && <AgencyPrompt />}
+                  </React.Fragment>
                 );
               })}
+              {showsPromptTemplate && section.id === 'identity' && promptTemplateAfter == null && (
+                <AgencyPrompt />
+              )}
             </div>
           </section>
         );

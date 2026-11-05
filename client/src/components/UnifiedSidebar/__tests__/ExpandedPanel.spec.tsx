@@ -105,6 +105,8 @@ function renderPanel({
   onNavigate,
   initialPanel = DEFAULT_PANEL,
   switchToHistory = true,
+  path = '/c/new',
+  onLeaveInsights,
 }: {
   expanded?: boolean;
   links?: NavLink[];
@@ -113,13 +115,15 @@ function renderPanel({
   onNavigate?: jest.Mock;
   initialPanel?: string;
   switchToHistory?: boolean;
+  path?: string;
+  onLeaveInsights?: jest.Mock;
 } = {}) {
   if (initialPanel !== DEFAULT_PANEL) {
     localStorage.setItem('side:active-panel', initialPanel);
   }
 
   const result = render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <QueryClientProvider client={createQueryClient()}>
         <RecoilRoot>
           <ActivePanelProvider>
@@ -130,6 +134,7 @@ function renderPanel({
               onExpand={onExpand}
               onNavigate={onNavigate}
               switchToHistory={switchToHistory}
+              onLeaveInsights={onLeaveInsights}
             />
           </ActivePanelProvider>
         </RecoilRoot>
@@ -204,6 +209,55 @@ describe('ExpandedPanel', () => {
 
       expect(onClick).toHaveBeenCalledTimes(1);
       expect(onNavigate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('page routes', () => {
+    const recapLinks = (): NavLink[] => [
+      ...createLinks(),
+      {
+        title: 'com_agency_recap_navigation' as const,
+        icon: NotebookPen,
+        id: 'agency-recap',
+        onClick: jest.fn(),
+      },
+    ];
+
+    it('marks the learning journey active, and no panel, while it is showing', () => {
+      renderPanel({ links: recapLinks(), path: '/agency', expanded: false });
+      expect(screen.getByRole('button', { name: 'com_agency_recap_navigation' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByRole('button', { name: 'com_ui_chat_history' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+    });
+
+    it('leaves the learning journey for the panel picked from it', () => {
+      const onLeaveInsights = jest.fn();
+      const { onExpand } = renderPanel({
+        links: recapLinks(),
+        path: '/agency',
+        expanded: false,
+        onLeaveInsights,
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'com_ui_prompts' }));
+      expect(onExpand).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem('side:active-panel')).toBe('prompts');
+    });
+
+    it('marks the chosen panel active away from page routes', () => {
+      renderPanel({ links: recapLinks() });
+      expect(screen.getByRole('button', { name: 'com_ui_chat_history' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByRole('button', { name: 'com_agency_recap_navigation' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
     });
   });
 

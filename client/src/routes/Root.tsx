@@ -40,7 +40,9 @@ import KeyboardDeleteDialog from '~/components/Nav/KeyboardDeleteDialog';
 import { useUserTermsQuery, useGetStartupConfig } from '~/data-provider';
 import { MobileDrawerScrim } from '~/components/UnifiedSidebar/mobile';
 import { SafeguardingDialog } from '~/components/Safeguarding/Notice';
+import { IntentionsDialog } from '~/components/Agency/Intentions';
 import useKeyboardShortcuts from '~/hooks/useKeyboardShortcuts';
+import ReflectionDialog from '~/components/Agency/Reflections';
 import useDrawerDismiss from '~/hooks/Nav/useDrawerDismiss';
 import useSidebarToggle from '~/hooks/Nav/useSidebarToggle';
 import useSidebarState from '~/hooks/Nav/useSidebarState';
@@ -75,6 +77,8 @@ function KeyboardShortcutsProvider() {
       <KeyboardShortcutsDialog />
       <KeyboardDeleteDialog />
       <SafeguardingDialog />
+      <ReflectionDialog />
+      <IntentionsDialog />
     </>
   );
 }

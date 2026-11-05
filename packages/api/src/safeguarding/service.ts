@@ -9,6 +9,7 @@ import { sendSafeguardingScore, traceIdForMessage } from '~/langfuse';
 import { getSafeguardingReporter } from './record';
 import { getSafeguardingScreener } from './screen';
 import { assessModelOutput } from './output';
+import { recordProcessing } from './sink';
 import { blockedReasons } from './assess';
 
 type SafeguardingConfigHolder = Partial<AppConfig> | undefined;
@@ -77,10 +78,26 @@ export async function screenForSafeguarding({
   if (config == null || !text.trim()) {
     return ALLOWED;
   }
+  const startedAt = Date.now();
+  /** An upload is recorded by its outcome, not by each check on the way. */
+  const recordScreen = (outcome: string) => {
+    if (event.source !== 'upload') {
+      recordProcessing('safeguard_screen', {
+        outcome,
+        source: event.source,
+        durationMs: Date.now() - startedAt,
+        userId: event.participant.userId,
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+      });
+    }
+  };
   let assessment: SafeguardingAssessment;
   try {
     assessment = await getSafeguardingScreener(config).screen(text);
+    recordScreen(assessment.severity);
   } catch (error) {
+    recordScreen('error');
     logger.error('[safeguarding] Could not screen content', {
       source: event.source,
       userId: event.participant.userId,

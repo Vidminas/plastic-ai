@@ -33,6 +33,10 @@ jest.mock('~/components/Chat/Messages/Content/ContentParts', () => ({
   default: () => null,
 }));
 
+jest.mock('~/components/Chat/Messages/SentPrompt', () => ({
+  SentPromptPanel: () => null,
+}));
+
 jest.mock('~/components/Chat/Messages/HoverButtons', () => ({
   __esModule: true,
   default: () => null,

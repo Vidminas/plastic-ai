@@ -8,6 +8,11 @@ import AnnouncerContext from '~/Providers/AnnouncerContext';
 import { ChatContext } from '~/Providers';
 import Parameters from '../Panel';
 
+jest.mock('../AgencyPrompt', () => ({
+  __esModule: true,
+  default: () => <div data-testid="prompt-template" />,
+}));
+
 const saved = { thinking: false, thinkingBudget: 4096, temperature: 0.7, topP: 0.9, topK: 40 };
 
 function setup(
@@ -123,5 +128,72 @@ describe.each([
       topP: 0.9,
       topK: 40,
     });
+  });
+});
+
+describe('prompt template', () => {
+  it('sits directly after the system prompt, with conversation goals on', async () => {
+    const { container } = setup(EModelEndpoint.bedrock, 'global.anthropic.claude-opus-5', {
+      interface: { parameters: true } as TStartupConfig['interface'],
+      agency: { conversationGoal: true } as TStartupConfig['agency'],
+    });
+    const template = await screen.findByTestId('prompt-template');
+    const systemPrompt = container.querySelector('[id$="-dynamic-textarea"]');
+    expect(systemPrompt).not.toBeNull();
+    expect(systemPrompt?.closest('div.col-span-2')?.nextElementSibling).toBe(template);
+  });
+
+  it.each([
+    ['global.anthropic.claude-opus-5', 'system'],
+    ['amazon.nova-lite-v1:0', 'promptPrefix'],
+  ])('stays in identity when %s hides its %s field', async (model, key) => {
+    setup(EModelEndpoint.bedrock, model, {
+      interface: {
+        parameters: true,
+        hiddenParameters: ['promptPrefix', 'system'],
+      } as TStartupConfig['interface'],
+      agency: { conversationGoal: true } as TStartupConfig['agency'],
+    });
+    const template = await screen.findByTestId('prompt-template');
+    expect(document.getElementById(`${key}-dynamic-textarea`)).toBeNull();
+    expect(template.closest('section')).toBe(screen.getByRole('region', { name: 'Identity' }));
+  });
+
+  it('keeps an identity section, first, when every identity field is hidden', async () => {
+    setup(EModelEndpoint.bedrock, 'amazon.nova-lite-v1:0', {
+      interface: {
+        parameters: true,
+        hiddenParameters: ['modelLabel', 'chatGptLabel', 'promptPrefix', 'system'],
+      } as TStartupConfig['interface'],
+      agency: { conversationGoal: true } as TStartupConfig['agency'],
+    });
+    const template = await screen.findByTestId('prompt-template');
+    expect(document.getElementById('modelLabel-dynamic-input')).toBeNull();
+    const identity = screen.getByRole('region', { name: 'Identity' });
+    expect(template.closest('section')).toBe(identity);
+    expect(screen.getAllByRole('region')[0]).toBe(identity);
+  });
+
+  it('leaves out an emptied identity section without conversation goals', async () => {
+    setup(EModelEndpoint.bedrock, 'amazon.nova-lite-v1:0', {
+      interface: {
+        parameters: true,
+        hiddenParameters: ['modelLabel', 'chatGptLabel', 'promptPrefix', 'system'],
+      } as TStartupConfig['interface'],
+    });
+    await screen.findAllByRole('heading');
+    expect(screen.queryByRole('region', { name: 'Identity' })).toBeNull();
+  });
+
+  it('is not shown without conversation goals, or with identity hidden', async () => {
+    setup(EModelEndpoint.bedrock, 'global.anthropic.claude-opus-5', {
+      interface: {
+        parameters: true,
+        hiddenParameterSections: ['identity'],
+      } as TStartupConfig['interface'],
+      agency: { conversationGoal: true } as TStartupConfig['agency'],
+    });
+    await screen.findAllByRole('heading');
+    expect(screen.queryByTestId('prompt-template')).toBeNull();
   });
 });

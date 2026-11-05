@@ -76,6 +76,10 @@ export const messages = (params: q.MessagesListParams) => {
 
 export const messagesArtifacts = (messageId: string) => `${messagesRoot}/artifact/${messageId}`;
 
+/** What a user's message sent the model (`interface.sentPrompt`). */
+export const messageSentPrompt = (conversationId: string, messageId: string) =>
+  `${messagesRoot}/${encodeURIComponent(conversationId)}/${encodeURIComponent(messageId)}/sent-prompt`;
+
 /** One tool-call part of a stored message, in full. */
 export const messageToolCallPart = ({
   conversationId,
@@ -635,6 +639,28 @@ export const memory = (key: string, agentId?: string) =>
 export const memoryById = (id: string, agentId?: string) =>
   `${memories()}/id/${encodeURIComponent(id)}${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ''}`;
 export const memoryPreferences = () => `${memories()}/preferences`;
+
+/* Learner agency */
+export const agency = () => `${BASE_URL}/api/agency`;
+export const agencyIntentions = () => `${agency()}/intentions`;
+export const agencyGoal = (conversationId: string) =>
+  `${agency()}/conversations/${encodeURIComponent(conversationId)}/goal`;
+export const agencyEvents = () => `${agency()}/events`;
+export const agencyRecap = (params: { conversationId?: string; range?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (params.conversationId) {
+    query.set('conversationId', params.conversationId);
+  }
+  if (params.range) {
+    query.set('range', params.range);
+  }
+  const search = query.toString();
+  return `${agency()}/recap${search ? `?${search}` : ''}`;
+};
+export const agencyReflections = () => `${agency()}/reflections`;
+export const agencyReflection = (reflectionId: string) =>
+  `${agency()}/reflections/${encodeURIComponent(reflectionId)}`;
+export const agencyPrompt = () => `${agency()}/prompt`;
 
 export const searchPrincipals = (params: q.PrincipalSearchParams) => {
   const { q: query, limit, types } = params;

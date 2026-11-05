@@ -9,6 +9,7 @@ import {
   askAnswerTextAtom,
   releasedComposerTextAtom,
 } from '~/components/Chat/ask/state';
+import { heldGoalCheckAtom } from '~/store/agency';
 
 const mockSubmitAskAnswer = jest.fn();
 const mockResetComposer = jest.fn();
@@ -89,6 +90,22 @@ describe('useAskAnswerMode', () => {
     expect(result.current.active).toBe(true);
     expect(result.current.composerAnswers).toBe(true);
     expect(result.current.composerLocked).toBe(false);
+    expect(result.current.popoverVisible).toBe(true);
+  });
+
+  it('steps aside while a goal-check answer waits on the goal editor', () => {
+    mockUseGetMessages.mockReturnValue({ data: batchAsk });
+    const { result } = renderHook(() => useAskAnswerMode('conversation-1'), {
+      wrapper: JotaiWrapper,
+    });
+    expect(result.current.popoverVisible).toBe(true);
+
+    act(() => jotaiStore.set(heldGoalCheckAtom, { submit: jest.fn() }));
+    expect(result.current.popoverVisible).toBe(false);
+    expect(result.current.composerLocked).toBe(false);
+
+    /** Cancelling the edit leaves the question open. */
+    act(() => jotaiStore.set(heldGoalCheckAtom, null));
     expect(result.current.popoverVisible).toBe(true);
   });
 

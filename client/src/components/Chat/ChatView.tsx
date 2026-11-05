@@ -24,11 +24,13 @@ import {
   useFileMapContext,
   ComposerRestoreProvider,
 } from '~/Providers';
+import { GoalBanner, GoalCard, useGoalCardAsking } from '~/components/Agency/Goal';
 import { QueuedTurnPortalProvider } from './Steering/QueuedTurnPortal';
 import ApprovalProvider from './Messages/Content/ApprovalContext';
 import ConversationStarters from './Input/ConversationStarters';
 import { pendingApprovalActionFamily } from './approval/state';
 import ProjectBadge from '~/components/Projects/ProjectBadge';
+import { useLinkedMessage } from '~/components/Agency/links';
 import { composerLiftFamily } from './Input/Composer/state';
 import { OwnerTextProvider } from './Messages/PrivateText';
 import { useGetMessagesByConvoId } from '~/data-provider';
@@ -131,6 +133,10 @@ function ChatView({
   // settle: a stale invalidated cache mounts with isLoading false while the
   // refetch is in flight, and resume must not build from (or race) it.
   useResumeOnLoad(conversationId, chatHelpers.getMessages, index, !isLoading && !isFetching);
+
+  /** Opens the conversation at the message a recap link names. */
+  useLinkedMessage(!isLoading && messagesTree != null);
+  const goalCardAsking = useGoalCardAsking();
 
   // Show a server-owned queued follow-up as the next user turn as soon as its
   // predecessor completes, ahead of the receipt and active-job polls.
@@ -248,7 +254,16 @@ function ChatView({
                               isLandingPage && 'max-w-3xl transition-all duration-200 xl:max-w-4xl',
                             )}
                           >
-                            {isLandingPage && <ConversationStarters />}
+                            {isLandingPage ? (
+                              <GoalCard />
+                            ) : (
+                              !isSubagentThreadReadOnly && (
+                                <GoalBanner conversationId={conversationId} />
+                              )
+                            )}
+                            {/* The goal card stands in for the composer, and for the starters
+                              that would send a message past it, until a goal is set or skipped. */}
+                            {isLandingPage && !goalCardAsking && <ConversationStarters />}
                             {isSubagentThreadReadOnly ? (
                               <div
                                 className="text-text-secondary mx-auto w-full max-w-3xl px-4 py-3 text-center text-sm xl:max-w-4xl"
@@ -257,18 +272,20 @@ function ChatView({
                                 {localize('com_ui_subagent_thread_read_only')}
                               </div>
                             ) : (
-                              <ChatForm
-                                index={index}
-                                routePending={routePending}
-                                placeholder={chatFormPlaceholder}
-                                project={isProjectLandingPage ? project : undefined}
-                                isLandingPage={isLandingPage}
-                                enterToSend={enterToSend}
-                                autoSendText={autoSendText}
-                                speechSettingsInitialized={speechSettingsInitialized}
-                                footerBelow={footerBelow}
-                                centerFormOnLanding={centerFormOnLanding}
-                              />
+                              !(isLandingPage && goalCardAsking) && (
+                                <ChatForm
+                                  index={index}
+                                  routePending={routePending}
+                                  placeholder={chatFormPlaceholder}
+                                  project={isProjectLandingPage ? project : undefined}
+                                  isLandingPage={isLandingPage}
+                                  enterToSend={enterToSend}
+                                  autoSendText={autoSendText}
+                                  speechSettingsInitialized={speechSettingsInitialized}
+                                  footerBelow={footerBelow}
+                                  centerFormOnLanding={centerFormOnLanding}
+                                />
+                              )
                             )}
                             {/* The generic disclaimer and the policy links are the
                               welcome screen's; a deployment's own footer stays

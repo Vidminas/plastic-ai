@@ -11,6 +11,8 @@ const {
   getSafeErrorMetadata,
   createMessageLengthLimit,
   createSafeguardingCheck,
+  createAgencyAnswerRecorder,
+  createAgencyEventRecorder,
 } = require('@librechat/api');
 const { PermissionTypes, Permissions, PermissionBits } = require('librechat-data-provider');
 const {
@@ -26,7 +28,7 @@ const AgentController = require('~/server/controllers/agents/request');
 const ResumeController = require('~/server/controllers/agents/resume');
 const addTitle = require('~/server/services/Endpoints/agents/title');
 const denyRequest = require('~/server/middleware/denyRequest');
-const { getFiles, getRoleByName } = require('~/models');
+const { getFiles, getRoleByName, recordAgencyEvent } = require('~/models');
 
 const router = express.Router();
 
@@ -87,6 +89,12 @@ const controller = async (req, res, next) => {
   await AgentController(req, res, next, initializeClient, addTitle);
 };
 
+/** Records how a learner answered the model's options, for the agency recap. */
+const recordAgencyAnswer = createAgencyAnswerRecorder({
+  getJob: (streamId) => GenerationJobManager.getJob(streamId),
+  record: createAgencyEventRecorder({ recordAgencyEvent }),
+});
+
 const resumeController = async (req, res, next) => {
   await ResumeController(req, res, next, initializeClient, addTitle);
 };
@@ -100,7 +108,8 @@ const resumeController = async (req, res, next) => {
  * @access Private
  * @returns {void}
  */
-router.post('/resume', resumeController);
+// router.post('/resume', resumeController);
+router.post('/resume', recordAgencyAnswer, resumeController);
 
 /**
  * @route POST / (regular endpoint)

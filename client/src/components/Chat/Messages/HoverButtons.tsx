@@ -17,6 +17,7 @@ import { useGenerationsByLatest, useLocalize } from '~/hooks';
 import { hasEditablePart } from './Content/editableParts';
 import { revealedQueuedTurnFamily } from '~/store/steer';
 import { Fork } from '~/components/Conversations';
+import { SentPromptButton } from './SentPrompt';
 import { hoverButtonClasses } from './styles';
 import MessageAudio from './MessageAudio';
 import Feedback from './Feedback';
@@ -44,6 +45,8 @@ type THoverButtons = {
 
 type HoverButtonProps = {
   id?: string;
+  ariaExpanded?: boolean;
+  ariaControls?: string;
   onClick: (e?: React.MouseEvent<HTMLButtonElement>) => void;
   title: string;
   icon: React.ReactNode;
@@ -66,6 +69,8 @@ const HoverButton = memo(
     className = '',
     dataTestId,
     disabled = false,
+    ariaExpanded,
+    ariaControls,
   }: HoverButtonProps) => {
     const buttonStyle = hoverButtonClasses({ isActive, isLast, className });
 
@@ -79,6 +84,8 @@ const HoverButton = memo(
             id={id}
             data-testid={dataTestId}
             aria-label={title}
+            aria-expanded={ariaExpanded}
+            aria-controls={ariaControls}
             className={buttonStyle}
             onClick={onClick}
             disabled={disabled}
@@ -248,6 +255,14 @@ const HoverButtons = ({
           isActive={isEditing}
           isLast={isLast}
           className={isCreatedByUser ? '' : 'active'}
+        />
+      )}
+
+      {/* What the message sent the model (`interface.sentPrompt`) */}
+      {!isActiveStreamingMessage && (
+        <SentPromptButton
+          message={message}
+          renderButton={(props) => <HoverButton {...props} isLast={isLast} />}
         />
       )}
 
